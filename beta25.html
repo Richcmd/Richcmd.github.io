@@ -4,7 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FreshFlow Assistant</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com">}
+
+window.onload = function(){
+showTab('dashboard');
+renderTasks();
+renderAGF();
+renderReports();
+renderNotifications();
+renderQuickNotes();
+renderCommunications();
+renderTemplates();
+generateMotivation();
+workloadWarnings();
+updateDashboard();
+}
+
+const mobileBtn = document.getElementById('mobileMenuButton');
+if(mobileBtn){
+mobileBtn.addEventListener('click', toggleSidebar);
+}
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -83,7 +104,7 @@ height:100vh;
 <div class="flex min-h-screen overflow-hidden">
 
 <!-- SIDEBAR -->
-<aside id="sidebar" class="sidebar w-72 glass p-6 flex flex-col justify-between fixed lg:relative h-full lg:h-auto">
+<aside id="sidebar" class="fixed lg:relative top-0 left-0 z-50 h-full w-72 transition-all duration-300 transform -translate-x-full lg:translate-x-0 bg-black/90 backdrop-blur-xl">
 
 <div>
 <div class="flex items-center justify-between mb-10">
@@ -568,10 +589,37 @@ updateDashboard();
 }
 
 function toggleSidebar(){
- const sidebar = document.getElementById('sidebar');
- sidebar.classList.toggle('translate-x-0');
- sidebar.classList.toggle('-translate-x-full');
+  const sidebar = document.getElementById('sidebar');
+  if(!sidebar) return;
+
+  const isOpen = sidebar.classList.contains('translate-x-0');
+
+  if(isOpen){
+    sidebar.classList.remove('translate-x-0');
+    sidebar.classList.add('-translate-x-full');
+    sidebar.style.pointerEvents = 'none';
+  } else {
+    sidebar.classList.add('translate-x-0');
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.style.pointerEvents = 'auto';
+  }
 }
+
+// ensure sidebar behaves correctly on resize
+window.addEventListener('resize', () => {
+  const sidebar = document.getElementById('sidebar');
+  if(!sidebar) return;
+
+  if(window.innerWidth >= 1024){
+    sidebar.classList.add('translate-x-0');
+    sidebar.classList.remove('-translate-x-full');
+    sidebar.style.pointerEvents = 'auto';
+  } else {
+    sidebar.classList.add('-translate-x-full');
+    sidebar.classList.remove('translate-x-0');
+    sidebar.style.pointerEvents = 'none';
+  }
+});
 
 window.addEventListener('resize', ()=>{
  const sidebar = document.getElementById('sidebar');
@@ -582,10 +630,34 @@ window.addEventListener('resize', ()=>{
 });
 
 function showTab(tabName){
- document.querySelectorAll('.tab-content').forEach(tab=>{
-   tab.classList.add('hidden');
-   tab.style.display='none';
- });
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.add('hidden');
+    tab.style.display = 'none';
+  });
+
+  const activeTab = document.getElementById(tabName);
+  if(activeTab){
+    activeTab.classList.remove('hidden');
+    activeTab.style.display = 'block';
+  }
+
+  document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+    btn.classList.remove('active-tab');
+  });
+
+  const activeBtn = document.getElementById('tab-' + tabName);
+  if(activeBtn){
+    activeBtn.classList.add('active-tab');
+  }
+
+  // MOBILE: close sidebar after navigation
+  const sidebar = document.getElementById('sidebar');
+  if(sidebar && window.innerWidth < 1024){
+    sidebar.classList.remove('translate-x-0');
+    sidebar.classList.add('-translate-x-full');
+    sidebar.style.pointerEvents = 'none';
+  }
+});
 
  const activeTab = document.getElementById(tabName);
  if(activeTab){
@@ -1245,6 +1317,7 @@ function workloadWarnings(){
  }
 }
 
+if(document.getElementById('agfChart')){
 new Chart(document.getElementById('agfChart'), {
  type:'doughnut',
  data:{
