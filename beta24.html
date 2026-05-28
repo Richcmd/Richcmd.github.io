@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreshFlow Assistant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:'Inter',sans-serif;
+}
+
+body{
+background:#050816;
+color:white;
+overflow-x:hidden;
+}
+
+.glass{
+background:rgba(255,255,255,0.05);
+border:1px solid rgba(255,255,255,0.08);
+backdrop-filter:blur(20px);
+}
+
+.sidebar{
+transition:0.3s ease;
+}
+
+.sidebar.closed{
+transform:translateX(-100%);
+}
+
+.card-hover{
+transition:0.25s ease;
+}
+
+.card-hover:hover{
+transform:translateY(-5px);
+box-shadow:0 0 30px rgba(16,185,129,0.15);
+}
+
+.active-tab{
+background:rgba(16,185,129,0.18);
+border-left:4px solid #10b981;
+}
+
+.tab-content{
+animation:fade 0.3s ease;
+}
+
+@keyframes fade{
+from{opacity:0;transform:translateY(10px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+.scrollbar::-webkit-scrollbar{
+width:6px;
+}
+
+.scrollbar::-webkit-scrollbar-thumb{
+background:rgba(255,255,255,0.15);
+border-radius:20px;
+}
+
+@media(max-width:1024px){
+.sidebar{
+position:fixed;
+z-index:999;
+height:100vh;
+}
+}
+</style>
+</head>
+<body>
+
+<div class="flex min-h-screen overflow-hidden">
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar w-72 glass p-6 flex flex-col justify-between fixed lg:relative h-full lg:h-auto">
+
+<div>
+<div class="flex items-center justify-between mb-10">
+<div>
+<h1 class="text-3xl font-black text-green-400">FreshFlow</h1>
+<p class="text-sm text-gray-400">Retail Assistant</p>
+</div>
+
+<button onclick="toggleSidebar()" class="lg:hidden text-2xl">✖</button>
+</div>
+
+<nav class="space-y-3">
+<button onclick="showTab('meldingen')" id="tab-meldingen" class="w-full text-left px-5 py-4 rounded-2xl">🔔 Meldingen</button>
+<button onclick="showTab('notities')" id="tab-notities" class="w-full text-left px-5 py-4 rounded-2xl">📒 Notities</button>
+<button onclick="showTab('communicatie')" id="tab-communicatie" class="w-full text-left px-5 py-4 rounded-2xl">📨 Communicatie</button>
+<button onclick="showTab('dashboard')" id="tab-dashboard" class="w-full text-left px-5 py-4 rounded-2xl active-tab">📊 Dashboard</button>
+<button onclick="showTab('haccp')" id="tab-haccp" class="w-full text-left px-5 py-4 rounded-2xl">🧼 HACCP</button>
+<button onclick="showTab('agf')" id="tab-agf" class="w-full text-left px-5 py-4 rounded-2xl">🥬 AGF</button>
+<button onclick="showTab('rapportage')" id="tab-rapportage" class="w-full text-left px-5 py-4 rounded-2xl">📝 Rapportage</button>
+<button onclick="showTab('visualisatie')" id="tab-visualisatie" class="w-full text-left px-5 py-4 rounded-2xl">⚡ Visualisatie</button>
+<button onclick="showTab('instellingen')" id="tab-instellingen" class="w-full text-left px-5 py-4 rounded-2xl">⚙️ Instellingen</button>
+</nav>
+</div>
+
+<div class="glass rounded-3xl p-5 mt-8">
+<h3 class="font-bold mb-4">Live Shift</h3>
+<div class="space-y-3 text-sm text-gray-300">
+<div class="flex justify-between"><span>Werkuren</span><span>8u</span></div>
+<div class="flex justify-between"><span>HACCP tijd</span><span>3.5u</span></div>
+<div class="flex justify-between"><span>Werkdruk</span><span class="text-orange-400">72%</span></div>
+<div class="flex justify-between"><span>Productiviteit</span><span class="text-green-400">84%</span></div>
+</div>
+</div>
+
+</aside>
+
+<!-- MAIN -->
+<main class="flex-1 lg:ml-0 p-4 lg:p-8 overflow-y-auto scrollbar w-full">
+
+<!-- TOPBAR -->
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+<div class="flex items-center gap-4">
+<button onclick="toggleSidebar()" class="glass px-4 py-3 rounded-2xl lg:hidden">☰</button>
+
+<div>
+<h2 id="dashboardGreeting" class="text-3xl lg:text-5xl font-black">Welkom 👋</h2>
+<p class="text-gray-400 mt-1">Slim retail management systeem</p>
+</div>
+</div>
+
+<div class="flex flex-wrap gap-3">
+<select id="quickNavigate" onchange="quickNavigate()" class="glass px-5 py-3 rounded-2xl outline-none">
+<option value="">⚡ Snelle navigatie</option>
+<option value="haccp">HACCP</option>
+<option value="agf">AGF</option>
+<option value="rapportage">Rapportage</option>
+<option value="visualisatie">Visualisatie</option>
+<option value="meldingen">Meldingen</option>
+</select>
+
+<select onchange="translatePage(this.value)" class="glass px-4 py-3 rounded-2xl">
+<option value="nl">🇳🇱 Nederlands</option>
+<option value="en">🇬🇧 English</option>
+</select>
+
+<button onclick="toggleNotifications()" class="glass px-5 py-3 rounded-2xl">
+🔔 Meldingen
+</button>
+</div>
+</div>
+
+<!-- DASHBOARD -->
+<section id="dashboard" class="tab-content">
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+
+<div class="glass rounded-3xl p-6 card-hover">
+<p class="text-gray-400 mb-3">Productiviteit</p>
+<h2 class="text-5xl font-black text-green-400">84%</h2>
+<p class="text-sm text-gray-400 mt-3">+12% deze week</p>
+</div>
+
+<div class="glass rounded-3xl p-6 card-hover">
+<p class="text-gray-400 mb-3">Open Taken</p>
+<h2 id="taskCount" class="text-5xl font-black text-orange-400">0</h2>
+<p class="text-sm text-gray-400 mt-3">Actieve HACCP taken</p>
+</div>
+
+<div class="glass rounded-3xl p-6 card-hover">
+<p class="text-gray-400 mb-3">AGF Meldingen</p>
+<h2 id="agfCount" class="text-5xl font-black text-red-400">0</h2>
+<p class="text-sm text-gray-400 mt-3">Nieuwe meldingen</p>
+</div>
+
+<div class="glass rounded-3xl p-6 card-hover">
+<p class="text-gray-400 mb-3">Rapportages</p>
+<h2 id="reportCount" class="text-5xl font-black text-blue-400">0</h2>
+<p class="text-sm text-gray-400 mt-3">Shift rapporten</p>
+</div>
+
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+
+<div class="xl:col-span-2 glass rounded-3xl p-6">
+<div class="flex justify-between items-center mb-6">
+<div>
+<h3 class="text-2xl font-bold">Prestatie Analyse</h3>
+<p class="text-gray-400">Realtime werkdruk & prestaties</p>
+</div>
+</div>
+<canvas id="performanceChart"></canvas>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<h3 class="text-2xl font-bold mb-6">Live Focus</h3>
+
+<button onclick="applySettings()" class="mb-6 bg-green-500 px-6 py-3 rounded-2xl font-bold">Instellingen opslaan</button>
+
+<div class="space-y-4">
+<div class="bg-white/5 p-4 rounded-2xl">
+<h4 class="font-bold mb-4">Dagelijkse templates</h4>
+<div class="flex gap-3 mb-3">
+<input id="dailyTemplateTask" placeholder="Nieuwe taak" class="flex-1 bg-black/20 rounded-xl px-4 py-3 outline-none">
+<button onclick="addTemplateTask('daily')" class="bg-green-500 px-4 rounded-xl">+</button>
+</div>
+<div id="dailyTemplates" class="space-y-2"></div>
+</div>
+
+<div class="bg-white/5 p-4 rounded-2xl">
+<h4 class="font-bold mb-4">Wekelijkse templates</h4>
+<div id="weeklyTemplates" class="space-y-2"></div>
+</div>
+
+<div class="bg-white/5 p-4 rounded-2xl">
+<h4 class="font-bold mb-4">Maandelijkse templates</h4>
+<div id="monthlyTemplates" class="space-y-2"></div>
+</div>
+<div class="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl">
+<h4 class="font-bold mb-2">Paprika rood kritiek</h4>
+<p class="text-gray-400 text-sm">Leeg schap + hoge verkoop</p>
+</div>
+
+<div class="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl">
+<h4 class="font-bold mb-2">Koeling controle</h4>
+<p class="text-gray-400 text-sm">Nog 30 min resterend</p>
+</div>
+
+<div class="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl">
+<h4 class="font-bold mb-2">Planning stabiel</h4>
+<p class="text-gray-400 text-sm">Shift ligt op schema</p>
+</div>
+</div>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+<button onclick="showTab('haccp')" class="glass rounded-3xl p-6 text-left card-hover">
+<div class="text-5xl mb-4">🧼</div>
+<h3 class="text-2xl font-bold mb-2">Nieuwe taak</h3>
+<p class="text-gray-400">Direct taak toevoegen</p>
+</button>
+
+<button onclick="showTab('agf')" class="glass rounded-3xl p-6 text-left card-hover">
+<div class="text-5xl mb-4">🥬</div>
+<h3 class="text-2xl font-bold mb-2">AGF melding</h3>
+<p class="text-gray-400">Snel afwijkingen melden</p>
+</button>
+
+<button onclick="showTab('rapportage')" class="glass rounded-3xl p-6 text-left card-hover">
+<div class="text-5xl mb-4">📝</div>
+<h3 class="text-2xl font-bold mb-2">Shift rapport</h3>
+<p class="text-gray-400">Nieuwe rapportage</p>
+</button>
+
+<div class="glass rounded-3xl p-6">
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-xl font-bold">XP Level</h3>
+<span>🏆</span>
+</div>
+<div class="text-5xl font-black text-green-400">12</div>
+<p class="text-gray-400 mt-3">Retail Expert</p>
+</div>
+</div>
+
+</section>
+
+<!-- HACCP -->
+<section id="haccp" class="tab-content hidden">
+
+<div class="flex flex-col lg:flex-row justify-between gap-4 mb-8">
+<div>
+<h2 class="text-4xl font-black">HACCP Planner</h2>
+<p class="text-gray-400 mt-2">Taken beheren en plannen</p>
+</div>
+
+<div class="flex flex-wrap gap-3">
+<input id="taskTitle" placeholder="Taak titel" class="glass px-5 py-3 rounded-2xl outline-none">
+
+<select id="taskPriority" class="glass px-5 py-3 rounded-2xl">
+<option value="Hoog">Hoog</option>
+<option value="Medium">Medium</option>
+<option value="Laag">Laag</option>
+</select>
+
+<input id="taskDuration" type="number" placeholder="Minuten" class="glass px-5 py-3 rounded-2xl outline-none w-32">
+
+<button onclick="addTask()" class="bg-green-500 hover:bg-green-400 px-6 py-3 rounded-2xl font-bold">
++ Toevoegen
+</button>
+</div>
+</div>
+
+<div id="taskList" class="space-y-4"></div>
+
+</section>
+
+<!-- AGF -->
+<section id="agf" class="tab-content hidden">
+
+<div class="flex flex-col lg:flex-row justify-between gap-4 mb-8">
+<div>
+<h2 class="text-4xl font-black">AGF Beheer</h2>
+<p class="text-gray-400 mt-2">Voorraad en afwijkingen beheren</p>
+</div>
+
+<div class="flex flex-wrap gap-3">
+<input id="agfProduct" placeholder="Product" class="glass px-5 py-3 rounded-2xl outline-none">
+
+<select id="agfType" class="glass px-5 py-3 rounded-2xl">
+<option>Overvoorraad</option>
+<option>Leeg schap</option>
+<option>Kwaliteit</option>
+<option>Bestelling verhogen</option>
+<option>Bestelling verlagen</option>
+</select>
+
+<button onclick="addAGF()" class="bg-green-500 hover:bg-green-400 px-6 py-3 rounded-2xl font-bold">
++ Melden
+</button>
+</div>
+</div>
+
+<div id="agfList" class="space-y-4"></div>
+
+</section>
+
+<!-- RAPPORTAGE -->
+<section id="rapportage" class="tab-content hidden">
+
+<div class="mb-8">
+<h2 class="text-4xl font-black">Shift Rapportage</h2>
+<p class="text-gray-400 mt-2">Rapportages aanmaken en beheren</p>
+</div>
+
+<div class="glass rounded-3xl p-6 mb-8">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+<input id="reportTitle" placeholder="Titel" class="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none">
+
+<select id="reportStatus" class="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none">
+<option>Groen</option>
+<option>Geel</option>
+<option>Oranje</option>
+<option>Rood</option>
+</select>
+</div>
+
+<textarea id="reportNote" rows="5" placeholder="Shift informatie" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none mb-4"></textarea>
+
+<button onclick="addReport()" class="bg-green-500 hover:bg-green-400 px-6 py-3 rounded-2xl font-bold">
+Rapport opslaan
+</button>
+</div>
+
+<div id="reportList" class="space-y-5"></div>
+
+</section>
+
+<!-- VISUAL -->
+<section id="visualisatie" class="tab-content hidden">
+
+<div class="mb-8">
+<h2 class="text-4xl font-black">Productiviteit Visualisatie</h2>
+<p class="text-gray-400 mt-2">Realtime inzichten en data analyse</p>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+<div class="glass rounded-3xl p-6">
+<h3 class="text-2xl font-bold mb-6">Werkdruk</h3>
+<canvas id="workloadChart"></canvas>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<h3 class="text-2xl font-bold mb-6">AGF Stabiliteit</h3>
+<canvas id="agfChart"></canvas>
+</div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+<div class="glass rounded-3xl p-6">
+<p class="text-gray-400 mb-3">XP</p>
+<div class="text-5xl font-black text-green-400">2840</div>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<p class="text-gray-400 mb-3">Streak</p>
+<div class="text-5xl font-black text-orange-400">12</div>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<p class="text-gray-400 mb-3">Efficiency</p>
+<div class="text-5xl font-black text-blue-400">91%</div>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<p class="text-gray-400 mb-3">AGF Score</p>
+<div class="text-5xl font-black text-red-400">78%</div>
+</div>
+</div>
+
+</section>
+
+<!-- MELDINGEN -->
+<section id="meldingen" class="tab-content hidden">
+<div class="mb-8">
+<h2 class="text-4xl font-black">Meldingen Centrum</h2>
+<p class="text-gray-400 mt-2">Realtime systeemmeldingen</p>
+</div>
+<div id="notificationsList" class="space-y-4"></div>
+</section>
+
+<!-- NOTITIES -->
+<section id="notities" class="tab-content hidden">
+<div class="mb-8">
+<h2 class="text-4xl font-black">Snelle Notities</h2>
+</div>
+<div class="glass rounded-3xl p-6 mb-6">
+<textarea id="quickNote" rows="5" placeholder="Snelle notitie..." class="w-full bg-white/5 rounded-2xl p-4 outline-none"></textarea>
+<button onclick="addQuickNote()" class="mt-4 bg-green-500 px-6 py-3 rounded-2xl font-bold">Opslaan</button>
+</div>
+<div id="quickNotesList" class="space-y-4"></div>
+</section>
+
+<!-- COMMUNICATIE -->
+<section id="communicatie" class="tab-content hidden">
+<div class="mb-8">
+<h2 class="text-4xl font-black">Communicatie Planner</h2>
+</div>
+<div class="glass rounded-3xl p-6 mb-6">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+<input id="commPerson" placeholder="Persoon" class="bg-white/5 rounded-2xl p-4 outline-none">
+<input id="commMessage" placeholder="Bericht" class="bg-white/5 rounded-2xl p-4 outline-none">
+<select id="commStatus" class="bg-white/5 rounded-2xl p-4 outline-none">
+<option>Groen</option>
+<option>Geel</option>
+<option>Rood</option>
+</select>
+</div>
+<button onclick="addCommunication()" class="bg-green-500 px-6 py-3 rounded-2xl font-bold">Toevoegen</button>
+</div>
+<div id="communicationList" class="space-y-4"></div>
+</section>
+
+<!-- SETTINGS -->
+<section id="instellingen" class="tab-content hidden">
+
+<div class="mb-8">
+<h2 class="text-4xl font-black">Instellingen & Controle</h2>
+<p class="text-gray-400 mt-2">Beheer systeem en voorkeuren</p>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+<div class="glass rounded-3xl p-6">
+<h3 class="text-2xl font-bold mb-6">Systeem instellingen</h3>
+
+<div class="space-y-5">
+<div>
+<label class="block mb-2 text-gray-400">Naam gebruiker</label>
+<input id="usernameInput" type="text" value="Gebruiker" class="w-full bg-white/5 rounded-2xl px-5 py-4 outline-none mb-5">
+
+<label class="block mb-2 text-gray-400">HACCP uren per dag</label>
+<input id="hoursInput" type="number" value="3.5" class="w-full bg-white/5 rounded-2xl px-5 py-4 outline-none">
+</div>
+
+<div>
+<label class="block mb-2 text-gray-400">Meldingen</label>
+<div class="flex gap-3">
+<button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">Push</button>
+<button class="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-xl">Email</button>
+</div>
+</div>
+
+<div>
+<label class="block mb-2 text-gray-400">Thema</label>
+<select class="w-full bg-white/5 rounded-2xl px-5 py-4 outline-none">
+<option>Dark Mode</option>
+<option>Midnight Green</option>
+<option>Blue Glass</option>
+</select>
+</div>
+</div>
+</div>
+
+<div class="glass rounded-3xl p-6">
+<h3 class="text-2xl font-bold mb-6">Management opties</h3>
+
+<div class="space-y-4">
+<div class="bg-white/5 p-4 rounded-2xl flex justify-between items-center">
+<div>
+<h4 class="font-bold">Dagtemplate</h4>
+<p class="text-gray-400 text-sm">12 HACCP taken</p>
+</div>
+<button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">Activeren</button>
+</div>
+
+<div class="bg-white/5 p-4 rounded-2xl flex justify-between items-center">
+<div>
+<h4 class="font-bold">Weekend planning</h4>
+<p class="text-gray-400 text-sm">Drukke dagen</p>
+</div>
+<button class="bg-orange-500/20 text-orange-400 px-4 py-2 rounded-xl">Activeren</button>
+</div>
+
+<div class="bg-white/5 p-4 rounded-2xl flex justify-between items-center">
+<div>
+<h4 class="font-bold">Reset systeem</h4>
+<p class="text-gray-400 text-sm">Wis lokale data</p>
+</div>
+<button onclick="resetData()" class="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl">Reset</button>
+</div>
+</div>
+</div>
+</div>
+
+</section>
+
+</main>
+</div>
+
+<script>
+
+let settings = JSON.parse(localStorage.getItem('settings')) || {
+  username: 'Gebruiker',
+  haccpHours: 3.5,
+  language: 'nl'
+};
+
+let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+let agfItems = JSON.parse(localStorage.getItem('agfItems')) || [];
+let reports = JSON.parse(localStorage.getItem('reports')) || [];
+let notifications = JSON.parse(localStorage.getItem('notifications')) || [];
+let quickNotes = JSON.parse(localStorage.getItem('quickNotes')) || [];
+let communications = JSON.parse(localStorage.getItem('communications')) || [];
+let templates = JSON.parse(localStorage.getItem('templates')) || {
+ daily: [],
+ weekly: [],
+ monthly: []
+};
+
+const translations = {
+  nl: {
+    welcome: 'Welkom terug',
+    system: 'Slim retail management systeem'
+  },
+  en: {
+    welcome: 'Welcome back',
+    system: 'Smart retail management system'
+  }
+};
+
+function saveAll(){
+  localStorage.setItem('tasks', JSON.stringify(tasks));
+  localStorage.setItem('agfItems', JSON.stringify(agfItems));
+  localStorage.setItem('reports', JSON.stringify(reports));
+  localStorage.setItem('notifications', JSON.stringify(notifications));
+  localStorage.setItem('settings', JSON.stringify(settings));
+
+  updateDashboard();
+}
+
+function toggleSidebar(){
+ document.getElementById('sidebar').classList.toggle('closed');
+}
+
+function showTab(tabName){
+ document.querySelectorAll('.tab-content').forEach(tab=>tab.classList.add('hidden'));
+ document.getElementById(tabName).classList.remove('hidden');
+
+ document.querySelectorAll('[id^="tab-"]').forEach(btn=>btn.classList.remove('active-tab'));
+ document.getElementById('tab-'+tabName).classList.add('active-tab');
+
+ if(window.innerWidth < 1024){
+  document.getElementById('sidebar').classList.add('closed');
+ }
+}
+
+function updateDashboard(){
+
+ document.getElementById('taskCount').innerText = tasks.length;
+ document.getElementById('agfCount').innerText = agfItems.length;
+ document.getElementById('reportCount').innerText = reports.length;
+
+ const completedTasks = tasks.filter(t=>t.status==='Voldaan').length;
+ const productivity = tasks.length ? Math.round((completedTasks/tasks.length)*100) : 0;
+
+ const totalMinutes = tasks.reduce((sum,t)=>sum + Number(t.duration || 0),0);
+ const workPressure = Math.round((totalMinutes / (settings.haccpHours*60))*100);
+
+ const greeting = document.querySelector('h2');
+ greeting.innerHTML = `${translations[settings.language].welcome}, ${settings.username} 👋`;
+
+ const sub = greeting.parentElement.querySelector('p');
+ sub.innerText = translations[settings.language].system;
+
+ renderTaskAnalytics(productivity, workPressure);
+ renderAGFInsights();
+ renderNotifications();
+}
+
+function translatePage(lang){
+ settings.language = lang;
+ saveAll();
+}
+
+function toggleNotifications(){
+ showTab('meldingen');
+} meldingen beschikbaar`);
+}
+
+function addNotification(text){
+ notifications.unshift({
+  id: Date.now(),
+  text,
+  time: new Date().toLocaleTimeString()
+ });
+
+ if(notifications.length > 15){
+  notifications.pop();
+ }
+
+ saveAll();
+}
+
+function renderNotifications(){
+ const container = document.getElementById('notificationsList');
+ if(!container) return;
+
+ container.innerHTML='';
+
+ notifications.forEach(n=>{
+  container.innerHTML += `
+  <div class="glass rounded-2xl p-5 flex justify-between items-center">
+  <div>
+  <h4 class="font-bold">${n.text}</h4>
+  <p class="text-gray-500 text-sm">${n.time}</p>
+  </div>
+  </div>
+  `;
+ });
+}
+
+function addTask(){
+ const title = document.getElementById('taskTitle').value;
+ const priority = document.getElementById('taskPriority').value;
+ const duration = document.getElementById('taskDuration').value;
+const frequency = prompt('Frequentie? Dagelijks/Wekelijks/Maandelijks/Geen','Dagelijks');
+
+ if(!title || !duration) return;
+
+ tasks.unshift({
+  id: Date.now(),
+  title,
+  priority,
+  duration,
+  status: 'Open',
+  frequency,
+  created: new Date().toLocaleString()
+ });
+
+ addNotification(`Nieuwe HACCP taak: ${title}`);
+
+ document.getElementById('taskTitle').value='';
+ document.getElementById('taskDuration').value='';
+
+ renderTasks();
+ saveAll();
+}
+
+function renderTasks(){
+ const container = document.getElementById('taskList');
+ container.innerHTML='';
+
+ tasks.forEach(task=>{
+
+ const statusColor = task.status === 'Voldaan'
+ ? 'text-green-400'
+ : task.status === 'Uitgesteld'
+ ? 'text-orange-400'
+ : task.status === 'Overgeslagen'
+ ? 'text-red-400'
+ : 'text-blue-400';
+
+ container.innerHTML += `
+ <div class="glass rounded-3xl p-5 flex flex-col xl:flex-row justify-between gap-5">
+
+ <div>
+ <div class="flex flex-wrap items-center gap-3 mb-3">
+ <h3 class="text-2xl font-bold">${task.title}</h3>
+ <span class="bg-orange-500/20 text-orange-400 px-3 py-1 rounded-full text-xs">${task.priority}</span>
+ <span class="${statusColor} font-bold">${task.status}</span>
+ </div>
+
+ <p class="text-gray-400">${task.duration} minuten</p>
+ <p class="text-blue-400 mt-2">🔁 ${task.frequency || 'Geen'}</p>
+ <p class="text-gray-500 text-sm mt-2">${task.created}</p>
+ </div>
+
+ <div class="flex flex-wrap gap-3">
+ <button onclick="changeTaskStatus(${task.id}, 'Voldaan')" class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">Voldaan</button>
+ <button onclick="changeTaskStatus(${task.id}, 'Uitgesteld')" class="bg-orange-500/20 text-orange-400 px-4 py-2 rounded-xl">Uitstellen</button>
+ <button onclick="changeTaskStatus(${task.id}, 'Overgeslagen')" class="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl">Overslaan</button>
+ <button onclick="editTask(${task.id})" class="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-xl">Bewerken</button>
+ <button onclick="deleteTask(${task.id})" class="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl">Verwijderen</button>
+ </div>
+ </div>
+ `;
+ });
+}
+
+function changeTaskStatus(id,status){
+ const task = tasks.find(t=>t.id===id);
+ if(!task) return;
+
+ task.status = status;
+
+ if(status==='Uitgesteld'){
+  task.delayUntil = 'morgen';
+ }
+
+ if(status==='Overgeslagen' && !task.frequency){
+  tasks = tasks.filter(t=>t.id!==id);
+ }
+
+ if(status==='Voldaan'){
+  if(task.frequency==='Dagelijks'){
+   task.status='Open';
+  }
+ }
+
+ addNotification(`${task.title} → ${status}`);
+ renderTasks();
+ saveAll();
+}
+
+function editTask(id){
+ const task = tasks.find(t=>t.id===id);
+ const newTitle = prompt('Nieuwe titel', task.title);
+ if(newTitle){
+  task.title = newTitle;
+  renderTasks();
+  saveAll();
+ }
+}
+
+function deleteTask(id){
+ tasks = tasks.filter(t=>t.id!==id);
+ renderTasks();
+ saveAll();
+}
+
+function addAGF(){
+ const product = document.getElementById('agfProduct').value;
+ const type = document.getElementById('agfType').value;
+
+ if(!product) return;
+
+ agfItems.unshift({
+  id: Date.now(),
+  product,
+  type,
+  created: new Date().toLocaleString()
+ });
+
+ addNotification(`AGF melding: ${product}`);
+
+ document.getElementById('agfProduct').value='';
+
+ renderAGF();
+ saveAll();
+}
+
+function renderAGF(){
+ const container = document.getElementById('agfList');
+ container.innerHTML='';
+
+ const productMap = {};
+
+ agfItems.forEach(item=>{
+
+ if(!productMap[item.product]){
+  productMap[item.product] = [];
+ }
+
+ productMap[item.product].push(item.type);
+
+ container.innerHTML += `
+ <div class="glass rounded-3xl p-5 flex flex-col xl:flex-row justify-between gap-4">
+ <div>
+ <h3 class="text-2xl font-bold mb-2">${item.product}</h3>
+ <p class="text-gray-400">${item.type}</p>
+ <p class="text-gray-500 text-sm mt-2">${item.created}</p>
+ </div>
+
+ <div class="flex flex-wrap gap-3">
+ <button onclick="editAGF(${item.id})" class="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-xl">Bewerken</button>
+ <button onclick="deleteAGF(${item.id})" class="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl">Verwijderen</button>
+ </div>
+ </div>
+ `;
+ });
+
+ renderAGFRecommendations(productMap);
+}
+
+function renderAGFRecommendations(productMap){
+ let existing = document.getElementById('recommendationPanel');
+ if(existing) existing.remove();
+
+ const section = document.getElementById('agf');
+ const panel = document.createElement('div');
+ panel.id = 'recommendationPanel';
+ panel.className = 'glass rounded-3xl p-6 mt-8';
+
+ let html = `<h3 class="text-3xl font-black mb-6">Bestel Overzicht</h3><div class="space-y-4">`;
+
+ Object.keys(productMap).forEach(product=>{
+  const entries = productMap[product];
+
+  const overstock = entries.filter(e=>e==='Overvoorraad').length;
+  const shortage = entries.filter(e=>e==='Leeg schap').length;
+
+  let advice = 'Stabiel';
+  let color = 'text-green-400';
+
+  if(overstock > shortage){
+   advice = 'Bestelling verlagen';
+   color = 'text-red-400';
+  }
+
+  if(shortage > overstock){
+   advice = 'Extra bijbestellen';
+   color = 'text-orange-400';
+  }
+
+  html += `
+  <div class="bg-white/5 rounded-2xl p-5 flex justify-between items-center">
+  <div>
+  <h4 class="text-xl font-bold">${product}</h4>
+  <p class="text-gray-400">${entries.length} meldingen</p>
+  </div>
+  <div class="${color} font-bold">${advice}</div>
+  </div>
+  `;
+ });
+
+ html += '</div>';
+ panel.innerHTML = html;
+ section.appendChild(panel);
+}
+
+function editAGF(id){
+ const item = agfItems.find(i=>i.id===id);
+ const newProduct = prompt('Nieuw product', item.product);
+ if(newProduct){
+  item.product = newProduct;
+  renderAGF();
+  saveAll();
+ }
+}
+
+function deleteAGF(id){
+ agfItems = agfItems.filter(i=>i.id!==id);
+ renderAGF();
+ saveAll();
+}
+
+function addReport(){
+ const title = document.getElementById('reportTitle').value;
+ const status = document.getElementById('reportStatus').value;
+ const note = document.getElementById('reportNote').value;
+
+ if(!title || !note) return;
+
+ reports.unshift({
+  id: Date.now(),
+  title,
+  status,
+  note,
+  time: new Date().toLocaleString()
+ });
+
+ addNotification(`Nieuw rapport: ${title}`);
+
+ renderReports();
+ saveAll();
+
+ reportTitle.value='';
+ reportNote.value='';
+}
+
+function renderReports(){
+ const container = document.getElementById('reportList');
+ container.innerHTML='';
+
+ reports.forEach(report=>{
+
+ let border = 'border-green-400';
+
+ if(report.status==='Geel') border='border-yellow-400';
+ if(report.status==='Oranje') border='border-orange-400';
+ if(report.status==='Rood') border='border-red-400';
+
+ container.innerHTML += `
+ <div class="glass rounded-3xl p-6 border-l-4 ${border}">
+ <div class="flex flex-col xl:flex-row justify-between gap-4">
+ <div>
+ <h3 class="text-2xl font-bold">${report.title}</h3>
+ <p class="text-gray-400 mt-3">${report.note}</p>
+ </div>
+
+ <div>
+ <div class="text-sm text-gray-500">${report.time}</div>
+ </div>
+ </div>
+
+ <div class="flex flex-wrap gap-3 mt-6">
+ <button onclick="editReport(${report.id})" class="bg-blue-500/20 text-blue-400 px-4 py-2 rounded-xl">Bewerken</button>
+ <button onclick="deleteReport(${report.id})" class="bg-red-500/20 text-red-400 px-4 py-2 rounded-xl">Verwijderen</button>
+ </div>
+ </div>
+ `;
+ });
+}
+
+function editReport(id){
+ const report = reports.find(r=>r.id===id);
+ const newNote = prompt('Nieuwe rapportage', report.note);
+ if(newNote){
+  report.note = newNote;
+  renderReports();
+  saveAll();
+ }
+}
+
+function deleteReport(id){
+ reports = reports.filter(r=>r.id!==id);
+ renderReports();
+ saveAll();
+}
+
+function renderTaskAnalytics(productivity, workPressure){
+ if(document.getElementById('dynamicStats')){
+  document.getElementById('dynamicStats').remove();
+ }
+
+ const dashboard = document.getElementById('dashboard');
+ const stats = document.createElement('div');
+ stats.id = 'dynamicStats';
+ stats.className = 'grid grid-cols-1 md:grid-cols-3 gap-6 mt-8';
+
+ stats.innerHTML = `
+ <div class="glass rounded-3xl p-6">
+ <p class="text-gray-400 mb-3">Werkdruk</p>
+ <div class="text-5xl font-black text-orange-400">${workPressure}%</div>
+ </div>
+
+ <div class="glass rounded-3xl p-6">
+ <p class="text-gray-400 mb-3">Voltooide taken</p>
+ <div class="text-5xl font-black text-green-400">${tasks.filter(t=>t.status==='Voldaan').length}</div>
+ </div>
+
+ <div class="glass rounded-3xl p-6">
+ <p class="text-gray-400 mb-3">Efficiency score</p>
+ <div class="text-5xl font-black text-blue-400">${productivity}%</div>
+ </div>
+ `;
+
+ dashboard.appendChild(stats);
+}
+
+function renderAGFInsights(){
+ const recent = agfItems.slice(0,7);
+ const criticalProducts = {};
+
+ recent.forEach(item=>{
+  if(!criticalProducts[item.product]){
+   criticalProducts[item.product]=0;
+  }
+
+  if(item.type==='Leeg schap') criticalProducts[item.product]+=2;
+  if(item.type==='Overvoorraad') criticalProducts[item.product]+=1;
+ });
+}
+
+function resetData(){
+ if(confirm('Alles resetten?')){
+  localStorage.clear();
+  location.reload();
+ }
+}
+
+function applySettings(){
+ const usernameInput = document.getElementById('usernameInput');
+ const hoursInput = document.getElementById('hoursInput');
+
+ settings.username = usernameInput.value;
+ settings.haccpHours = Number(hoursInput.value);
+
+ saveAll();
+ updateDashboard();
+ alert('Instellingen opgeslagen');
+}
+
+function quickNavigate(){
+ const value = document.getElementById('quickNavigate').value;
+ if(value){
+  showTab(value);
+ }
+}
+
+function addQuickNote(){
+ const note = document.getElementById('quickNote').value;
+ if(!note) return;
+
+ quickNotes.unshift({
+  id: Date.now(),
+  note
+ });
+
+ localStorage.setItem('quickNotes', JSON.stringify(quickNotes));
+ renderQuickNotes();
+ document.getElementById('quickNote').value='';
+}
+
+function renderQuickNotes(){
+ const container = document.getElementById('quickNotesList');
+ if(!container) return;
+
+ container.innerHTML='';
+
+ quickNotes.forEach(n=>{
+  container.innerHTML += `
+  <div class="glass rounded-2xl p-5 flex justify-between items-center">
+  <p>${n.note}</p>
+  <button onclick="deleteQuickNote(${n.id})" class="text-red-400">✖</button>
+  </div>
+  `;
+ });
+}
+
+function deleteQuickNote(id){
+ quickNotes = quickNotes.filter(n=>n.id!==id);
+ localStorage.setItem('quickNotes', JSON.stringify(quickNotes));
+ renderQuickNotes();
+}
+
+function addCommunication(){
+ const person = document.getElementById('commPerson').value;
+ const message = document.getElementById('commMessage').value;
+ const status = document.getElementById('commStatus').value;
+
+ communications.unshift({
+  id: Date.now(),
+  person,
+  message,
+  status
+ });
+
+ localStorage.setItem('communications', JSON.stringify(communications));
+ renderCommunications();
+}
+
+function renderCommunications(){
+ const container = document.getElementById('communicationList');
+ if(!container) return;
+
+ container.innerHTML='';
+
+ communications.forEach(c=>{
+ let color='border-green-400';
+ if(c.status==='Geel') color='border-yellow-400';
+ if(c.status==='Rood') color='border-red-400';
+
+ container.innerHTML += `
+ <div class="glass rounded-2xl p-5 border-l-4 ${color}">
+ <h4 class="font-bold text-xl">${c.person}</h4>
+ <p class="text-gray-400 mt-2">${c.message}</p>
+ </div>
+ `;
+ });
+}
+
+function addTemplateTask(type){
+ const input = document.getElementById('dailyTemplateTask');
+ if(!input.value) return;
+
+ templates[type].push(input.value);
+ localStorage.setItem('templates', JSON.stringify(templates));
+ renderTemplates();
+ input.value='';
+}
+
+function renderTemplates(){
+ document.getElementById('dailyTemplates').innerHTML = templates.daily.map(task=>`
+ <div class="bg-black/20 rounded-xl p-3 flex justify-between items-center">
+ <span>${task}</span>
+ <button onclick="loadTemplateTask('${task}')" class="text-green-400">Inladen</button>
+ </div>
+ `).join('');
+}
+
+function loadTemplateTask(taskName){
+ tasks.unshift({
+  id: Date.now(),
+  title: taskName,
+  priority: 'Medium',
+  duration: 30,
+  status: 'Open',
+  frequency: 'Dagelijks'
+ });
+
+ renderTasks();
+ saveAll();
+}
+
+renderTasks();
+renderAGF();
+renderReports();
+setupSearch();
+updateDashboard();
+
+new Chart(document.getElementById('performanceChart'), {
+ type:'line',
+ data:{
+ labels:['Ma','Di','Wo','Do','Vr'],
+ datasets:[{
+ label:'Productiviteit',
+ data:[65,72,81,77,92],
+ borderColor:'#10b981',
+ backgroundColor:'rgba(16,185,129,0.15)',
+ fill:true,
+ tension:0.4
+ }]
+ },
+ options:{
+ responsive:true,
+ plugins:{legend:{labels:{color:'white'}}}
+ }
+});
+
+new Chart(document.getElementById('workloadChart'), {
+ type:'bar',
+ data:{
+ labels:['Ma','Di','Wo','Do','Vr'],
+ datasets:[{
+ label:'Werkdruk',
+ data:[72,81,64,77,89],
+ backgroundColor:'rgba(249,115,22,0.7)'
+ }]
+ },
+ options:{
+ responsive:true,
+ plugins:{legend:{labels:{color:'white'}}}
+ }
+});
+
+new Chart(document.getElementById('agfChart'), {
+ type:'doughnut',
+ data:{
+ labels:['Stabiel','Risico','Kritiek'],
+ datasets:[{
+ data:[68,21,11],
+ backgroundColor:['#10b981','#f59e0b','#ef4444']
+ }]
+ },
+ options:{
+ responsive:true,
+ plugins:{legend:{labels:{color:'white'}}}
+ }
+});
+
+</script>
+
+</body>
+</html>
