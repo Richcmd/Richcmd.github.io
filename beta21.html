@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreshFlow Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background: #070b14;
+      overflow-x: hidden;
+    }
+
+    .glass {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .sidebar-item {
+      transition: 0.2s ease;
+    }
+
+    .sidebar-item:hover {
+      background: rgba(16,185,129,0.15);
+      transform: translateX(4px);
+    }
+
+    .active-tab {
+      background: linear-gradient(to right, rgba(16,185,129,0.25), rgba(16,185,129,0.05));
+      border-left: 4px solid #10b981;
+    }
+
+    .card-hover {
+      transition: 0.25s ease;
+    }
+
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 0 30px rgba(16,185,129,0.1);
+    }
+
+    .scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 20px;
+    }
+
+    .pulse-green {
+      animation: pulseGreen 2s infinite;
+    }
+
+    @keyframes pulseGreen {
+      0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+      70% { box-shadow: 0 0 0 15px rgba(16,185,129,0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+
+    .gradient-text {
+      background: linear-gradient(to right, #10b981, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
+</head>
+<body class="text-white min-h-screen">
+
+<div class="flex min-h-screen">
+
+  <!-- SIDEBAR -->
+  <aside class="w-72 glass border-r border-white/10 p-6 flex flex-col justify-between">
+
+    <div>
+      <div class="mb-10">
+        <h1 class="text-3xl font-black gradient-text">FreshFlow</h1>
+        <p class="text-sm text-gray-400 mt-2">Retail Operations Assistant</p>
+      </div>
+
+      <nav class="space-y-3">
+        <button onclick="showTab('dashboard')" class="sidebar-item active-tab w-full text-left px-4 py-4 rounded-xl" id="tab-dashboard">
+          📊 Dashboard
+        </button>
+
+        <button onclick="showTab('haccp')" class="sidebar-item w-full text-left px-4 py-4 rounded-xl" id="tab-haccp">
+          🧼 HACCP Planner
+        </button>
+
+        <button onclick="showTab('agf')" class="sidebar-item w-full text-left px-4 py-4 rounded-xl" id="tab-agf">
+          🥬 AGF Beheer
+        </button>
+
+        <button onclick="showTab('rapportage')" class="sidebar-item w-full text-left px-4 py-4 rounded-xl" id="tab-rapportage">
+          📝 Rapportage
+        </button>
+
+        <button onclick="showTab('productiviteit')" class="sidebar-item w-full text-left px-4 py-4 rounded-xl" id="tab-productiviteit">
+          ⚡ Productiviteit
+        </button>
+
+        <button onclick="showTab('instellingen')" class="sidebar-item w-full text-left px-4 py-4 rounded-xl" id="tab-instellingen">
+          ⚙️ Instellingen
+        </button>
+      </nav>
+    </div>
+
+    <div class="glass rounded-2xl p-5 mt-8">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold">Shift Status</h3>
+        <div class="w-3 h-3 rounded-full bg-green-400 pulse-green"></div>
+      </div>
+
+      <div class="space-y-3 text-sm text-gray-300">
+        <div class="flex justify-between">
+          <span>Werkuren</span>
+          <span>8 uur</span>
+        </div>
+
+        <div class="flex justify-between">
+          <span>HACCP tijd</span>
+          <span>3.5 uur</span>
+        </div>
+
+        <div class="flex justify-between">
+          <span>Werkdruk</span>
+          <span class="text-orange-400">72%</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 p-8 overflow-y-auto scrollbar">
+
+    <!-- TOPBAR -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
+      <div>
+        <h2 class="text-4xl font-black">Welkom terug 👋</h2>
+        <p class="text-gray-400 mt-2">Slim voorraadbeheer & productiviteitssysteem</p>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <input type="text" placeholder="Zoeken..." class="glass px-5 py-3 rounded-2xl outline-none w-72">
+
+        <button class="glass px-5 py-3 rounded-2xl hover:bg-white/10 transition">
+          🔔
+        </button>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section id="dashboard" class="tab-content">
+
+      <!-- KPI -->
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+
+        <div class="glass rounded-3xl p-6 card-hover">
+          <div class="flex justify-between items-center mb-5">
+            <h3 class="text-gray-300">Productiviteit</h3>
+            <span>⚡</span>
+          </div>
+
+          <h2 class="text-5xl font-black mb-3">84%</h2>
+          <p class="text-green-400">+12% t.o.v vorige week</p>
+        </div>
+
+        <div class="glass rounded-3xl p-6 card-hover">
+          <div class="flex justify-between items-center mb-5">
+            <h3 class="text-gray-300">Open HACCP</h3>
+            <span>🧼</span>
+          </div>
+
+          <h2 class="text-5xl font-black mb-3">14</h2>
+          <p class="text-orange-400">3 hoge prioriteit</p>
+        </div>
+
+        <div class="glass rounded-3xl p-6 card-hover">
+          <div class="flex justify-between items-center mb-5">
+            <h3 class="text-gray-300">AGF Meldingen</h3>
+            <span>🥬</span>
+          </div>
+
+          <h2 class="text-5xl font-black mb-3">8</h2>
+          <p class="text-red-400">2 kritieke producten</p>
+        </div>
+
+        <div class="glass rounded-3xl p-6 card-hover">
+          <div class="flex justify-between items-center mb-5">
+            <h3 class="text-gray-300">Dagscore</h3>
+            <span>⭐</span>
+          </div>
+
+          <h2 class="text-5xl font-black mb-3">86</h2>
+          <p class="text-green-400">Sterke shift vandaag</p>
+        </div>
+      </div>
+
+      <!-- MAIN GRID -->
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+        <!-- GRAPH -->
+        <div class="xl:col-span-2 glass rounded-3xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <h3 class="text-2xl font-bold">Weekprestaties</h3>
+              <p class="text-gray-400">Taken, productiviteit en efficiëntie</p>
+            </div>
+
+            <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+              Deze week
+            </button>
+          </div>
+
+          <canvas id="performanceChart" height="120"></canvas>
+        </div>
+
+        <!-- PRIORITY -->
+        <div class="glass rounded-3xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-bold">Nu belangrijk</h3>
+            <span>🔥</span>
+          </div>
+
+          <div class="space-y-4">
+
+            <div class="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-semibold">Paprika rood</h4>
+                <span class="text-red-400 text-sm">Kritiek</span>
+              </div>
+              <p class="text-gray-400 text-sm">Lege schappen + hoge verkoop</p>
+            </div>
+
+            <div class="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-semibold">Koeling controle</h4>
+                <span class="text-orange-400 text-sm">Urgent</span>
+              </div>
+              <p class="text-gray-400 text-sm">Nog 30 minuten resterend</p>
+            </div>
+
+            <div class="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl">
+              <div class="flex justify-between items-center mb-2">
+                <h4 class="font-semibold">Werkdruk stabiel</h4>
+                <span class="text-green-400 text-sm">Goed</span>
+              </div>
+              <p class="text-gray-400 text-sm">Planning ligt op schema</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <button class="glass rounded-3xl p-6 text-left card-hover">
+          <div class="text-5xl mb-4">➕</div>
+          <h3 class="text-2xl font-bold mb-2">Nieuwe HACCP taak</h3>
+          <p class="text-gray-400">Voeg snel nieuwe taken toe</p>
+        </button>
+
+        <button class="glass rounded-3xl p-6 text-left card-hover">
+          <div class="text-5xl mb-4">🥬</div>
+          <h3 class="text-2xl font-bold mb-2">AGF melding</h3>
+          <p class="text-gray-400">Overvoorraad of leegschap melden</p>
+        </button>
+
+        <button class="glass rounded-3xl p-6 text-left card-hover">
+          <div class="text-5xl mb-4">📝</div>
+          <h3 class="text-2xl font-bold mb-2">Shift rapport</h3>
+          <p class="text-gray-400">Dagrapportage invullen</p>
+        </button>
+      </div>
+
+    </section>
+
+    <!-- HACCP -->
+    <section id="haccp" class="tab-content hidden">
+
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 class="text-4xl font-black">HACCP Planner</h2>
+          <p class="text-gray-400 mt-2">Slim plannen binnen beschikbare uren</p>
+        </div>
+
+        <button onclick="addTask()" class="bg-green-500 hover:bg-green-400 transition px-6 py-3 rounded-2xl font-bold">
+          + Nieuwe taak
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">Beschikbare HACCP tijd</h3>
+          <div class="text-5xl font-black text-green-400">3.5u</div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">Totale taakduur</h3>
+          <div class="text-5xl font-black text-orange-400">5.1u</div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">Werkdruk</h3>
+          <div class="text-5xl font-black text-red-400">72%</div>
+        </div>
+      </div>
+
+      <div class="glass rounded-3xl p-6">
+
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-2xl font-bold">Takenlijst</h3>
+
+          <div class="flex gap-3">
+            <select class="bg-black/20 px-4 py-2 rounded-xl">
+              <option>Alle prioriteiten</option>
+              <option>Hoog</option>
+              <option>Medium</option>
+              <option>Laag</option>
+            </select>
+
+            <select class="bg-black/20 px-4 py-2 rounded-xl">
+              <option>Vandaag</option>
+              <option>Deze week</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="space-y-4" id="taskList">
+
+          <div class="bg-white/5 p-5 rounded-2xl border border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-3 mb-2">
+                <h4 class="text-xl font-semibold">Koeling controle</h4>
+                <span class="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs">HOOG</span>
+              </div>
+
+              <p class="text-gray-400">Controleer temperatuur en registratie</p>
+            </div>
+
+            <div class="flex items-center gap-4">
+              <span class="text-gray-400">15 min</span>
+              <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+                Voltooid
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white/5 p-5 rounded-2xl border border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-3 mb-2">
+                <h4 class="text-xl font-semibold">Diepvries inspectie</h4>
+                <span class="bg-orange-500/20 text-orange-400 px-3 py-1 rounded-full text-xs">MEDIUM</span>
+              </div>
+
+              <p class="text-gray-400">Controle op ijsvorming en schoonmaak</p>
+            </div>
+
+            <div class="flex items-center gap-4">
+              <span class="text-gray-400">35 min</span>
+              <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+                Voltooid
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- AGF -->
+    <section id="agf" class="tab-content hidden">
+
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 class="text-4xl font-black">AGF Beheer</h2>
+          <p class="text-gray-400 mt-2">Slim voorraadbeheer en productcontrole</p>
+        </div>
+
+        <button onclick="addAGF()" class="bg-green-500 hover:bg-green-400 transition px-6 py-3 rounded-2xl font-bold">
+          + Nieuwe melding
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+
+        <div class="glass rounded-3xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-bold">Kritieke producten</h3>
+            <span>🥬</span>
+          </div>
+
+          <div class="space-y-4">
+
+            <div class="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl">
+              <div class="flex justify-between mb-3">
+                <h4 class="text-xl font-bold">Paprika rood</h4>
+                <span class="text-red-400">Leeg</span>
+              </div>
+
+              <div class="flex justify-between text-sm text-gray-400">
+                <span>Stabiliteit</span>
+                <span>42%</span>
+              </div>
+            </div>
+
+            <div class="bg-orange-500/10 border border-orange-500/20 p-5 rounded-2xl">
+              <div class="flex justify-between mb-3">
+                <h4 class="text-xl font-bold">Bosui</h4>
+                <span class="text-orange-400">Overvoorraad</span>
+              </div>
+
+              <div class="flex justify-between text-sm text-gray-400">
+                <span>Stabiliteit</span>
+                <span>58%</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-2xl font-bold">Besteladvies</h3>
+            <span>📦</span>
+          </div>
+
+          <div class="space-y-4">
+
+            <div class="bg-green-500/10 border border-green-500/20 p-5 rounded-2xl flex justify-between items-center">
+              <div>
+                <h4 class="font-bold">Komkommer</h4>
+                <p class="text-gray-400 text-sm">Extra voorraad aanbevolen</p>
+              </div>
+
+              <div class="text-green-400 font-bold text-2xl">+12%</div>
+            </div>
+
+            <div class="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl flex justify-between items-center">
+              <div>
+                <h4 class="font-bold">Mango</h4>
+                <p class="text-gray-400 text-sm">Bestelling verlagen</p>
+              </div>
+
+              <div class="text-red-400 font-bold text-2xl">-8%</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-3xl p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-2xl font-bold">Shift geheugen</h3>
+          <span>🧠</span>
+        </div>
+
+        <div class="space-y-4">
+
+          <div class="bg-white/5 p-4 rounded-2xl">
+            ✅ Paprika bestelling verhoogd
+          </div>
+
+          <div class="bg-white/5 p-4 rounded-2xl">
+            ⚠️ Bosui overvoorraad gemeld
+          </div>
+
+          <div class="bg-white/5 p-4 rounded-2xl">
+            📦 Avocado voorraad controle later nodig
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RAPPORTAGE -->
+    <section id="rapportage" class="tab-content hidden">
+
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 class="text-4xl font-black">Shift Rapportage</h2>
+          <p class="text-gray-400 mt-2">Dagstatus en chronologische rapporten</p>
+        </div>
+
+        <button class="bg-green-500 hover:bg-green-400 transition px-6 py-3 rounded-2xl font-bold">
+          + Nieuw rapport
+        </button>
+      </div>
+
+      <div class="glass rounded-3xl p-6 mb-8">
+
+        <h3 class="text-2xl font-bold mb-6">Nieuwe rapportage</h3>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <input type="text" placeholder="Titel van rapport" class="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none">
+
+          <select class="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none">
+            <option>Groen - Goede shift</option>
+            <option>Geel - Lichte problemen</option>
+            <option>Oranje - Moeilijke shift</option>
+            <option>Rood - Kritieke shift</option>
+          </select>
+        </div>
+
+        <textarea rows="6" placeholder="Hoe verliep de dag?" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none mb-6"></textarea>
+
+        <button class="bg-green-500 hover:bg-green-400 transition px-6 py-3 rounded-2xl font-bold">
+          Rapport opslaan
+        </button>
+      </div>
+
+      <div class="space-y-5">
+
+        <div class="glass rounded-3xl p-6 border-l-4 border-green-400">
+          <div class="flex justify-between mb-4">
+            <h3 class="text-2xl font-bold">Sterke vrijdagshift</h3>
+            <span class="text-green-400">Groen</span>
+          </div>
+
+          <p class="text-gray-400 mb-4">
+            Goede productiviteit en sterke AGF stabiliteit. Alleen lichte overvoorraad mango.
+          </p>
+
+          <div class="text-sm text-gray-500">27 mei 2026 - 18:24</div>
+        </div>
+
+        <div class="glass rounded-3xl p-6 border-l-4 border-orange-400">
+          <div class="flex justify-between mb-4">
+            <h3 class="text-2xl font-bold">Drukke vracht dag</h3>
+            <span class="text-orange-400">Oranje</span>
+          </div>
+
+          <p class="text-gray-400 mb-4">
+            Veel vracht waardoor AGF controle minder aandacht kreeg.
+          </p>
+
+          <div class="text-sm text-gray-500">26 mei 2026 - 17:51</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PRODUCTIVITEIT -->
+    <section id="productiviteit" class="tab-content hidden">
+
+      <div class="mb-8">
+        <h2 class="text-4xl font-black">Productiviteit Visualisatie</h2>
+        <p class="text-gray-400 mt-2">Data, trends en persoonlijke prestaties</p>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-2xl font-bold mb-6">Werkdruk analyse</h3>
+          <canvas id="workloadChart"></canvas>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-2xl font-bold mb-6">AGF stabiliteit</h3>
+          <canvas id="agfChart"></canvas>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">XP</h3>
+          <div class="text-5xl font-black text-green-400">2840</div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">Streak</h3>
+          <div class="text-5xl font-black text-orange-400">12</div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-xl font-bold mb-4">Level</h3>
+          <div class="text-5xl font-black text-blue-400">Expert</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- INSTELLINGEN -->
+    <section id="instellingen" class="tab-content hidden">
+
+      <div class="mb-8">
+        <h2 class="text-4xl font-black">Instellingen & Controlepaneel</h2>
+        <p class="text-gray-400 mt-2">Beheer templates, uren en voorkeuren</p>
+      </div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-2xl font-bold mb-6">HACCP Instellingen</h3>
+
+          <div class="space-y-5">
+            <div>
+              <label class="block mb-2 text-gray-400">Beschikbare uren per dag</label>
+              <input type="number" value="3.5" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none">
+            </div>
+
+            <div>
+              <label class="block mb-2 text-gray-400">Werkdruk waarschuwing</label>
+              <input type="range" min="0" max="100" value="70" class="w-full">
+            </div>
+          </div>
+        </div>
+
+        <div class="glass rounded-3xl p-6">
+          <h3 class="text-2xl font-bold mb-6">Taak Templates</h3>
+
+          <div class="space-y-4">
+            <div class="bg-white/5 p-4 rounded-2xl flex justify-between items-center">
+              <div>
+                <h4 class="font-bold">Dagelijkse HACCP</h4>
+                <p class="text-gray-400 text-sm">12 standaardtaken</p>
+              </div>
+
+              <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+                Laden
+              </button>
+            </div>
+
+            <div class="bg-white/5 p-4 rounded-2xl flex justify-between items-center">
+              <div>
+                <h4 class="font-bold">Weekend Planning</h4>
+                <p class="text-gray-400 text-sm">8 aangepaste taken</p>
+              </div>
+
+              <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+                Laden
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<script>
+
+  function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(tab => {
+      tab.classList.add('hidden');
+    });
+
+    document.getElementById(tabName).classList.remove('hidden');
+
+    document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+      btn.classList.remove('active-tab');
+    });
+
+    document.getElementById('tab-' + tabName).classList.add('active-tab');
+  }
+
+  function addTask() {
+    const taskList = document.getElementById('taskList');
+
+    const task = document.createElement('div');
+
+    task.className = 'bg-white/5 p-5 rounded-2xl border border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-4';
+
+    task.innerHTML = `
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <h4 class="text-xl font-semibold">Nieuwe HACCP taak</h4>
+          <span class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-xs">NIEUW</span>
+        </div>
+
+        <p class="text-gray-400">Nieuwe taak toegevoegd aan planning</p>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <span class="text-gray-400">20 min</span>
+        <button class="bg-green-500/20 text-green-400 px-4 py-2 rounded-xl">
+          Voltooid
+        </button>
+      </div>
+    `;
+
+    taskList.prepend(task);
+  }
+
+  function addAGF() {
+    alert('Quick Capture geopend: voeg hier direct AGF meldingen toe.');
+  }
+
+  // PERFORMANCE CHART
+  new Chart(document.getElementById('performanceChart'), {
+    type: 'line',
+    data: {
+      labels: ['Ma', 'Di', 'Wo', 'Do', 'Vr'],
+      datasets: [{
+        label: 'Productiviteit',
+        data: [62, 74, 70, 84, 91],
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16,185,129,0.15)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: {
+            color: '#ffffff'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#9ca3af'
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.05)'
+          }
+        },
+        y: {
+          ticks: {
+            color: '#9ca3af'
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.05)'
+          }
+        }
+      }
+    }
+  });
+
+  // WORKLOAD CHART
+  new Chart(document.getElementById('workloadChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Ma', 'Di', 'Wo', 'Do', 'Vr'],
+      datasets: [{
+        label: 'Werkdruk',
+        data: [65, 72, 81, 70, 88],
+        backgroundColor: 'rgba(249,115,22,0.7)'
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: {
+            color: '#fff'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: '#9ca3af'
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.05)'
+          }
+        },
+        y: {
+          ticks: {
+            color: '#9ca3af'
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.05)'
+          }
+        }
+      }
+    }
+  });
+
+  // AGF CHART
+  new Chart(document.getElementById('agfChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Stabiel', 'Risico', 'Kritiek'],
+      datasets: [{
+        data: [68, 22, 10],
+        backgroundColor: [
+          '#10b981',
+          '#f59e0b',
+          '#ef4444'
+        ]
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: {
+            color: '#fff'
+          }
+        }
+      }
+    }
+  });
+
+</script>
+
+</body>
+</html>
