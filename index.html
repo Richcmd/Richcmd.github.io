@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>RICH CMD — Personal Retail Intelligence</title>
+  <meta name="description" content="RICH CMD — Your Personal Retail Intelligence Command Center" />
+  <meta name="theme-color" content="#f7fafc" id="themeColorMeta" />
+  <link rel="manifest" href="./manifest.json?v=640" />
+  <link rel="stylesheet" href="./styles.css?v=640" />
+  <script>
+    (function(){
+      try {
+        var raw = localStorage.getItem('richcmd_v61_state') || localStorage.getItem('richcmd_v6_state') || localStorage.getItem('rich_cmd_state') || localStorage.getItem('flow');
+        var parsed = raw ? JSON.parse(raw) : null;
+        var theme = parsed && parsed.settings && parsed.settings.theme ? parsed.settings.theme : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch(e) { document.documentElement.setAttribute('data-theme','light'); }
+    })();
+  </script>
+</head>
+<body>
+  <div id="appBoot" class="boot-screen">
+    <div class="boot-card">
+      <div class="brand-mark">RC</div>
+      <h1>RICH CMD</h1>
+      <p>Your Personal Retail Intelligence Command Center</p>
+    </div>
+  </div>
+  <div id="app" aria-live="polite"></div>
+  <div id="modalRoot"></div>
+  <div id="toastRoot"></div>
+  <script src="./app.js?v=640"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('./service-worker.js?v=640').catch(function(){});
+      });
+    }
+  </script>
+</body>
+</html>
