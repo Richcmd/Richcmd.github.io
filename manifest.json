@@ -1,7 +1,7 @@
 {
   "name": "RICH CMD",
   "short_name": "RICH CMD",
-  "description": "Your Personal Retail Intelligence Command Center",
+  "description": "RICH CMD v6.5.27 — Mobile & PWA Experience Polish",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
