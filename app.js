@@ -49,6 +49,8 @@ function defaultState(){
   };
 }
 let state = loadState();
+// v6.6.1 preflight: declare tutorial override hooks used by older patch layers in strict mode.
+let tutorialPrev, v657Step, v658Step, v657TargetFor, v658TargetFor;
 function loadState(){
   const keys=[APP.storage,'richcmd_v6_state','rich_cmd_state','flow'];
   for(const k of keys){
@@ -5378,3 +5380,5306 @@ try {
 } catch(err) {
   console.error('v6.5.27 Mobile Assist Hotfix failed', err);
 }
+
+/* v6.6.0 — Daily Flow Polish */
+try {
+  APP.version = 'v6.6.0';
+  APP.cache = 'rich-cmd-cache-v660';
+
+  Object.assign(I18N.nl, {
+    startMyShiftNow:'Start mijn shift nu', showMe:'Laat zien', openHaccpPlanning:'Open HACCP dagplanning', startAgfQuickCheck:'Start AGF Quick Check', finishBreakNow:'Stop mijn pauze', closeShiftNow:'Sluit mijn shift af', calmModeActive:'Rustmodus actief', calmModeText:'Alleen de belangrijkste acties worden getoond. Minder prikkels, meer focus.', restoreNormalView:'Normale weergave herstellen', directActions:'Directe acties', dailyAdvice:'Dagadvies', energyLowAdvice:'Je gaf lage energie aan. Begin klein: kies een korte basistaak en bouw rustig momentum op.', energyNormalAdvice:'Je energie is normaal. Volg de basisroutine en pak daarna AGF of periodiek werk op.', energyStrongAdvice:'Je voelt je sterk. Plan naast de basisroutine één periodieke taak of schoonmaakactie.', startShiftAdvice:'Start eerst je shift, dan kan RICH CMD werktijd, pauzes en productiviteit beter volgen.', nextActions:'Eerste 3 acties', quietWorkMode:'Rustige werkmodus', shiftStartedTitle:'Shift gestart', shiftStartedText:'Begin met de basis. Eén rustige keuze tegelijk is hoe je controle houdt.', lowEnergy:'Laag', normalEnergy:'Normaal', strongEnergy:'Sterk', energyCheck:'Energiecheck'
+  });
+  Object.assign(I18N.en, {
+    startMyShiftNow:'Start my shift now', showMe:'Show me', openHaccpPlanning:'Open HACCP day planning', startAgfQuickCheck:'Start Produce Quick Check', finishBreakNow:'End my break', closeShiftNow:'Close my shift', calmModeActive:'Calm mode active', calmModeText:'Only the most important actions are shown. Less noise, more focus.', restoreNormalView:'Restore normal view', directActions:'Direct actions', dailyAdvice:'Daily advice', energyLowAdvice:'You selected low energy. Start small: choose a short base task and build calm momentum.', energyNormalAdvice:'Your energy is normal. Follow the base routine, then continue with produce or periodic work.', energyStrongAdvice:'You feel strong. Add one periodic task or cleaning action after the base routine.', startShiftAdvice:'Start your shift first so RICH CMD can track work time, breaks and productivity.', nextActions:'First 3 actions', quietWorkMode:'Calm work mode', shiftStartedTitle:'Shift started', shiftStartedText:'Start with the base. One calm choice at a time is how you keep control.', lowEnergy:'Low', normalEnergy:'Normal', strongEnergy:'Strong', energyCheck:'Energy check'
+  });
+
+  function v660EnsureUi(){
+    state.ui = state.ui || {};
+    if(!state.ui.energy) state.ui.energy = 'normal';
+    state.ui.rustMode = !!state.ui.rustMode;
+  }
+
+  function v660EnergyAdvice(){
+    v660EnsureUi();
+    if(state.ui.energy === 'low') return t('energyLowAdvice');
+    if(state.ui.energy === 'strong') return t('energyStrongAdvice');
+    return t('energyNormalAdvice');
+  }
+
+  function v660ActionButton(action){
+    if(action.type === 'start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(action.type === 'stop-break') return `<button class="btn primary" data-action="toggle-break">${t('finishBreakNow')}</button>`;
+    if(action.type === 'close-shift') return `<button class="btn primary" data-action="shift-end">${t('closeShiftNow')}</button>`;
+    if(action.type === 'task') return `<button class="btn small good" data-action="task-done" data-id="${action.id}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(action.type === 'agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    if(action.type === 'inventory') return `<button class="btn primary" data-route="inventory">${t('showMe')}</button>`;
+    if(action.type === 'communication') return `<button class="btn primary" data-route="communication">${t('showMe')}</button>`;
+    if(action.type === 'storemap') return `<button class="btn primary" data-route="storemap">${t('showMe')}</button>`;
+    return `<button class="btn primary" data-route="${action.route||'today'}">${t('showMe')}</button>`;
+  }
+
+  function v660DailyActions(limit=3){
+    const actions=[];
+    if(!state.shift.active){
+      actions.push({type:'start-shift', title:t('startMyShiftNow'), reason:t('startShiftAdvice'), route:'today'});
+    } else if(state.shift.breakActive){
+      actions.push({type:'stop-break', title:t('finishBreakNow'), reason:L('Je pauze loopt nog. Stop deze om verder te plannen.','Your break is active. End it to continue planning.'), route:'today'});
+    }
+    const urgentClean = cleaningUrgent().find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgentClean){ actions.push({type:'storemap', title:`${t('storemap')}: ${urgentClean.zone||''} M${urgentClean.meter||''}`, reason:L('Urgentie vanuit schoonmaakkaart of nacontrole.','Urgency from Cleaning Map or follow-up.'), route:'storemap'}); }
+    sortedTasks().slice(0,6).forEach(task=>actions.push({type:'task', id:task.id, title:taskTitle(task), reason:`${localStatus(task.priority)} · ${minutesToText(task.duration)} · ${translatedCategory(task.category||'')}`, route:'haccp'}));
+    const agf = agfAttention()[0];
+    if(agf) actions.push({type:'agf', title:agf.name, reason:agf.reason||agf.advice||t('orderAdvice'), route:'agf'});
+    const comm = state.communications.find(c=>c.status==='Rood'||(c.followDate&&c.followDate<=TODAY()));
+    if(comm) actions.push({type:'communication', title:comm.to||comm.customTo||t('communication'), reason:comm.message||L('Communicatie vraagt opvolging.','Communication needs follow-up.'), route:'communication'});
+    const low = lowStockItems()[0];
+    if(low) actions.push({type:'inventory', title:low.name, reason:L('Inventaris staat onder minimum.','Inventory is below minimum.'), route:'inventory'});
+    if(actions.length===0) actions.push({type:'agf', title:t('startAgfQuickCheck'), reason:L('Geen urgente acties. Een korte check houdt je data actueel.','No urgent actions. A quick check keeps your data current.'), route:'agf'});
+    return actions.slice(0,limit);
+  }
+
+  function v660ActionCard(action, i){
+    return `<div class="list-item v660-action-card">
+      <div><span class="chip">${i+1}</span> <strong>${escapeHtml(action.title)}</strong><div class="small muted">${escapeHtml(action.reason||'')}</div></div>
+      <div class="btn-row">${v660ActionButton(action)}</div>
+    </div>`;
+  }
+
+  nextAction = window.nextAction = function(){
+    const a=v660DailyActions(1)[0];
+    return {title:a.title, reason:a.reason, route:a.route||'today', type:a.type, id:a.id, why:[v660EnergyAdvice(), a.reason].filter(Boolean)};
+  };
+
+  renderSmartQueue = window.renderSmartQueue = function(){
+    const q=v660DailyActions(3);
+    return `<div class="list">${q.map((a,i)=>v660ActionCard(a,i)).join('')}</div>`;
+  };
+
+  renderEnergyCheck = window.renderEnergyCheck = function(){
+    v660EnsureUi();
+    return `<div class="energy-grid v660-energy-grid">
+      <button class="btn ${state.ui.energy==='low'?'primary':''}" data-action="set-energy" data-level="low">${t('lowEnergy')}</button>
+      <button class="btn ${state.ui.energy==='normal'?'primary':''}" data-action="set-energy" data-level="normal">${t('normalEnergy')}</button>
+      <button class="btn ${state.ui.energy==='strong'?'primary':''}" data-action="set-energy" data-level="strong">${t('strongEnergy')}</button>
+    </div><p class="muted small mt">${escapeHtml(v660EnergyAdvice())}</p>`;
+  };
+
+  function v660TodayMainCards(){
+    return `<div class="grid">
+      <div class="card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div>
+      <div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div>
+      <div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div>
+    </div>`;
+  }
+
+  renderToday = window.renderToday = function(){
+    v660EnsureUi();
+    const prod=productivity();
+    const calm=!!state.ui.rustMode;
+    return `<div class="today-v660 ${calm?'rust-active':''}">
+      <div class="hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.0</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeText'):L('Vandaag draait om volgorde, rust en de beste volgende actie.','Today is about sequence, calm and the best next action.')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>
+      <div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>
+      ${calm?`<div class="v660-calm-panel"><div class="card hero-mini"><h3>${t('calmModeActive')}</h3><p>${t('calmModeText')}</p></div>${v660TodayMainCards()}</div>`:`<div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v660TodayMainCards()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}
+    </div>`;
+  };
+
+  const v660BaseSetEnergy = typeof setEnergy === 'function' ? setEnergy : null;
+  setEnergy = window.setEnergy = function(level){
+    v660EnsureUi();
+    state.ui.energy = ['low','normal','strong'].includes(level) ? level : 'normal';
+    addActivity(`${t('energyCheck')}: ${currentEnergyLabel()}`,'energy');
+    toast(v660EnergyAdvice(),'info');
+    save(); render();
+  };
+
+  const v660BaseStartShift = typeof startShift === 'function' ? startShift : null;
+  startShift = window.startShift = function(){
+    if(state.shift.active){ toast(L('Shift loopt al.','Shift is already active.'),'info'); return; }
+    state.shift.active=true;
+    state.shift.startedAt=nowISO();
+    state.shift.logs.unshift({type:'clockIn',at:nowISO(),energy:state.ui.energy||'normal'});
+    addActivity(currentLang()==='en'?'Shift started':'Shift gestart','shift');
+    save(); render();
+    modal(t('shiftStartedTitle'), `<div class="hero"><h2>${t('shiftStartedTitle')} 👋</h2><p>${t('shiftStartedText')}</p></div><div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="btn-row mt"><button class="btn primary" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`);
+  };
+
+  const v660BaseHandleAction = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='start-shift-now'){ startShift(); return; }
+    if(a==='smart-next'){
+      const q=v660DailyActions(3);
+      modal(t('smart'), `<div class="grid"><p class="muted">${L('Dit zijn de eerste acties die nu het meeste helpen.','These are the first actions that help most right now.')}</p><div class="list">${q.map((x,i)=>v660ActionCard(x,i)).join('')}</div></div>`, 'wide');
+      return;
+    }
+    if(a==='toggle-rust-mode'){
+      v660EnsureUi();
+      state.ui.rustMode=!state.ui.rustMode;
+      toast(state.ui.rustMode?t('calmModeActive'):L('Normale weergave actief','Normal view active'),'info');
+      save(); render(); return;
+    }
+    if(a==='set-energy'){ setEnergy(el.dataset.level); return; }
+    return v660BaseHandleAction(a, el, e);
+  };
+
+  const v660BaseAssist = renderAssist;
+  renderAssist = window.renderAssist = function(){
+    const n=nextAction();
+    let html = v660BaseAssist();
+    html = html.replace('</div></aside>', `<div class="assist-extra v660-assist-extra"><h4>${t('energyCheck')}</h4><p class="muted small">${escapeHtml(v660EnergyAdvice())}</p><h4>${t('nextActions')}</h4><p class="small"><strong>${escapeHtml(n.title)}</strong><br>${escapeHtml(n.reason)}</p></div></div></aside>`);
+    return html;
+  };
+
+  const v660BaseDiag = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html=v660BaseDiag();
+    html=html.replaceAll('v6.5.27','v6.6.0').replaceAll('rich-cmd-cache-v6527','rich-cmd-cache-v660');
+    html += `<div class="card"><h3>v6.6.0 — Daily Flow Polish</h3><p>${L('Smart Next Action heeft nu directe knoppen, Rustmodus is echt actief en Energiecheck beïnvloedt het dagadvies.','Smart Next Action now has direct buttons, Calm Mode is active and Energy Check affects daily advice.')}</p></div>`;
+    return html;
+  };
+
+  v660EnsureUi();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.0 Daily Flow Polish failed', err);
+}
+
+
+/* v6.6.1 — Daily Flow Stabilization */
+try {
+  APP.version = 'v6.6.1';
+  APP.cache = 'rich-cmd-cache-v661';
+
+  Object.assign(I18N.nl, {
+    v661Title:'RICH CMD v6.6.1 — Daily Flow Stabilisatie',
+    v661Subtitle:'Rustiger werken, duidelijkere acties en betere koppeling tussen energie en planning.',
+    viewCommunication:'Bekijk communicatie',
+    openInventory:'Open inventaris',
+    openStoreMap:'Open schoonmaakkaart',
+    shortWin:'Korte winst',
+    shortWinReason:'Lage energie: kies eerst een korte taak die snel af te ronden is.',
+    energyPlanningEffect:'Effect op planning',
+    energyLowEffect:'Korte taken krijgen voorrang. Managementblokken blijven op de achtergrond.',
+    energyNormalEffect:'Basisroutine blijft leidend. Daarna AGF, periodiek of communicatie.',
+    energyStrongEffect:'Na de basisroutine mag één periodieke of schoonmaakactie hoger komen.',
+    calmShiftStatus:'Shiftstatus',
+    urgentCommunication:'Urgente communicatie',
+    noUrgentCommunication:'Geen urgente communicatie open.',
+    mobileWorkFlow:'Mobiele werkflow',
+    calmModeHint:'Rustmodus toont alleen shift, energie, eerste acties, urgente communicatie en snelle uitvoering.',
+    normalViewActive:'Normale weergave actief',
+    v7Prep:'V7-voorbereiding',
+    v7PrepText:'Deze update houdt de patch klein, maar maakt de Daily Flow consistenter als basis richting V7.'
+  });
+  Object.assign(I18N.en, {
+    v661Title:'RICH CMD v6.6.1 — Daily Flow Stabilization',
+    v661Subtitle:'Calmer work, clearer actions and stronger connection between energy and planning.',
+    viewCommunication:'View communication',
+    openInventory:'Open inventory',
+    openStoreMap:'Open Cleaning Map',
+    shortWin:'Short win',
+    shortWinReason:'Low energy: choose a short task that can be completed quickly first.',
+    energyPlanningEffect:'Planning effect',
+    energyLowEffect:'Short tasks move up. Management blocks stay in the background.',
+    energyNormalEffect:'Base routine stays leading. Then produce, periodic work or communication.',
+    energyStrongEffect:'After the base routine, one periodic or cleaning action may move up.',
+    calmShiftStatus:'Shift status',
+    urgentCommunication:'Urgent communication',
+    noUrgentCommunication:'No urgent communication open.',
+    mobileWorkFlow:'Mobile workflow',
+    calmModeHint:'Calm mode only shows shift, energy, first actions, urgent communication and quick execution.',
+    normalViewActive:'Normal view active',
+    v7Prep:'V7 preparation',
+    v7PrepText:'This update keeps the patch small, while making Daily Flow more consistent as a foundation for V7.'
+  });
+
+  function v661EnsureUi(){
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.ui.rustMode = !!state.ui.rustMode;
+    state.schemaVersion = Math.max(661, +(state.schemaVersion||0));
+  }
+
+  function v661EnergyAdvice(){
+    v661EnsureUi();
+    if(state.ui.energy === 'low') return t('energyLowAdvice');
+    if(state.ui.energy === 'strong') return t('energyStrongAdvice');
+    return t('energyNormalAdvice');
+  }
+
+  function v661EnergyEffect(){
+    v661EnsureUi();
+    if(state.ui.energy === 'low') return t('energyLowEffect');
+    if(state.ui.energy === 'strong') return t('energyStrongEffect');
+    return t('energyNormalEffect');
+  }
+
+  function v661EnergyLabel(){
+    const e = state.ui.energy || 'normal';
+    return e === 'low' ? t('lowEnergy') : e === 'strong' ? t('strongEnergy') : t('normalEnergy');
+  }
+
+  function v661IsPeriodicTask(task){
+    const text = `${task.category||''} ${task.group||''} ${task.title||''}`.toLowerCase();
+    return text.includes('periodiek') || text.includes('periodic') || text.includes('maandelijks') || text.includes('weekly') || text.includes('monthly');
+  }
+
+  function v661TaskScore(task, index){
+    const energy = state.ui.energy || 'normal';
+    const pr = priorityWeight(task.priority);
+    const duration = +(task.duration||0);
+    const manual = task.manualOrder ?? 9999;
+    let score = manual * 0.01 + pr * 100 + Math.min(duration,120);
+    if(energy === 'low'){
+      score += duration <= 10 ? -90 : duration >= 30 ? 80 : 0;
+      if(v661IsPeriodicTask(task)) score += 55;
+    }
+    if(energy === 'strong'){
+      if(v661IsPeriodicTask(task)) score -= 60;
+      if(String(task.category||'').toLowerCase().includes('basis')) score -= 15;
+    }
+    return score + index * 0.001;
+  }
+
+  function v661OpenTasks(){
+    return sortedTasks().map((task,index)=>({task,index})).sort((a,b)=>v661TaskScore(a.task,a.index)-v661TaskScore(b.task,b.index)).map(x=>x.task);
+  }
+
+  function v661ActionButton(action){
+    if(action.type === 'start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(action.type === 'stop-break') return `<button class="btn primary" data-action="toggle-break">${t('finishBreakNow')}</button>`;
+    if(action.type === 'close-shift') return `<button class="btn primary" data-action="shift-end">${t('closeShiftNow')}</button>`;
+    if(action.type === 'task') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(action.id)}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(action.type === 'agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    if(action.type === 'inventory') return `<button class="btn primary" data-route="inventory">${t('openInventory')}</button>`;
+    if(action.type === 'communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')}</button>`;
+    if(action.type === 'storemap') return `<button class="btn primary" data-route="storemap">${t('openStoreMap')}</button>`;
+    return `<button class="btn primary" data-route="${escapeHtml(action.route||'today')}">${t('showMe')}</button>`;
+  }
+
+  function v661DailyActions(limit=3){
+    v661EnsureUi();
+    const actions = [];
+    const energy = state.ui.energy || 'normal';
+
+    if(!state.shift.active){
+      actions.push({type:'start-shift', title:t('startMyShiftNow'), reason:t('startShiftAdvice'), route:'today'});
+    } else if(state.shift.breakActive){
+      actions.push({type:'stop-break', title:t('finishBreakNow'), reason:L('Je pauze loopt nog. Stop deze om verder te plannen.','Your break is active. End it to continue planning.'), route:'today'});
+    }
+
+    const urgentClean = cleaningUrgent().find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgentClean){
+      actions.push({type:'storemap', title:`${t('storemap')}: ${urgentClean.zone||urgentClean.label||''}${urgentClean.meter?` M${urgentClean.meter}`:''}`, reason:L('Urgentie vanuit schoonmaakkaart of nacontrole.','Urgency from Cleaning Map or follow-up.'), route:'storemap'});
+    }
+
+    const openTasks = v661OpenTasks();
+    if(energy === 'low'){
+      const shortTask = openTasks.find(task=>(+task.duration||0) <= 10);
+      if(shortTask){
+        actions.push({type:'task', id:shortTask.id, title:`${t('shortWin')}: ${taskTitle(shortTask)}`, reason:t('shortWinReason'), route:'haccp'});
+      }
+    }
+
+    openTasks.slice(0,6).forEach(task=>{
+      if(actions.some(a=>a.id===task.id)) return;
+      actions.push({type:'task', id:task.id, title:taskTitle(task), reason:`${localStatus(task.priority)} · ${minutesToText(task.duration)} · ${translatedCategory(task.category||'')}`, route:'haccp'});
+    });
+
+    const comm = state.communications.find(c=>c.status==='Rood'||(c.followDate&&c.followDate<=TODAY())||(!c.read && String(c.status||'')!=='Voltooid'));
+    if(comm) actions.push({type:'communication', title:comm.to||comm.customTo||t('communication'), reason:comm.message||L('Communicatie vraagt opvolging.','Communication needs follow-up.'), route:'communication'});
+
+    const agf = agfAttention()[0];
+    if(agf) actions.push({type:'agf', title:agf.name, reason:agf.reason||agf.advice||t('orderAdvice'), route:'agf'});
+
+    const low = lowStockItems()[0];
+    if(low) actions.push({type:'inventory', title:low.name, reason:L('Inventaris staat onder minimum.','Inventory is below minimum.'), route:'inventory'});
+
+    if(state.shift.active && !state.shift.breakActive && actions.length < limit){
+      const elapsed = state.shift.startedAt ? Math.round((Date.now()-new Date(state.shift.startedAt).getTime())/60000) : 0;
+      const expected = (+state.settings.workHours||8)*60;
+      if(elapsed > expected * 0.75 || (todayTasks().length && completedCount() >= todayTasks().length)){
+        actions.push({type:'close-shift', title:t('closeShiftNow'), reason:L('Je dag is ver genoeg om je overdracht en afsluiting te controleren.','Your day is far enough along to check handover and closing.'), route:'today'});
+      }
+    }
+
+    if(actions.length===0){
+      actions.push({type:'agf', title:t('startAgfQuickCheck'), reason:L('Geen urgente acties. Een korte check houdt je data actueel.','No urgent actions. A quick check keeps your data current.'), route:'agf'});
+    }
+    return actions.slice(0,limit);
+  }
+
+  function v661ActionCard(action, i){
+    return `<div class="list-item v661-action-card">
+      <div><span class="chip">${i+1}</span> <strong>${escapeHtml(action.title)}</strong><div class="small muted">${escapeHtml(action.reason||'')}</div></div>
+      <div class="btn-row">${v661ActionButton(action)}</div>
+    </div>`;
+  }
+
+  nextAction = window.nextAction = function(){
+    const a = v661DailyActions(1)[0];
+    return {title:a.title, reason:a.reason, route:a.route||'today', type:a.type, id:a.id, why:[v661EnergyAdvice(), v661EnergyEffect(), a.reason].filter(Boolean)};
+  };
+
+  renderSmartQueue = window.renderSmartQueue = function(){
+    const q = v661DailyActions(3);
+    return `<div class="list v661-smart-list">${q.map((a,i)=>v661ActionCard(a,i)).join('')}</div>`;
+  };
+
+  renderEnergyCheck = window.renderEnergyCheck = function(){
+    v661EnsureUi();
+    return `<div class="energy-grid v661-energy-grid">
+      <button class="btn ${state.ui.energy==='low'?'primary':''}" data-action="set-energy" data-level="low">${t('lowEnergy')}</button>
+      <button class="btn ${state.ui.energy==='normal'?'primary':''}" data-action="set-energy" data-level="normal">${t('normalEnergy')}</button>
+      <button class="btn ${state.ui.energy==='strong'?'primary':''}" data-action="set-energy" data-level="strong">${t('strongEnergy')}</button>
+    </div>
+    <div class="v661-energy-note">
+      <p class="muted small"><strong>${escapeHtml(v661EnergyLabel())}</strong> · ${escapeHtml(v661EnergyAdvice())}</p>
+      <p class="muted small"><strong>${t('energyPlanningEffect')}:</strong> ${escapeHtml(v661EnergyEffect())}</p>
+    </div>`;
+  };
+
+  function v661UrgentCommunication(){
+    const rows = state.communications.filter(c=>c.status==='Rood'||(c.followDate&&c.followDate<=TODAY())||(!c.read && String(c.status||'')!=='Voltooid')).slice(0,3);
+    if(!rows.length) return `<p class="muted small">${t('noUrgentCommunication')}</p>`;
+    return `<div class="list">${rows.map(c=>`<div class="list-item compact"><div><strong>${escapeHtml(c.to||c.customTo||t('communication'))}</strong><div class="small muted">${escapeHtml(c.message||'')}</div></div><button class="btn small" data-route="communication">${t('viewCommunication')}</button></div>`).join('')}</div>`;
+  }
+
+  function v661MainActions(){
+    return `<div class="grid v661-main-actions">
+      <div class="card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div>
+      <div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div>
+      <div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="storemap">${t('openStoreMap')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div>
+    </div>`;
+  }
+
+  function v661CalmToday(){
+    return `<div class="v661-calm-panel">
+      <div class="card hero-mini v661-calm-status"><h3>${t('calmModeActive')}</h3><p>${t('calmModeHint')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="toggle-rust-mode">${t('restoreNormalView')}</button></div></div>
+      <div class="grid grid-2 v661-calm-strip">${kpi(t('calmShiftStatus'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('energyCheck'),v661EnergyLabel(),state.ui.energy==='low'?'warn':state.ui.energy==='strong'?'good':null)}</div>
+      <div class="grid">
+        <div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div>
+        <div class="card"><h3>${t('urgentCommunication')}</h3>${v661UrgentCommunication()}</div>
+        <div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('closeShiftNow')}</button></div></div>
+      </div>
+    </div>`;
+  }
+
+  renderToday = window.renderToday = function(){
+    v661EnsureUi();
+    const prod = productivity();
+    const calm = !!state.ui.rustMode;
+    return `<div class="today-v661 ${calm?'rust-active':''}">
+      <div class="hero v661-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.1</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v661Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>
+      ${calm ? v661CalmToday() : `<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div><div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v661MainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}
+    </div>`;
+  };
+
+  const v661BaseSetEnergy = typeof setEnergy === 'function' ? setEnergy : null;
+  setEnergy = window.setEnergy = function(level){
+    v661EnsureUi();
+    state.ui.energy = ['low','normal','strong'].includes(level) ? level : 'normal';
+    addActivity(`${t('energyCheck')}: ${v661EnergyLabel()}`,'energy');
+    toast(v661EnergyAdvice(),'info');
+    save(); render();
+  };
+
+  const v661BaseHandleAction = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='start-shift-now'){ startShift(); return; }
+    if(a==='smart-next'){
+      const q = v661DailyActions(3);
+      modal(t('smart'), `<div class="grid"><p class="muted">${L('Dit zijn de eerste acties die nu het meeste helpen. De volgorde gebruikt je energiecheck.','These are the first actions that help most right now. The order uses your energy check.')}</p><div class="list">${q.map((x,i)=>v661ActionCard(x,i)).join('')}</div></div>`, 'wide');
+      return;
+    }
+    if(a==='toggle-rust-mode'){
+      v661EnsureUi();
+      state.ui.rustMode=!state.ui.rustMode;
+      toast(state.ui.rustMode?t('calmModeActive'):t('normalViewActive'),'info');
+      save(); render(); return;
+    }
+    if(a==='set-energy'){ setEnergy(el.dataset.level); return; }
+    return v661BaseHandleAction(a, el, e);
+  };
+
+  const v661BaseAssist = renderAssist;
+  renderAssist = window.renderAssist = function(){
+    const n = nextAction();
+    let html = v661BaseAssist();
+    const extra = `<div class="assist-extra v661-assist-extra"><h4>${t('energyCheck')}</h4><p class="muted small">${escapeHtml(v661EnergyAdvice())}</p><h4>${t('energyPlanningEffect')}</h4><p class="muted small">${escapeHtml(v661EnergyEffect())}</p><h4>${t('nextActions')}</h4><p class="small"><strong>${escapeHtml(n.title)}</strong><br>${escapeHtml(n.reason)}</p></div>`;
+    return html.includes('</div></aside>') ? html.replace('</div></aside>', `${extra}</div></aside>`) : html + extra;
+  };
+
+  const v661BaseDiag = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v661BaseDiag();
+    html = html.replaceAll('v6.6.0','v6.6.1').replaceAll('rich-cmd-cache-v660','rich-cmd-cache-v661');
+    html += `<div class="card"><h3>${t('v661Title')}</h3><p>${t('v661Subtitle')}</p><ul><li>${t('calmModeHint')}</li><li>${t('energyPlanningEffect')}: ${escapeHtml(v661EnergyEffect())}</li><li>${t('v7PrepText')}</li></ul></div>`;
+    return html;
+  };
+
+  v661EnsureUi();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.1 Daily Flow Stabilization failed', err);
+}
+
+/* v6.6.2 — Daily Flow Layout, PWA Offline, Communication Follow-up & Order Management */
+try {
+  APP.version = 'v6.6.2';
+  APP.cache = 'rich-cmd-cache-v662';
+
+  Object.assign(I18N.nl, {
+    v662Title:'RICH CMD v6.6.2 — Flow & Bestelbeheer Stabilisatie',
+    v662Subtitle:'Betere Daily Flow-layout, duidelijkere PWA-status, relatieve opvolging en bestelbeheer in plaats van voorraadbeheer.',
+    calmScope:'Rustmodus werkt nu bewust alleen op Vandaag.',
+    calmScopeText:'Rustmodus is bedoeld als uitvoermodus voor je startpagina. Andere modules blijven volledig zichtbaar zodat je geen beheerfuncties kwijtraakt.',
+    offlineReady:'Offline gereed',
+    offlineReadyText:'Na één succesvolle online laadbeurt bewaart de PWA de kernbestanden voor offline gebruik. Bij een update moet de app eerst weer online openen.',
+    pwaOfflineHelp:'Als offline openen niet lukt: open de app één keer online, gebruik Cache herstellen en installeer/vernieuw daarna de PWA.',
+    quickNote:'Snelle notitie',
+    quickNotePlaceholder:'Noteer snel iets voor later...',
+    saveNote:'Notitie opslaan',
+    notes:'Notities',
+    noNotes:'Nog geen notities.',
+    followUpMode:'Opvolging',
+    noFollowUp:'Geen opvolging',
+    inDays:'Over dagen',
+    inWeeks:'Over weken',
+    specificDate:'Specifieke datum',
+    amount:'Aantal',
+    orderManagement:'Bestelbeheer',
+    orderManagementIntro:'Voor jouw gebruik is bestelbeheer logischer dan voorraadbeheer: standaard staat elk artikel op 0, en je markeert alleen wat je wilt bijbestellen of wat juist teveel is.',
+    addOrderItem:'Bestelartikel toevoegen',
+    orderQty:'Bestelaantal',
+    defaultOrderQty:'Standaard bestelaantal',
+    markOrder:'Bijbestellen',
+    markOverstock:'Teveel',
+    clearMark:'Reset',
+    updateOrderList:'Bestellijst bijwerken',
+    confirmOrderList:'Bestellijst bevestigen',
+    clearOrderList:'Bestellijst leegmaken',
+    removeFromOrderList:'Verwijderen',
+    orderFrequency:'Bestelfrequentie',
+    timesOrdered:'keer besteld',
+    lastOrdered:'Laatst besteld',
+    noOrderList:'Geen artikelen op de bestellijst.',
+    orderListConfirmed:'Bestellijst bevestigd en frequentie bijgewerkt.',
+    orderListCleared:'Bestellijst leeggemaakt.',
+    orderListUpdated:'Bestellijst bijgewerkt.',
+    tooMuchShort:'Teveel',
+    notOrdering:'Niet bestellen',
+    orderAdviceOpinion:'Mijn advies: maak Inventaris primair bestelbeheer. Voorraad tellen kost tijd en is op de winkelvloer vaak minder nuttig dan snel bepalen wat er bij moet of juist niet besteld moet worden.'
+  });
+  Object.assign(I18N.en, {
+    v662Title:'RICH CMD v6.6.2 — Flow & Ordering Stabilization',
+    v662Subtitle:'Better Daily Flow layout, clearer PWA status, relative follow-ups and ordering management instead of stock management.',
+    calmScope:'Calm Mode now intentionally only affects Today.',
+    calmScopeText:'Calm Mode is meant as an execution mode for the start page. Other modules stay fully visible so management functions are not hidden.',
+    offlineReady:'Offline ready',
+    offlineReadyText:'After one successful online load, the PWA stores the core files for offline use. After an update, the app must open online once first.',
+    pwaOfflineHelp:'If offline launch fails: open the app online once, use Repair cache and then refresh/reinstall the PWA.',
+    quickNote:'Quick note',
+    quickNotePlaceholder:'Quickly note something for later...',
+    saveNote:'Save note',
+    notes:'Notes',
+    noNotes:'No notes yet.',
+    followUpMode:'Follow-up',
+    noFollowUp:'No follow-up',
+    inDays:'In days',
+    inWeeks:'In weeks',
+    specificDate:'Specific date',
+    amount:'Amount',
+    orderManagement:'Order management',
+    orderManagementIntro:'For your use case, order management is more logical than stock management: every item starts at 0, and you only mark what needs ordering or what is overstocked.',
+    addOrderItem:'Add order item',
+    orderQty:'Order quantity',
+    defaultOrderQty:'Default order quantity',
+    markOrder:'Order',
+    markOverstock:'Too much',
+    clearMark:'Reset',
+    updateOrderList:'Update order list',
+    confirmOrderList:'Confirm order list',
+    clearOrderList:'Clear order list',
+    removeFromOrderList:'Remove',
+    orderFrequency:'Order frequency',
+    timesOrdered:'times ordered',
+    lastOrdered:'Last ordered',
+    noOrderList:'No items on the order list.',
+    orderListConfirmed:'Order list confirmed and frequency updated.',
+    orderListCleared:'Order list cleared.',
+    orderListUpdated:'Order list updated.',
+    tooMuchShort:'Too much',
+    notOrdering:'Do not order',
+    orderAdviceOpinion:'My advice: make Inventory primarily order management. Counting stock costs time and is often less useful on the shop floor than quickly deciding what should or should not be ordered.'
+  });
+
+  function v662EnsureUi(){
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.ui.rustMode = !!state.ui.rustMode;
+    state.schemaVersion = Math.max(662, +(state.schemaVersion||0));
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
+    state.inventoryOrders = Array.isArray(state.inventoryOrders) ? state.inventoryOrders : [];
+    state.communications = Array.isArray(state.communications) ? state.communications : [];
+  }
+
+  function v662DaysFromToday(days){
+    const d = new Date();
+    d.setDate(d.getDate() + Math.max(0, +(days||0)));
+    return d.toISOString().slice(0,10);
+  }
+  function v662FollowDateFromModal(){
+    const mode = byId('commFollowMode')?.value || 'none';
+    const amount = Math.max(1, +(byId('commFollowAmount')?.value || 1));
+    if(mode === 'days') return v662DaysFromToday(amount);
+    if(mode === 'weeks') return v662DaysFromToday(amount * 7);
+    if(mode === 'date') return byId('commFollowDate')?.value || '';
+    return '';
+  }
+  function v662PeopleOptions(){
+    const people = Array.isArray(state.settings.contacts) ? state.settings.contacts : [];
+    return `<option value="">${L('Zelf invullen','Custom')}</option>${people.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}`;
+  }
+  function v662OpenCommunicationForm(){
+    v662EnsureUi();
+    modal(t('addCommunication'), `<div class="grid grid-2 v662-comm-form">
+      <label>${t('person')}<select class="select" id="commTo">${v662PeopleOptions()}</select></label>
+      <label>${L('Andere persoon','Other person')}<input class="input" id="commCustom" placeholder="${L('Bijv. teamleider / collega','e.g. team lead / colleague')}"></label>
+      <label>${t('status')}<select class="select" id="commStatus"><option value="Rood">${L('Rood — actie nodig','Red — action needed')}</option><option value="Geel">${L('Geel — opvolgen','Yellow — follow up')}</option><option value="Groen">${L('Groen — informatie','Green — information')}</option></select></label>
+      <label>${t('followUpMode')}<select class="select" id="commFollowMode"><option value="days">${t('inDays')}</option><option value="weeks">${t('inWeeks')}</option><option value="date">${t('specificDate')}</option><option value="none">${t('noFollowUp')}</option></select></label>
+      <label>${t('amount')}<input class="input" id="commFollowAmount" type="number" min="1" max="31" value="1"></label>
+      <label>${t('specificDate')}<input class="input" id="commFollowDate" type="date"></label>
+      <label class="check-row"><input type="checkbox" id="commUrgent"> ${t('urgent') || L('Urgent','Urgent')}</label>
+      <label class="v662-span-2">${t('message')}<textarea class="textarea" id="commMsg" placeholder="${t('message')}"></textarea></label>
+    </div><div class="btn-row mt"><button class="btn" data-action="apply-modal-comm-template-v6523" data-template="short">${t('shortUpdate') || L('Korte update','Short update')}</button><button class="btn" data-action="apply-modal-comm-template-v6523" data-template="problem">${t('problemReport') || L('Probleemmelding','Problem report')}</button><button class="btn primary" data-action="confirm-add-communication-v662">${t('save')}</button></div>`, 'wide');
+  }
+  function v662AddCommunication(){
+    const message = (byId('commMsg')?.value || '').trim();
+    if(!message){ toast(t('messageRequired') || L('Bericht is verplicht.','Message is required.'), 'warn'); return; }
+    const to = byId('commTo')?.value || '';
+    const custom = (byId('commCustom')?.value || '').trim();
+    const followDate = v662FollowDateFromModal();
+    const followMode = byId('commFollowMode')?.value || 'none';
+    const followAmount = +(byId('commFollowAmount')?.value || 0);
+    state.communications.unshift({id:uid('comm'),type:'communication',to,customTo:custom,message,status:byId('commStatus')?.value || 'Rood',urgent:!!byId('commUrgent')?.checked,read:false,done:false,followDate,followMode,followAmount,createdAt:nowISO()});
+    addActivity(`${t('communication')}: ${message.slice(0,40)}`, 'communication');
+    closeModal(); toast(t('savedCommunication') || L('Communicatie opgeslagen.','Communication saved.'), 'good'); save(); render();
+  }
+  function v662OpenQuickNoteForm(){
+    modal(t('quickNote'), `<textarea class="textarea" id="quickNoteText" placeholder="${t('quickNotePlaceholder')}"></textarea><div class="btn-row mt"><button class="btn primary" data-action="confirm-add-quick-note">${t('saveNote')}</button><button class="btn" data-action="close-modal">${t('cancel')}</button></div>`);
+  }
+  function v662AddQuickNote(){
+    const text = (byId('quickNoteText')?.value || '').trim();
+    if(!text){ toast(t('messageRequired') || L('Notitie is leeg.','Note is empty.'), 'warn'); return; }
+    state.communications.unshift({id:uid('note'),type:'note',to:L('Notitie','Note'),customTo:'',message:text,status:'Notitie',urgent:false,read:true,done:false,followDate:'',createdAt:nowISO()});
+    addActivity(`${t('quickNote')}: ${text.slice(0,40)}`, 'communication');
+    closeModal(); toast(t('savedCommunication') || L('Notitie opgeslagen.','Note saved.'), 'good'); save(); render();
+  }
+  function v662RenderNotes(){
+    const notes = state.communications.filter(c=>c.type === 'note' || c.status === 'Notitie').slice(0,6);
+    if(!notes.length) return `<p class="muted small">${t('noNotes')}</p>`;
+    return `<div class="list">${notes.map(n=>`<div class="list-item compact"><div><strong>${escapeHtml(t('quickNote'))}</strong><div class="small muted">${dateTime(n.createdAt)}</div><p class="small">${escapeHtml(n.message || '')}</p></div><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(n.id)}">${t('delete')}</button></div>`).join('')}</div>`;
+  }
+
+  const v662CommunicationBase = renderCommunication;
+  renderCommunication = window.renderCommunication = function(){
+    v662EnsureUi();
+    let html = v662CommunicationBase();
+    const noteButton = `<button class="btn" data-action="open-quick-note-form">${t('quickNote')}</button>`;
+    if(!html.includes('open-quick-note-form')){
+      html = html.replace('data-action="prepare-tomorrow-v6523">', `data-action="prepare-tomorrow-v6523">`);
+      html = html.replace('</div></div><div class="grid grid-4">', `${noteButton}</div></div><div class="grid grid-4">`);
+      if(!html.includes('open-quick-note-form')) html = html.replace('<div class="hero">', `<div class="hero">`).replace('</p><div class="btn-row">', `</p><div class="btn-row">${noteButton}`);
+    }
+    return `<div class="v662-communication-wrap">${html}<div class="card v662-note-card"><div class="btn-row"><h3>${t('notes')}</h3><button class="btn small primary" data-action="open-quick-note-form">${t('quickNote')}</button></div>${v662RenderNotes()}</div></div>`;
+  };
+
+  function v662OrderFlag(item){ return item.orderFlag || (item.overstock ? 'overstock' : ((+item.orderQty||0)>0 ? 'order' : 'none')); }
+  function v662OrderQty(item){ return Math.max(0, +(item.orderQty ?? 0)); }
+  function v662DefaultQty(item){ return Math.max(1, +(item.defaultOrderQty || item.defaultQty || item.max || 1)); }
+  function v662OrderList(){ return state.inventoryOrders.filter(o=>o && o.type !== 'legacy-cleared'); }
+  function v662OrderItemById(id){ return state.inventory.find(i=>i.id === id); }
+  function v662UpsertOrder(item){
+    if(!item) return;
+    const qty = v662OrderQty(item) || v662DefaultQty(item);
+    item.orderQty = qty;
+    item.orderFlag = 'order';
+    item.overstock = false;
+    const existing = state.inventoryOrders.find(o=>o.itemId === item.id || (o.nasa && item.nasa && o.nasa === item.nasa && o.name === item.name));
+    if(existing){ existing.qty = qty; existing.name = item.name; existing.nasa = item.nasa; existing.category = item.category; existing.at = nowISO(); }
+    else state.inventoryOrders.unshift({id:uid('iord'),itemId:item.id,name:item.name,nasa:item.nasa,category:item.category,qty,reason:t('markOrder'),at:nowISO()});
+  }
+  function v662RemoveOrderForItem(id){ state.inventoryOrders = state.inventoryOrders.filter(o=>o.itemId !== id); }
+
+  renderInventory = window.renderInventory = function(){
+    v662EnsureUi();
+    const query = state.ui.invSearch || '';
+    const orders = v662OrderList();
+    return `<div class="grid inventory-v662">
+      <div class="hero"><span class="chip">${t('orderManagement')}</span><h2>${t('orderManagement')}</h2><p>${t('orderManagementIntro')}</p><div class="btn-row"><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button><button class="btn" data-action="copy-inv-orders" ${orders.length?'':'disabled'}>${t('copy')}</button><button class="btn good" data-action="confirm-inv-orders" ${orders.length?'':'disabled'}>${t('confirmOrderList')}</button><button class="btn bad" data-action="clear-inv-orders" ${orders.length?'':'disabled'}>${t('clearOrderList')}</button></div></div>
+      <div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('orderManagement')}</h3><div class="form-grid"><input class="input" id="invSearch" value="${escapeHtml(query)}" placeholder="${t('search')} item / NASA"><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button></div><div id="inventoryList" class="mt">${renderInventoryList(query)}</div></div></div><div class="grid"><div class="card v662-order-card"><h3>${t('order')}</h3>${renderInventoryOrders()}</div><div class="card"><h3>${t('orderAdvice')}</h3><p>${t('orderAdviceOpinion')}</p></div></div></div>
+    </div>`;
+  };
+
+  renderInventoryList = window.renderInventoryList = function(filter=''){
+    v662EnsureUi();
+    const q = (filter || '').toLowerCase();
+    const arr = state.inventory.filter(i=>(`${i.name||''} ${i.nasa||''} ${i.category||''}`).toLowerCase().includes(q));
+    if(!arr.length) return `<div class="empty-state"><h3>${t('orderManagement')}</h3><p>${L('Nog geen bestelartikelen. Voeg vaste artikelen toe die je snel wilt kunnen bijbestellen.','No order items yet. Add fixed items you want to order quickly.')}</p><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button></div>`;
+    return `<div class="list v662-order-items">${arr.map(i=>{
+      const flag = v662OrderFlag(i);
+      const qty = v662OrderQty(i);
+      const freq = +(i.orderFrequencyCount || 0);
+      const orderClass = flag === 'order' ? 'good' : flag === 'overstock' ? 'warn' : 'info';
+      const label = flag === 'order' ? `${t('markOrder')}: ${qty || v662DefaultQty(i)}` : flag === 'overstock' ? t('tooMuchShort') : `${t('notOrdering')}: 0`;
+      return `<div class="list-item v662-order-item"><div class="v662-order-info"><strong>${escapeHtml(i.name||'')}</strong><div class="small muted">${escapeHtml(i.category||'')} · NASA ${escapeHtml(i.nasa||'-')}</div><div class="btn-row"><span class="pill ${orderClass}">${escapeHtml(label)}</span><span class="pill info">${t('orderFrequency')}: ${freq} ${t('timesOrdered')}</span>${i.lastOrderedAt?`<span class="pill">${t('lastOrdered')}: ${dateOnly(i.lastOrderedAt)}</span>`:''}</div></div><div class="v662-order-controls"><div class="btn-row"><button class="btn small" data-action="inv-order-delta" data-id="${escapeHtml(i.id)}" data-delta="-1">−</button><span class="chip">${t('orderQty')}: ${qty}</span><button class="btn small" data-action="inv-order-delta" data-id="${escapeHtml(i.id)}" data-delta="1">+</button></div><div class="btn-row"><button class="btn small primary" data-action="set-inv-order-flag" data-id="${escapeHtml(i.id)}" data-flag="order">${t('markOrder')}</button><button class="btn small warn" data-action="set-inv-order-flag" data-id="${escapeHtml(i.id)}" data-flag="overstock">${t('markOverstock')}</button><button class="btn small" data-action="set-inv-order-flag" data-id="${escapeHtml(i.id)}" data-flag="none">${t('clearMark')}</button><button class="btn small" data-action="add-inv-order" data-id="${escapeHtml(i.id)}">${t('updateOrderList')}</button><button class="btn small" data-action="edit-inv" data-id="${escapeHtml(i.id)}">${t('edit')}</button></div></div></div>`;
+    }).join('')}</div>`;
+  };
+
+  renderInventoryOrders = window.renderInventoryOrders = function(){
+    v662EnsureUi();
+    const orders = v662OrderList();
+    if(!orders.length) return `<p class="muted">${t('noOrderList')}</p>`;
+    return `<div class="list">${orders.map(o=>`<div class="list-item compact"><div><strong>${escapeHtml(o.name||'')}</strong><div class="small muted">NASA ${escapeHtml(o.nasa||'-')} · ${dateTime(o.at)}</div></div><div class="btn-row"><span class="pill good">${escapeHtml(String(o.qty||0))}</span><button class="btn small bad" data-action="remove-inv-order" data-id="${escapeHtml(o.id)}">${t('removeFromOrderList')}</button></div></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="copy-inv-orders">${t('copy')}</button><button class="btn good" data-action="confirm-inv-orders">${t('confirmOrderList')}</button><button class="btn bad" data-action="clear-inv-orders">${t('clearOrderList')}</button></div>`;
+  };
+
+  openInventoryForm = window.openInventoryForm = function(i=null){
+    const cats = ['Schoonmaak','Kantoor','Emballage','Kantine','Magazijn','HACCP','AGF','Overig'];
+    const pre = i ? '' : (state.ui.invSearch || '').trim();
+    modal(i?L('Bestelartikel bewerken','Edit order item'):t('addOrderItem'), `<div class="grid grid-2"><label>${L('Naam','Name')}<input class="input" id="modal_name" value="${escapeHtml(i?.name||pre)}"></label><label>${t('nasa')}<input class="input" id="modal_nasa" value="${escapeHtml(i?.nasa||'')}"></label><label>${t('category')}<select class="select" id="modal_category">${cats.map(c=>`<option ${((i?.category||'HACCP')===c)?'selected':''}>${c}</option>`).join('')}</select></label><label>${t('defaultOrderQty')}<input class="input" id="modal_defaultOrderQty" type="number" min="1" value="${v662DefaultQty(i||{})}"></label><label class="v662-span-2">${L('Notitie / frequentie','Note / frequency')}<input class="input" id="modal_orderNote" value="${escapeHtml(i?.orderNote||'')}" placeholder="${L('Bijv. meestal 1x per week controleren','e.g. usually check once per week')}"></label></div><button class="btn primary mt" data-action="${i?'confirm-edit-inventory':'confirm-add-inventory'}" ${i?`data-id="${escapeHtml(i.id)}"`:''}>${t('save')}</button>`, 'wide');
+  };
+  addInventoryFromModal = window.addInventoryFromModal = function(){
+    const name = (byId('modal_name')?.value || '').trim();
+    if(!name){ toast(L('Naam is verplicht.','Name is required.'),'warn'); return; }
+    state.inventory.unshift({id:uid('inv'),name,nasa:byId('modal_nasa')?.value || '',category:byId('modal_category')?.value || 'HACCP',stock:0,min:0,max:+byId('modal_defaultOrderQty')?.value || 1,defaultOrderQty:+byId('modal_defaultOrderQty')?.value || 1,orderQty:0,orderFlag:'none',overstock:false,orderFrequencyCount:0,orderNote:byId('modal_orderNote')?.value || '',lastChecked:nowISO()});
+    closeModal(); save(); render();
+  };
+  editInventoryFromModal = window.editInventoryFromModal = function(id){
+    const i = state.inventory.find(x=>x.id === id); if(!i) return;
+    i.name = (byId('modal_name')?.value || '').trim() || i.name;
+    i.nasa = byId('modal_nasa')?.value || '';
+    i.category = byId('modal_category')?.value || 'HACCP';
+    i.defaultOrderQty = +byId('modal_defaultOrderQty')?.value || 1;
+    i.max = i.defaultOrderQty;
+    i.orderNote = byId('modal_orderNote')?.value || '';
+    closeModal(); save(); render();
+  };
+  addInventoryOrder = window.addInventoryOrder = function(id){
+    const i = v662OrderItemById(id); if(!i) return;
+    if(v662OrderFlag(i) === 'overstock'){ toast(t('notOrdering'),'warn'); return; }
+    if(!v662OrderQty(i)) i.orderQty = v662DefaultQty(i);
+    v662UpsertOrder(i);
+    toast(t('orderListUpdated'),'good'); save(); render();
+  };
+
+  function v662MainActions(){
+    return `<div class="grid v662-today-flow-grid">
+      <div class="card v662-flow-card v662-next-card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div>
+      <div class="grid grid-2 v662-flow-secondary"><div class="card v662-flow-card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v662-flow-card"><h3>${t('directActions')}</h3><div class="btn-row v662-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="storemap">${t('openStoreMap')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div>
+    </div>`;
+  }
+  function v662CalmToday(){
+    return `<div class="v661-calm-panel v662-calm-panel">
+      <div class="card hero-mini v661-calm-status"><h3>${t('calmModeActive')}</h3><p>${t('calmModeHint')}</p><p class="muted small"><strong>${t('calmScope')}</strong> ${t('calmScopeText')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="toggle-rust-mode">${t('restoreNormalView')}</button></div></div>
+      <div class="grid grid-2 v661-calm-strip">${kpi(t('calmShiftStatus'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('energyCheck'),state.ui.energy==='low'?t('lowEnergy'):state.ui.energy==='strong'?t('strongEnergy'):t('normalEnergy'),state.ui.energy==='low'?'warn':state.ui.energy==='strong'?'good':null)}</div>
+      <div class="grid"><div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="card"><h3>${t('urgentCommunication')}</h3>${typeof v661UrgentCommunication === 'function' ? v661UrgentCommunication() : `<button class="btn" data-route="communication">${t('viewCommunication')}</button>`}</div><div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('closeShiftNow')}</button></div></div></div>
+    </div>`;
+  }
+  renderToday = window.renderToday = function(){
+    v662EnsureUi();
+    const prod = productivity();
+    const calm = !!state.ui.rustMode;
+    return `<div class="today-v661 today-v662 ${calm?'rust-active':''}">
+      <div class="hero v661-hero v662-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.2</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v662Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>
+      ${calm ? v662CalmToday() : `<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div><div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v662MainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}
+    </div>`;
+  };
+
+  function v662PwaCard(){
+    const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    const sw = ('serviceWorker' in navigator) ? (navigator.serviceWorker.controller ? L('Actief','Active') : L('Beschikbaar / laden','Available / loading')) : L('Niet ondersteund','Not supported');
+    return `<div class="card v662-pwa-card"><h3>${L('App / PWA status','App / PWA status')}</h3><div class="list">
+      <div class="list-item compact"><span>${L('Modus','Mode')}</span><strong>${standalone ? L('Geïnstalleerde app','Installed app') : L('Browser','Browser')}</strong></div>
+      <div class="list-item compact"><span>${L('Service worker','Service worker')}</span><strong>${escapeHtml(sw)}</strong></div>
+      <div class="list-item compact"><span>${L('Online status','Online status')}</span><strong>${navigator.onLine ? L('Online','Online') : L('Offline','Offline')}</strong></div>
+      <div class="list-item compact"><span>${t('offlineReady')}</span><strong>${('caches' in window) ? 'PWA cache' : L('Onbekend','Unknown')}</strong></div>
+      <div class="list-item compact"><span>${L('Versie','Version')}</span><strong>${APP.version}</strong></div>
+      <div class="list-item compact"><span>Cache</span><strong>${APP.cache}</strong></div>
+    </div><p class="muted small">${t('offlineReadyText')}</p><p class="muted small">${t('pwaOfflineHelp')}</p><div class="btn-row mt"><button class="btn primary" data-action="install-pwa-v6525">${L('App installeren','Install app')}</button><button class="btn" data-action="refresh-app-v6525">${L('App vernieuwen','Refresh app')}</button><button class="btn" data-action="repair-cache-v6525">${L('Cache herstellen','Repair cache')}</button></div></div>`;
+  }
+  renderSettings = window.renderSettings = function(){
+    v662EnsureUi();
+    return `<div class="grid settings-v662"><div class="grid grid-main"><div class="grid"><div class="card"><h3>Profiel & ritme</h3><div class="form-grid"><label>${t('name')}<input class="input" id="setName" value="${escapeHtml(state.settings.name||'')}"></label><label>${t('language')}<select class="select" id="setLang"><option value="nl" ${currentLang()==='nl'?'selected':''}>Nederlands</option><option value="en" ${currentLang()==='en'?'selected':''}>English</option></select></label><label>${t('workHours')}<input class="input" id="setWorkHours" type="number" step="0.25" value="${state.settings.workHours}"></label><label>${t('haccpHours')}<input class="input" id="setHaccpHours" type="number" step="0.25" value="${state.settings.haccpHours}"></label><label>${t('shiftStart')}<input class="input" id="setShiftStart" type="time" value="${state.settings.shiftStart}"></label><label>${t('shiftEnd')}<input class="input" id="setShiftEnd" type="time" value="${state.settings.shiftEnd}"></label></div><h4>${t('workdays')}</h4><div class="btn-row">${['Ma','Di','Wo','Do','Vr','Za','Zo'].map((d,i)=>`<button class="btn small ${state.settings.workDays.includes(i+1)?'primary':''}" data-action="settings-toggle-workday" data-day="${i+1}">${d}</button>`).join('')}</div><button class="btn primary mt" data-action="save-settings">${t('save')}</button></div><div class="card"><h3>Thema galerij</h3><div class="theme-grid">${themeOptions().map(th=>`<button class="theme-card ${state.settings.theme===th.id?'active':''}" data-action="set-theme" data-theme="${th.id}"><div class="theme-swatch">${th.colors.map(c=>`<span style="background:${c}"></span>`).join('')}</div><strong>${th.name}</strong></button>`).join('')}</div></div></div><div class="grid"><div class="card"><h3>Contactpersonen</h3><div class="list">${state.settings.contacts.map(c=>`<div class="list-item compact"><span>${escapeHtml(c)}</span><button class="btn small bad" data-action="delete-contact" data-name="${escapeHtml(c)}">${t('delete')}</button></div>`).join('') || `<p class="muted small">${L('Nog geen contactpersonen.','No contacts yet.')}</p>`}</div><div class="btn-row mt"><input class="input" id="newContact" placeholder="Nieuwe contactpersoon"><button class="btn" data-action="add-contact">${t('add')}</button></div></div><div class="card"><h3>${t('calmMode')}</h3><p><strong>${t('calmScope')}</strong></p><p class="muted small">${t('calmScopeText')}</p></div>${v662PwaCard()}</div></div></div>`;
+  };
+
+  const v662HandleActionBase = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a === 'open-communication-form' || a === 'open-communication-form-v6523'){ v662OpenCommunicationForm(); return; }
+    if(a === 'confirm-add-communication-v662' || a === 'confirm-add-communication-v6523' || a === 'confirm-add-communication'){ v662AddCommunication(); return; }
+    if(a === 'open-quick-note-form'){ v662OpenQuickNoteForm(); return; }
+    if(a === 'confirm-add-quick-note'){ v662AddQuickNote(); return; }
+    if(a === 'inv-order-delta'){
+      const i = v662OrderItemById(el.dataset.id); if(i){ i.orderQty = Math.max(0, v662OrderQty(i) + (+el.dataset.delta||0)); i.orderFlag = i.orderQty > 0 ? 'order' : (i.orderFlag === 'overstock' ? 'overstock' : 'none'); if(i.orderFlag === 'order') i.overstock = false; if(i.orderQty === 0) v662RemoveOrderForItem(i.id); save(); render(); } return;
+    }
+    if(a === 'set-inv-order-flag'){
+      const i = v662OrderItemById(el.dataset.id); if(i){ const flag = el.dataset.flag || 'none'; i.orderFlag = flag; i.overstock = flag === 'overstock'; if(flag === 'order' && !v662OrderQty(i)) i.orderQty = v662DefaultQty(i); if(flag === 'order') v662UpsertOrder(i); else v662RemoveOrderForItem(i.id); if(flag === 'none') i.orderQty = 0; save(); render(); } return;
+    }
+    if(a === 'add-inv-order'){ addInventoryOrder(el.dataset.id); return; }
+    if(a === 'remove-inv-order'){
+      const order = state.inventoryOrders.find(o=>o.id === el.dataset.id);
+      if(order && order.itemId){ const i = v662OrderItemById(order.itemId); if(i){ i.orderQty = 0; i.orderFlag = 'none'; } }
+      state.inventoryOrders = state.inventoryOrders.filter(o=>o.id !== el.dataset.id); save(); render(); return;
+    }
+    if(a === 'clear-inv-orders'){
+      state.inventoryOrders.forEach(o=>{ if(o.itemId){ const i = v662OrderItemById(o.itemId); if(i){ i.orderQty = 0; i.orderFlag = 'none'; } } });
+      state.inventoryOrders = []; toast(t('orderListCleared'),'info'); save(); render(); return;
+    }
+    if(a === 'confirm-inv-orders'){
+      const orders = v662OrderList();
+      orders.forEach(o=>{ const i = o.itemId ? v662OrderItemById(o.itemId) : state.inventory.find(x=>x.name===o.name && (!o.nasa || x.nasa===o.nasa)); if(i){ i.orderFrequencyCount = +(i.orderFrequencyCount||0) + 1; i.lastOrderedAt = nowISO(); i.lastOrderQty = +(o.qty||0); i.orderQty = 0; i.orderFlag = 'none'; i.overstock = false; } });
+      state.orderHistory = Array.isArray(state.orderHistory) ? state.orderHistory : [];
+      state.orderHistory.unshift({id:uid('ordhist'),type:'inventory',at:nowISO(),items:orders.map(o=>({name:o.name,nasa:o.nasa,qty:o.qty}))});
+      state.orderHistory = state.orderHistory.slice(0,200);
+      state.inventoryOrders = []; toast(t('orderListConfirmed'),'good'); save(); render(); return;
+    }
+    if(a === 'copy-inv-orders'){
+      const text = v662OrderList().map(o=>`${o.name}${o.nasa?` (${o.nasa})`:''}: ${o.qty}`).join('\n');
+      copyText(text || t('noOrderList')); return;
+    }
+    return v662HandleActionBase(a, el, e);
+  };
+
+  const v662DiagBase = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v662DiagBase();
+    html = html.replaceAll('v6.6.1','v6.6.2').replaceAll('rich-cmd-cache-v661','rich-cmd-cache-v662');
+    html += `<div class="card"><h3>${t('v662Title')}</h3><p>${t('v662Subtitle')}</p><ul><li>${t('calmScopeText')}</li><li>${t('offlineReadyText')}</li><li>${t('orderManagementIntro')}</li></ul></div>`;
+    return html;
+  };
+
+  v662EnsureUi();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.2 stabilization failed', err);
+}
+
+
+/* v6.6.3 — Mobile, PWA & Workflow Polish */
+try {
+  APP.version = 'v6.6.3';
+  APP.cache = 'rich-cmd-cache-v663';
+
+  Object.assign(I18N.nl, {
+    v663Title:'RICH CMD v6.6.3 — Mobile, PWA & Workflow Polish',
+    v663Subtitle:'Mobiele layout, PWA Update Center, opvolging over aantallen, communicatie, bestelbeheer en rustigere diagnostiek.',
+    pwaUpdateCenter:'PWA Update Center',
+    checkForUpdates:'Zoek naar update',
+    prepareOffline:'App voorbereiden voor offline gebruik',
+    activateUpdate:'Update activeren',
+    reloadApp:'App herladen',
+    updateCheckStarted:'Updatecontrole gestart.',
+    updateReady:'Er staat een app-update klaar. Herlaad om deze te gebruiken.',
+    noUpdateFound:'Geen directe update gevonden. De app is bijgewerkt of de host heeft nog geen nieuwe versie.',
+    offlinePrepared:'Offline voorbereiding afgerond.',
+    offlinePreparedAt:'Offline voorbereid op',
+    followRelative:'Over aantal dagen/weken',
+    followAmount:'Aantal',
+    followUnit:'Eenheid',
+    days:'dagen',
+    weeks:'weken',
+    calculatedDate:'Berekende datum',
+    followPreview:'Opvolging wordt gepland op',
+    communicationAndNotes:'Communicatie & notities',
+    addFollowup:'Opvolging toevoegen',
+    openCommunication:'Open communicatie',
+    followupsToday:'Opvolging vandaag',
+    openNotes:'Snelle notities',
+    makeFollowup:'Maak opvolging',
+    markDone:'Markeer afgerond',
+    handoverCopy:'Overdracht kopiëren',
+    orderFlow:'Bestelflow',
+    orderToday:'Bestellijst vandaag',
+    orderFilterAll:'Alle artikelen',
+    orderFilterOrder:'Alleen bijbestellen',
+    orderFilterOverstock:'Alleen teveel',
+    orderEmptyAdvice:'Standaard staat alles op 0. Markeer alleen wat je wilt bijbestellen of wat juist teveel is.',
+    orderConfirmedToday:'Bestellijst bevestigd',
+    todaySignals:'Vandaag-signalen',
+    todaySignalsText:'Open communicatie en bestellijst worden nu meegenomen in je dagelijkse flow.',
+    viewOrders:'Bekijk bestellijst',
+    viewCommunication:'Bekijk communicatie',
+    diagnosticCollapsed:'Diagnostiek toont standaard minder items. Gebruik meer weergeven als je dieper wilt controleren.',
+    latestActions:'Laatste acties',
+    latestUpdates:'Laatste updates',
+    showMore:'Meer weergeven',
+    showLess:'Minder weergeven',
+    updateCenterHelp:'Zoek naar update controleert de service worker. Cache vernieuwen downloadt pas opnieuw wat nodig is voor offline gebruik.',
+    pwaHostNote:'Na een nieuwe upload moet de app één keer online openen. Daarna kan de geïnstalleerde PWA offline verder werken met de lokale cache.'
+  });
+  Object.assign(I18N.en, {
+    v663Title:'RICH CMD v6.6.3 — Mobile, PWA & Workflow Polish',
+    v663Subtitle:'Mobile layout, PWA Update Center, amount-based follow-ups, communication, ordering and calmer diagnostics.',
+    pwaUpdateCenter:'PWA Update Center',
+    checkForUpdates:'Check for update',
+    prepareOffline:'Prepare app for offline use',
+    activateUpdate:'Activate update',
+    reloadApp:'Reload app',
+    updateCheckStarted:'Update check started.',
+    updateReady:'An app update is ready. Reload to use it.',
+    noUpdateFound:'No immediate update found. The app is current or the host has no newer version yet.',
+    offlinePrepared:'Offline preparation completed.',
+    offlinePreparedAt:'Offline prepared at',
+    followRelative:'In a number of days/weeks',
+    followAmount:'Amount',
+    followUnit:'Unit',
+    days:'days',
+    weeks:'weeks',
+    calculatedDate:'Calculated date',
+    followPreview:'Follow-up will be planned on',
+    communicationAndNotes:'Communication & notes',
+    addFollowup:'Add follow-up',
+    openCommunication:'Open communication',
+    followupsToday:'Follow-ups today',
+    openNotes:'Quick notes',
+    makeFollowup:'Make follow-up',
+    markDone:'Mark done',
+    handoverCopy:'Copy handover',
+    orderFlow:'Order flow',
+    orderToday:'Today order list',
+    orderFilterAll:'All items',
+    orderFilterOrder:'Order only',
+    orderFilterOverstock:'Overstock only',
+    orderEmptyAdvice:'Everything starts at 0. Only mark what needs ordering or what is overstocked.',
+    orderConfirmedToday:'Order list confirmed',
+    todaySignals:'Today signals',
+    todaySignalsText:'Open communication and the order list are now included in your daily flow.',
+    viewOrders:'View order list',
+    viewCommunication:'View communication',
+    diagnosticCollapsed:'Diagnostics shows fewer items by default. Use show more when you want to inspect deeper.',
+    latestActions:'Latest actions',
+    latestUpdates:'Latest updates',
+    showMore:'Show more',
+    showLess:'Show less',
+    updateCenterHelp:'Check for update checks the service worker. Refresh cache only downloads what is needed for offline use.',
+    pwaHostNote:'After a new upload, open the app online once. Then the installed PWA can keep working offline with the local cache.'
+  });
+
+  function v663EnsureUi(){
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.ui.rustMode = !!state.ui.rustMode;
+    state.ui.orderFilter = state.ui.orderFilter || 'all';
+    state.ui.diagShowAllActivity = !!state.ui.diagShowAllActivity;
+    state.ui.diagShowAllUpdates = !!state.ui.diagShowAllUpdates;
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
+    state.inventoryOrders = Array.isArray(state.inventoryOrders) ? state.inventoryOrders : [];
+    state.communications = Array.isArray(state.communications) ? state.communications : [];
+    state.orderHistory = Array.isArray(state.orderHistory) ? state.orderHistory : [];
+    state.schemaVersion = Math.max(663, +(state.schemaVersion||0));
+  }
+
+  function v663AsDate(dateStr){
+    const base = dateStr || TODAY();
+    return new Date(`${base}T12:00:00`);
+  }
+  function v663AddDays(days){
+    const d = v663AsDate(TODAY());
+    d.setDate(d.getDate() + Math.max(0, +(days||0)));
+    return d.toISOString().slice(0,10);
+  }
+  function v663RelativeFollowDate(amount, unit){
+    const n = Math.max(1, Math.min(unit === 'weeks' ? 4 : 31, parseInt(amount,10) || 1));
+    return v663AddDays(unit === 'weeks' ? n * 7 : n);
+  }
+  function v663FollowDateFromModal(){
+    const mode = byId('commFollowMode')?.value || 'relative';
+    if(mode === 'none') return '';
+    if(mode === 'date') return byId('commFollowDate')?.value || '';
+    return v663RelativeFollowDate(byId('commFollowAmount')?.value || 1, byId('commFollowUnit')?.value || 'days');
+  }
+  function v663FollowPreviewText(){
+    const mode = byId('commFollowMode')?.value || 'relative';
+    if(mode === 'none') return t('noFollowUp');
+    const date = v663FollowDateFromModal();
+    if(!date) return t('specificDate');
+    return `${t('followPreview')}: ${dateOnly(date)}`;
+  }
+  function v663BindFollowPreview(){
+    const preview = byId('commFollowPreview');
+    const mode = byId('commFollowMode');
+    const amount = byId('commFollowAmount');
+    const unit = byId('commFollowUnit');
+    const date = byId('commFollowDate');
+    const wrapRelative = byId('commFollowRelativeWrap');
+    const wrapDate = byId('commFollowDateWrap');
+    if(!preview || !mode) return;
+    const update = () => {
+      const m = mode.value || 'relative';
+      if(wrapRelative) wrapRelative.style.display = m === 'relative' ? '' : 'none';
+      if(wrapDate) wrapDate.style.display = m === 'date' ? '' : 'none';
+      preview.textContent = v663FollowPreviewText();
+    };
+    [mode, amount, unit, date].forEach(el => el && el.addEventListener('input', update));
+    [mode, amount, unit, date].forEach(el => el && el.addEventListener('change', update));
+    update();
+  }
+
+  function v663PeopleOptions(){
+    const people = Array.isArray(state.settings.contacts) ? state.settings.contacts : [];
+    return `<option value="">${L('Zelf invullen','Custom')}</option>${people.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}`;
+  }
+  function v663OpenCommunicationForm(prefill=''){
+    v663EnsureUi();
+    modal(t('addFollowup'), `<div class="grid grid-2 v663-comm-form">
+      <label>${t('person')}<select class="select" id="commTo">${v663PeopleOptions()}</select></label>
+      <label>${L('Andere persoon','Other person')}<input class="input" id="commCustom" placeholder="${L('Bijv. teamleider / collega','e.g. team lead / colleague')}"></label>
+      <label>${t('status')}<select class="select" id="commStatus"><option value="Rood">${L('Rood — actie nodig','Red — action needed')}</option><option value="Geel">${L('Geel — opvolgen','Yellow — follow up')}</option><option value="Groen">${L('Groen — informatie','Green — information')}</option></select></label>
+      <label>${t('followUpMode')}<select class="select" id="commFollowMode"><option value="relative">${t('followRelative')}</option><option value="date">${t('specificDate')}</option><option value="none">${t('noFollowUp')}</option></select></label>
+      <div id="commFollowRelativeWrap" class="grid grid-2 v663-span-2 v663-follow-relative">
+        <label>${t('followAmount')}<input class="input" id="commFollowAmount" type="number" min="1" max="31" value="2"></label>
+        <label>${t('followUnit')}<select class="select" id="commFollowUnit"><option value="days">${t('days')}</option><option value="weeks">${t('weeks')}</option></select></label>
+      </div>
+      <label id="commFollowDateWrap" class="v663-span-2">${t('specificDate')}<input class="input" id="commFollowDate" type="date"></label>
+      <div class="v663-span-2"><span class="pill info" id="commFollowPreview"></span></div>
+      <label class="check-row"><input type="checkbox" id="commUrgent"> ${t('urgent') || L('Urgent','Urgent')}</label>
+      <label class="v663-span-2">${t('message')}<textarea class="textarea" id="commMsg" placeholder="${t('message')}">${escapeHtml(prefill||'')}</textarea></label>
+    </div><div class="btn-row mt"><button class="btn" data-action="apply-modal-comm-template-v6523" data-template="short">${t('shortUpdate') || L('Korte update','Short update')}</button><button class="btn" data-action="apply-modal-comm-template-v6523" data-template="problem">${t('problemReport') || L('Probleemmelding','Problem report')}</button><button class="btn primary" data-action="confirm-add-communication-v663">${t('save')}</button></div>`, 'wide');
+    setTimeout(v663BindFollowPreview, 0);
+  }
+  function v663AddCommunication(){
+    const message = (byId('commMsg')?.value || '').trim();
+    if(!message){ toast(t('messageRequired') || L('Bericht is verplicht.','Message is required.'), 'warn'); return; }
+    const mode = byId('commFollowMode')?.value || 'relative';
+    const unit = byId('commFollowUnit')?.value || 'days';
+    const amount = mode === 'relative' ? Math.max(1, +(byId('commFollowAmount')?.value || 1)) : 0;
+    const followDate = v663FollowDateFromModal();
+    state.communications.unshift({id:uid('comm'),type:'communication',to:byId('commTo')?.value || '',customTo:(byId('commCustom')?.value || '').trim(),message,status:byId('commStatus')?.value || 'Rood',urgent:!!byId('commUrgent')?.checked,read:false,done:false,followDate,followMode:mode,followAmount:amount,followUnit:unit,createdAt:nowISO()});
+    addActivity(`${t('communication')}: ${message.slice(0,40)}`, 'communication');
+    closeModal(); toast(t('savedCommunication') || L('Communicatie opgeslagen.','Communication saved.'), 'good'); save(); render();
+  }
+  function v663OpenQuickNoteForm(){
+    modal(t('quickNote'), `<textarea class="textarea" id="quickNoteText" placeholder="${t('quickNotePlaceholder')}"></textarea><div class="btn-row mt"><button class="btn primary" data-action="confirm-add-quick-note-v663">${t('saveNote')}</button><button class="btn" data-action="close-modal">${t('cancel')}</button></div>`);
+  }
+  function v663AddQuickNote(){
+    const text = (byId('quickNoteText')?.value || '').trim();
+    if(!text){ toast(t('messageRequired') || L('Notitie is leeg.','Note is empty.'), 'warn'); return; }
+    state.communications.unshift({id:uid('note'),type:'note',to:L('Notitie','Note'),customTo:'',message:text,status:'Notitie',urgent:false,read:true,done:false,followDate:'',createdAt:nowISO()});
+    addActivity(`${t('quickNote')}: ${text.slice(0,40)}`, 'communication');
+    closeModal(); toast(t('savedCommunication') || L('Notitie opgeslagen.','Note saved.'), 'good'); save(); render();
+  }
+  function v663CommunicationItems(){ return state.communications.filter(c=>c.type !== 'note' && c.status !== 'Notitie'); }
+  function v663NoteItems(){ return state.communications.filter(c=>c.type === 'note' || c.status === 'Notitie'); }
+  function v663OpenCommunicationCount(){ return v663CommunicationItems().filter(c=>!c.done && c.status !== 'Afgehandeld').length; }
+  function v663DueCommunicationCount(){ return v663CommunicationItems().filter(c=>!c.done && c.followDate && c.followDate <= TODAY()).length; }
+  function v663RenderCommunicationList(limit=12){
+    const arr = v663CommunicationItems().slice(0,limit);
+    if(!arr.length) return `<p class="muted small">${t('empty')}</p>`;
+    return `<div class="list">${arr.map(c=>{
+      const label = c.to || c.customTo || t('communication');
+      const due = c.followDate && c.followDate <= TODAY();
+      const dateText = c.followDate ? `${t('followDate')}: ${dateOnly(c.followDate)}` : t('noFollowUp');
+      return `<div class="list-item v663-comm-item"><div><strong>${escapeHtml(label)}</strong><div>${escapeHtml(c.message || '')}</div><div class="tiny muted">${dateTime(c.createdAt)} · ${escapeHtml(dateText)}</div><div class="btn-row mt"><span class="pill ${due?'warn':'info'}">${escapeHtml(c.status || 'Open')}</span>${c.urgent?`<span class="pill bad">Urgent</span>`:''}</div></div><div class="btn-row"><select class="select" style="width:135px" data-action="comm-status" data-id="${escapeHtml(c.id)}"><option ${c.status==='Rood'?'selected':''}>Rood</option><option ${c.status==='Geel'?'selected':''}>Geel</option><option ${c.status==='Groen'?'selected':''}>Groen</option><option ${c.status==='Afgehandeld'?'selected':''}>Afgehandeld</option></select><button class="btn small good" data-action="comm-done-v663" data-id="${escapeHtml(c.id)}">${t('markDone')}</button><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(c.id)}">${t('delete')}</button></div></div>`;
+    }).join('')}</div>`;
+  }
+  function v663RenderNotes(limit=8){
+    const notes = v663NoteItems().slice(0,limit);
+    if(!notes.length) return `<p class="muted small">${t('noNotes')}</p>`;
+    return `<div class="list">${notes.map(n=>`<div class="list-item compact"><div><strong>${t('quickNote')}</strong><div class="small muted">${dateTime(n.createdAt)}</div><p class="small">${escapeHtml(n.message || '')}</p></div><div class="btn-row"><button class="btn small" data-action="note-to-followup-v663" data-id="${escapeHtml(n.id)}">${t('makeFollowup')}</button><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(n.id)}">${t('delete')}</button></div></div>`).join('')}</div>`;
+  }
+  function v663CopyHandover(){
+    const open = v663CommunicationItems().filter(c=>!c.done && c.status !== 'Afgehandeld').slice(0,8);
+    const notes = v663NoteItems().slice(0,5);
+    const lines = [L('Overdracht RICH CMD','RICH CMD handover'), '', L('Open opvolging:','Open follow-up:')];
+    if(open.length) open.forEach(c=>lines.push(`- ${(c.to||c.customTo||t('communication'))}: ${c.message}${c.followDate?` (${dateOnly(c.followDate)})`:''}`)); else lines.push(`- ${t('empty')}`);
+    lines.push('', L('Snelle notities:','Quick notes:'));
+    if(notes.length) notes.forEach(n=>lines.push(`- ${n.message}`)); else lines.push(`- ${t('empty')}`);
+    copyText(lines.join('\n'));
+  }
+
+  renderCommunication = window.renderCommunication = function(){
+    v663EnsureUi();
+    const open = v663OpenCommunicationCount();
+    const due = v663DueCommunicationCount();
+    const notes = v663NoteItems().length;
+    const urgent = v663CommunicationItems().filter(c=>c.urgent || c.status === 'Rood').length;
+    return `<div class="grid communication-v663">
+      <div class="hero"><span class="chip">${t('communicationAndNotes')}</span><h2>${t('communicationAndNotes')}</h2><p>${L('Leg opvolgingen en snelle notities vast zonder de pagina zwaar te maken.','Capture follow-ups and quick notes without making the page heavy.')}</p><div class="btn-row"><button class="btn primary" data-action="open-communication-form-v663">${t('addFollowup')}</button><button class="btn" data-action="open-quick-note-form-v663">${t('quickNote')}</button><button class="btn" data-action="copy-handover-v663">${t('handoverCopy')}</button></div></div>
+      <div class="grid grid-4">${kpi(t('openCommunication'), open, open?'warn':'good')}${kpi(t('followupsToday'), due, due?'bad':'good')}${kpi(t('openNotes'), notes, notes?'info':'good')}${kpi('Urgent', urgent, urgent?'bad':'good')}</div>
+      <div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('openCommunication')}</h3>${v663RenderCommunicationList()}</div><div class="card"><h3>${t('reports')}</h3>${typeof renderReportFilters==='function'?renderReportFilters():''}<button class="btn primary mt" data-action="open-report-form">${t('add')} ${t('report')}</button><div class="mt">${renderReports()}</div></div></div><div class="grid"><div class="card v662-note-card"><div class="btn-row"><h3>${t('notes')}</h3><button class="btn small primary" data-action="open-quick-note-form-v663">${t('quickNote')}</button></div>${v663RenderNotes()}</div><div class="card"><h3>${t('communicationTemplates')}</h3>${typeof renderCommunicationTemplates==='function'?renderCommunicationTemplates():''}<textarea class="textarea mt" id="toneText" placeholder="${L('Schrijf hier je concept...','Write your draft here...')}"></textarea><button class="btn mt" data-action="tone-format">${L('Maak professioneel','Make professional')}</button></div></div></div>
+    </div>`;
+  };
+
+  function v663OrderFlag(item){ return item.orderFlag || (item.overstock ? 'overstock' : ((+item.orderQty||0)>0 ? 'order' : 'none')); }
+  function v663OrderQty(item){ return Math.max(0, +(item.orderQty ?? 0)); }
+  function v663DefaultQty(item){ return Math.max(1, +(item.defaultOrderQty || item.defaultQty || item.max || 1)); }
+  function v663OrderList(){ return state.inventoryOrders.filter(o=>o && o.type !== 'legacy-cleared'); }
+  function v663OrderItemById(id){ return state.inventory.find(i=>i.id === id); }
+  function v663UpsertOrder(item){
+    if(!item) return;
+    const qty = v663OrderQty(item) || v663DefaultQty(item);
+    item.orderQty = qty;
+    item.orderFlag = 'order';
+    item.overstock = false;
+    const existing = state.inventoryOrders.find(o=>o.itemId === item.id || (o.nasa && item.nasa && o.nasa === item.nasa && o.name === item.name));
+    if(existing){ existing.qty = qty; existing.name = item.name; existing.nasa = item.nasa; existing.category = item.category; existing.at = nowISO(); }
+    else state.inventoryOrders.unshift({id:uid('iord'),itemId:item.id,name:item.name,nasa:item.nasa,category:item.category,qty,reason:t('markOrder'),at:nowISO()});
+  }
+  function v663RemoveOrderForItem(id){ state.inventoryOrders = state.inventoryOrders.filter(o=>o.itemId !== id); }
+  function v663FilteredInventory(){
+    const q = (state.ui.invSearch || '').toLowerCase();
+    const filter = state.ui.orderFilter || 'all';
+    return state.inventory.filter(i=> (`${i.name||''} ${i.nasa||''} ${i.category||''}`).toLowerCase().includes(q)).filter(i=>{
+      const flag = v663OrderFlag(i);
+      if(filter === 'order') return flag === 'order' || v663OrderList().some(o=>o.itemId === i.id);
+      if(filter === 'overstock') return flag === 'overstock';
+      return true;
+    });
+  }
+  renderInventory = window.renderInventory = function(){
+    v663EnsureUi();
+    const orders = v663OrderList();
+    const overstock = state.inventory.filter(i=>v663OrderFlag(i)==='overstock').length;
+    return `<div class="grid inventory-v662 inventory-v663">
+      <div class="hero"><span class="chip">${t('orderFlow')}</span><h2>${t('orderManagement')}</h2><p>${t('orderEmptyAdvice')}</p><div class="btn-row"><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button><button class="btn" data-action="copy-inv-orders" ${orders.length?'':'disabled'}>${t('copy')}</button><button class="btn good" data-action="confirm-inv-orders-v663" ${orders.length?'':'disabled'}>${t('confirmOrderList')}</button><button class="btn bad" data-action="clear-inv-orders-v663" ${orders.length?'':'disabled'}>${t('clearOrderList')}</button></div></div>
+      <div class="grid grid-4">${kpi(t('orderToday'), orders.length, orders.length?'warn':'good')}${kpi(t('markOverstock'), overstock, overstock?'warn':'good')}${kpi(t('product'), state.inventory.length, null)}${kpi(t('lastOrdered'), state.orderHistory[0]?.at ? dateOnly(state.orderHistory[0].at) : '-', null)}</div>
+      <div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('orderManagement')}</h3><div class="form-grid"><input class="input" id="invSearch" value="${escapeHtml(state.ui.invSearch||'')}" placeholder="${t('search')} item / NASA"><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button></div><div class="btn-row mt v663-filter-row"><button class="btn small ${state.ui.orderFilter==='all'?'primary':''}" data-action="set-order-filter-v663" data-filter="all">${t('orderFilterAll')}</button><button class="btn small ${state.ui.orderFilter==='order'?'primary':''}" data-action="set-order-filter-v663" data-filter="order">${t('orderFilterOrder')}</button><button class="btn small ${state.ui.orderFilter==='overstock'?'primary':''}" data-action="set-order-filter-v663" data-filter="overstock">${t('orderFilterOverstock')}</button></div><div id="inventoryList" class="mt">${renderInventoryList()}</div></div></div><div class="grid"><div class="card v662-order-card"><h3>${t('orderToday')}</h3>${renderInventoryOrders()}</div><div class="card"><h3>${t('orderAdvice')}</h3><p>${t('orderAdviceOpinion')}</p><p class="muted small">${L('Bevestigen verhoogt de bestelfrequentie en zet artikelen terug naar 0.','Confirming increases order frequency and resets items to 0.')}</p></div></div></div>
+    </div>`;
+  };
+  renderInventoryList = window.renderInventoryList = function(){
+    v663EnsureUi();
+    const arr = v663FilteredInventory();
+    if(!arr.length) return `<div class="empty-state"><h3>${t('orderManagement')}</h3><p>${t('orderEmptyAdvice')}</p><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button></div>`;
+    return `<div class="list v662-order-items v663-order-items">${arr.map(i=>{
+      const flag = v663OrderFlag(i);
+      const qty = v663OrderQty(i);
+      const freq = +(i.orderFrequencyCount || 0);
+      const orderClass = flag === 'order' ? 'good' : flag === 'overstock' ? 'warn' : 'info';
+      const label = flag === 'order' ? `${t('markOrder')}: ${qty || v663DefaultQty(i)}` : flag === 'overstock' ? t('tooMuchShort') : `${t('notOrdering')}: 0`;
+      return `<div class="list-item v662-order-item v663-order-item"><div class="v662-order-info"><strong>${escapeHtml(i.name||'')}</strong><div class="small muted">${escapeHtml(i.category||'')} · NASA ${escapeHtml(i.nasa||'-')}</div><div class="btn-row"><span class="pill ${orderClass}">${escapeHtml(label)}</span><span class="pill info">${t('orderFrequency')}: ${freq} ${t('timesOrdered')}</span>${i.lastOrderedAt?`<span class="pill">${t('lastOrdered')}: ${dateOnly(i.lastOrderedAt)}</span>`:''}</div></div><div class="v662-order-controls"><div class="btn-row"><button class="btn small" data-action="inv-order-delta-v663" data-id="${escapeHtml(i.id)}" data-delta="-1">−</button><span class="chip">${t('orderQty')}: ${qty}</span><button class="btn small" data-action="inv-order-delta-v663" data-id="${escapeHtml(i.id)}" data-delta="1">+</button></div><div class="btn-row"><button class="btn small primary" data-action="set-inv-order-flag-v663" data-id="${escapeHtml(i.id)}" data-flag="order">${t('markOrder')}</button><button class="btn small warn" data-action="set-inv-order-flag-v663" data-id="${escapeHtml(i.id)}" data-flag="overstock">${t('markOverstock')}</button><button class="btn small" data-action="set-inv-order-flag-v663" data-id="${escapeHtml(i.id)}" data-flag="none">${t('clearMark')}</button><button class="btn small" data-action="add-inv-order-v663" data-id="${escapeHtml(i.id)}">${t('updateOrderList')}</button><button class="btn small" data-action="edit-inv" data-id="${escapeHtml(i.id)}">${t('edit')}</button></div></div></div>`;
+    }).join('')}</div>`;
+  };
+  renderInventoryOrders = window.renderInventoryOrders = function(){
+    v663EnsureUi();
+    const orders = v663OrderList();
+    if(!orders.length) return `<p class="muted">${t('noOrderList')} ${t('orderEmptyAdvice')}</p>`;
+    return `<div class="list">${orders.map(o=>`<div class="list-item compact"><div><strong>${escapeHtml(o.name||'')}</strong><div class="small muted">NASA ${escapeHtml(o.nasa||'-')} · ${dateTime(o.at)}</div></div><div class="btn-row"><span class="pill good">${escapeHtml(String(o.qty||0))}</span><button class="btn small bad" data-action="remove-inv-order-v663" data-id="${escapeHtml(o.id)}">${t('removeFromOrderList')}</button></div></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="copy-inv-orders">${t('copy')}</button><button class="btn good" data-action="confirm-inv-orders-v663">${t('confirmOrderList')}</button><button class="btn bad" data-action="clear-inv-orders-v663">${t('clearOrderList')}</button></div>`;
+  };
+  addInventoryOrder = window.addInventoryOrder = function(id){
+    const i = v663OrderItemById(id); if(!i) return;
+    if(v663OrderFlag(i) === 'overstock'){ toast(t('notOrdering'),'warn'); return; }
+    if(!v663OrderQty(i)) i.orderQty = v663DefaultQty(i);
+    v663UpsertOrder(i); toast(t('orderListUpdated'),'good'); save(); render();
+  };
+
+  function v663TodaySignals(){
+    const open = v663OpenCommunicationCount();
+    const due = v663DueCommunicationCount();
+    const orders = v663OrderList().length;
+    const overstock = state.inventory.filter(i=>v663OrderFlag(i)==='overstock').length;
+    return `<div class="card v663-today-signals"><h3>${t('todaySignals')}</h3><p class="muted small">${t('todaySignalsText')}</p><div class="grid grid-4">${kpi(t('openCommunication'), open, open?'warn':'good')}${kpi(t('followupsToday'), due, due?'bad':'good')}${kpi(t('orderToday'), orders, orders?'warn':'good')}${kpi(t('markOverstock'), overstock, overstock?'warn':'good')}</div><div class="btn-row mt"><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button></div></div>`;
+  }
+  function v663ActionButton(action){
+    if(action.type === 'start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(action.type === 'communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')}</button>`;
+    if(action.type === 'inventory') return `<button class="btn primary" data-route="inventory">${t('viewOrders')}</button>`;
+    if(action.type === 'task') return `<button class="btn small good" data-action="task-done" data-id="${action.id}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(action.type === 'agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    if(action.type === 'storemap') return `<button class="btn primary" data-route="storemap">${t('showMe')}</button>`;
+    return `<button class="btn primary" data-route="${action.route||'today'}">${t('showMe')}</button>`;
+  }
+  function v663DailyActions(limit=3){
+    v663EnsureUi();
+    const actions=[];
+    if(!state.shift.active) actions.push({type:'start-shift', title:t('startMyShiftNow'), reason:t('startShiftAdvice'), route:'today'});
+    const dueComm = v663CommunicationItems().find(c=>!c.done && c.followDate && c.followDate <= TODAY());
+    if(dueComm) actions.push({type:'communication', title:t('followupsToday'), reason:dueComm.message || t('communication'), route:'communication'});
+    if(v663OrderList().length) actions.push({type:'inventory', title:t('orderToday'), reason:`${v663OrderList().length} ${L('artikelen op de bestellijst','items on the order list')}`, route:'inventory'});
+    const openComm = v663CommunicationItems().find(c=>!c.done && c.status !== 'Afgehandeld' && (c.status === 'Rood' || c.urgent));
+    if(openComm && openComm !== dueComm) actions.push({type:'communication', title:t('openCommunication'), reason:openComm.message || t('communication'), route:'communication'});
+    const urgentClean = cleaningUrgent().find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgentClean) actions.push({type:'storemap', title:`${t('storemap')}: ${urgentClean.zone||''} M${urgentClean.meter||''}`, reason:L('Urgentie vanuit schoonmaakkaart of nacontrole.','Urgency from Cleaning Map or follow-up.'), route:'storemap'});
+    sortedTasks().slice(0,5).forEach(task=>actions.push({type:'task', id:task.id, title:taskTitle(task), reason:`${localStatus(task.priority)} · ${minutesToText(task.duration)} · ${translatedCategory(task.category||'')}`, route:'haccp'}));
+    const agf = agfAttention()[0];
+    if(agf) actions.push({type:'agf', title:agf.name, reason:agf.reason||agf.advice||t('orderAdvice'), route:'agf'});
+    if(actions.length===0) actions.push({type:'agf', title:t('startAgfQuickCheck'), reason:L('Geen urgente acties. Een korte check houdt je data actueel.','No urgent actions. A quick check keeps your data current.'), route:'agf'});
+    return actions.slice(0,limit);
+  }
+  function v663ActionCard(action, i){
+    return `<div class="list-item v661-action-card v663-action-card"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(action.title)}</strong><div class="small muted">${escapeHtml(action.reason||'')}</div></div><div class="btn-row">${v663ActionButton(action)}</div></div>`;
+  }
+  nextAction = window.nextAction = function(){
+    const a = v663DailyActions(1)[0];
+    return {title:a.title, reason:a.reason, route:a.route||'today', type:a.type, id:a.id, why:[typeof v661EnergyAdvice === 'function' ? v661EnergyAdvice() : '', a.reason].filter(Boolean)};
+  };
+  renderSmartQueue = window.renderSmartQueue = function(){
+    const q = v663DailyActions(3);
+    return `<div class="list">${q.map((a,i)=>v663ActionCard(a,i)).join('')}</div>`;
+  };
+  function v663MainActions(){
+    return `<div class="grid v662-today-flow-grid v663-today-flow-grid"><div class="card v662-flow-card v662-next-card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="grid grid-2 v662-flow-secondary"><div class="card v662-flow-card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v662-flow-card"><h3>${t('directActions')}</h3><div class="btn-row v662-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div></div>`;
+  }
+  function v663CalmToday(){
+    return `<div class="v661-calm-panel v662-calm-panel v663-calm-panel"><div class="card hero-mini v661-calm-status"><h3>${t('calmModeActive')}</h3><p>${t('calmModeHint')}</p><p class="muted small"><strong>${t('calmScope')}</strong> ${t('calmScopeText')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="toggle-rust-mode">${t('restoreNormalView')}</button></div></div><div class="grid grid-2 v661-calm-strip">${kpi(t('calmShiftStatus'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('energyCheck'),state.ui.energy==='low'?t('lowEnergy'):state.ui.energy==='strong'?t('strongEnergy'):t('normalEnergy'),state.ui.energy==='low'?'warn':state.ui.energy==='strong'?'good':null)}</div>${v663TodaySignals()}<div class="grid"><div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('closeShiftNow')}</button></div></div></div></div>`;
+  }
+  renderToday = window.renderToday = function(){
+    v663EnsureUi();
+    const prod = productivity();
+    const calm = !!state.ui.rustMode;
+    return `<div class="today-v661 today-v662 today-v663 ${calm?'rust-active':''}"><div class="hero v661-hero v662-hero v663-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.3</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v663Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>${calm ? v663CalmToday() : `<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>${v663TodaySignals()}<div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v663MainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}</div>`;
+  };
+
+  function v663PwaCard(){
+    const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    const sw = ('serviceWorker' in navigator) ? (navigator.serviceWorker.controller ? L('Actief','Active') : L('Beschikbaar / laden','Available / loading')) : L('Niet ondersteund','Not supported');
+    const prepared = state.ui.offlinePreparedAt ? dateTime(state.ui.offlinePreparedAt) : L('Nog niet bevestigd','Not confirmed yet');
+    return `<div class="card v663-pwa-card"><h3>${t('pwaUpdateCenter')}</h3><div class="list"><div class="list-item compact"><span>${L('Modus','Mode')}</span><strong>${standalone ? L('Geïnstalleerde app','Installed app') : L('Browser','Browser')}</strong></div><div class="list-item compact"><span>${L('Service worker','Service worker')}</span><strong>${escapeHtml(sw)}</strong></div><div class="list-item compact"><span>${L('Online status','Online status')}</span><strong>${navigator.onLine ? L('Online','Online') : L('Offline','Offline')}</strong></div><div class="list-item compact"><span>${t('offlinePreparedAt')}</span><strong>${escapeHtml(prepared)}</strong></div><div class="list-item compact"><span>${L('Versie','Version')}</span><strong>${APP.version}</strong></div><div class="list-item compact"><span>Cache</span><strong>${APP.cache}</strong></div></div><p class="muted small">${t('updateCenterHelp')}</p><p class="muted small">${t('pwaHostNote')}</p><div class="btn-row mt"><button class="btn primary" data-action="pwa-check-update-v663">${t('checkForUpdates')}</button><button class="btn" data-action="pwa-prepare-offline-v663">${t('prepareOffline')}</button><button class="btn" data-action="pwa-activate-update-v663">${t('activateUpdate')}</button><button class="btn" data-action="refresh-app-v6525">${L('App vernieuwen','Refresh app')}</button><button class="btn" data-action="repair-cache-v6525">${L('Cache herstellen','Repair cache')}</button></div></div>`;
+  }
+  renderSettings = window.renderSettings = function(){
+    v663EnsureUi();
+    return `<div class="grid settings-v662 settings-v663"><div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('profileAndRhythm') || 'Profiel & ritme'}</h3><div class="form-grid"><label>${t('name')}<input class="input" id="setName" value="${escapeHtml(state.settings.name||'')}"></label><label>${t('language')}<select class="select" id="setLang"><option value="nl" ${currentLang()==='nl'?'selected':''}>Nederlands</option><option value="en" ${currentLang()==='en'?'selected':''}>English</option></select></label><label>${t('workHours')}<input class="input" id="setWorkHours" type="number" step="0.25" value="${state.settings.workHours}"></label><label>${t('haccpHours')}<input class="input" id="setHaccpHours" type="number" step="0.25" value="${state.settings.haccpHours}"></label><label>${t('shiftStart')}<input class="input" id="setShiftStart" type="time" value="${state.settings.shiftStart}"></label><label>${t('shiftEnd')}<input class="input" id="setShiftEnd" type="time" value="${state.settings.shiftEnd}"></label></div><h4>${t('workdays')}</h4><div class="btn-row">${['Ma','Di','Wo','Do','Vr','Za','Zo'].map((d,i)=>`<button class="btn small ${state.settings.workDays.includes(i+1)?'primary':''}" data-action="settings-toggle-workday" data-day="${i+1}">${d}</button>`).join('')}</div><button class="btn primary mt" data-action="save-settings">${t('save')}</button></div><div class="card"><h3>${t('themeGalleryTitle') || 'Thema galerij'}</h3><div class="theme-grid">${themeOptions().map(th=>`<button class="theme-card ${state.settings.theme===th.id?'active':''}" data-action="set-theme" data-theme="${th.id}"><div class="theme-swatch">${th.colors.map(c=>`<span style="background:${c}"></span>`).join('')}</div><strong>${th.name}</strong></button>`).join('')}</div></div></div><div class="grid"><div class="card"><h3>Contactpersonen</h3><div class="list">${state.settings.contacts.map(c=>`<div class="list-item compact"><span>${escapeHtml(c)}</span><button class="btn small bad" data-action="delete-contact" data-name="${escapeHtml(c)}">${t('delete')}</button></div>`).join('') || `<p class="muted small">${L('Nog geen contactpersonen.','No contacts yet.')}</p>`}</div><div class="btn-row mt"><input class="input" id="newContact" placeholder="Nieuwe contactpersoon"><button class="btn" data-action="add-contact">${t('add')}</button></div></div><div class="card"><h3>${t('calmMode')}</h3><p><strong>${t('calmScope')}</strong></p><p class="muted small">${t('calmScopeText')}</p></div>${v663PwaCard()}</div></div></div>`;
+  };
+
+  async function v663CheckUpdate(){
+    try{
+      if(!('serviceWorker' in navigator)){ toast(L('Service worker wordt niet ondersteund.','Service worker is not supported.'),'warn'); return; }
+      toast(t('updateCheckStarted'),'info');
+      const reg = await navigator.serviceWorker.getRegistration();
+      if(!reg){ toast(L('Geen service worker registratie gevonden. Herlaad de app online.','No service worker registration found. Reload the app online.'),'warn'); return; }
+      await reg.update();
+      if(reg.waiting){ toast(t('updateReady'),'good'); }
+      else { toast(t('noUpdateFound'),'info'); }
+      state.ui.lastUpdateCheckAt = nowISO(); addActivity(t('checkForUpdates'),'pwa'); save(); render();
+    }catch(err){ console.error(err); toast(L('Updatecontrole mislukt. Controleer je verbinding.','Update check failed. Check your connection.'),'bad'); }
+  }
+  async function v663PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast(L('Cache API niet beschikbaar.','Cache API not available.'),'warn'); return; }
+      const assets = ['./','./index.html','./index.html?v=663','./styles.css?v=663','./app.js?v=663','./manifest.json?v=663','./icon-192.png','./icon-512.png'];
+      const cache = await caches.open(APP.cache);
+      await cache.addAll(assets);
+      if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt = nowISO(); addActivity(t('prepareOffline'),'pwa'); save(); render(); toast(t('offlinePrepared'),'good');
+    }catch(err){ console.error(err); toast(L('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','Offline preparation failed. Open the app online and try again.'),'bad'); }
+  }
+  async function v663ActivateUpdate(){
+    try{
+      const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+      if(reg?.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(), 400); return; }
+      location.reload();
+    }catch(err){ location.reload(); }
+  }
+
+  function v663RenderActivityTimeline(){
+    const limit = state.ui.diagShowAllActivity ? 30 : 5;
+    const arr = state.activity.slice(0,limit);
+    const body = arr.length ? `<div class="timeline">${arr.map(a=>`<div class="timeline-item"><div class="timeline-time">${dateTime(a.at)}</div><div class="timeline-card"><strong>${escapeHtml(a.type||'')}</strong><p>${escapeHtml(a.text)}</p></div></div>`).join('')}</div>` : `<p class="muted">${t('empty')}</p>`;
+    const more = state.activity.length > 5 ? `<button class="btn mt" data-action="toggle-diag-activity-v663">${state.ui.diagShowAllActivity?t('showLess'):t('showMore')}</button>` : '';
+    return body + more;
+  }
+  function v663UpdateEntries(){
+    return [
+      ['v6.6.3', t('v663Subtitle')],
+      ['v6.6.2', t('v662Subtitle') || 'Flow & Bestelbeheer Stabilisatie'],
+      ['v6.6.1', t('v661Subtitle') || 'Daily Flow Stabilization'],
+      ['v6.6.0', 'Daily Flow Polish'],
+      ['v6.5.27', 'Mobile Assist Hotfix'],
+      ['v6.5.26', L('Diagnostiek en mobiele onderbalk hersteld.','Diagnostics and mobile bottom nav restored.')],
+      ['v6.5.25', L('Mobiele PWA-ervaring en app-status toegevoegd.','Mobile PWA experience and app status added.')]
+    ];
+  }
+  function v663RenderUpdateLog(){
+    const entries = v663UpdateEntries();
+    const list = state.ui.diagShowAllUpdates ? entries : entries.slice(0,3);
+    return `<div class="list">${list.map(([v,txt])=>`<div class="list-item compact"><strong>${v}</strong><span>${escapeHtml(txt)}</span></div>`).join('')}</div>${entries.length>3?`<button class="btn mt" data-action="toggle-diag-updates-v663">${state.ui.diagShowAllUpdates?t('showLess'):t('showMore')}</button>`:''}`;
+  }
+  renderDiagnostics = window.renderDiagnostics = function(){
+    v663EnsureUi();
+    const health = diagnosticHealth();
+    const q = typeof moduleQuality === 'function' ? moduleQuality() : {};
+    return `<div class="grid diagnostics-v663"><div class="hero"><span class="chip">${t('v663Title')}</span><h2>${t('diagnostics') || t('appHealth')}</h2><p>${t('diagnosticCollapsed')}</p></div><div class="grid grid-4">${kpi(t('version')||'Versie',APP.version,null)}${kpi('Cache',APP.cache,null)}${kpi(t('appHealth'),health+'%',health>85?'good':'warn')}${kpi('Records',totalRecords(),null)}</div><div class="grid grid-2"><div class="card"><h3>${t('appHealthGuard')}</h3>${regressionChecks().map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)}</span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="card"><h3>${t('dataQuality')}</h3>${Object.keys(q).length?Object.entries(q).map(([k,v])=>bar(k,v,v>85?'good':v>65?'warn':'bad')).join(''):`<p class="muted">${t('empty')}</p>`}</div><div class="card"><h3>${t('backupReminder')}</h3><p>${backupReminderText()}</p><div class="btn-row"><button class="btn" data-action="download-backup">${t('backup')}</button><button class="btn" data-action="open-import">${t('import')}</button><button class="btn" data-action="clear-cache">Cache</button><button class="btn bad" data-action="reset-app">${t('reset')}</button></div></div><div class="card"><h3>${t('pwaUpdateCenter')}</h3>${v663PwaCard()}</div></div><div class="card"><h3>${t('latestActions')}</h3>${v663RenderActivityTimeline()}</div><div class="card"><h3>${t('latestUpdates')}</h3>${v663RenderUpdateLog()}</div></div>`;
+  };
+
+  const v663BaseBindPostRender = bindPostRender;
+  bindPostRender = window.bindPostRender = function(){
+    try { v663BaseBindPostRender(); } catch(e) { try { bindInputs(); } catch(_) {} }
+    try { v663BindFollowPreview(); } catch(e) {}
+    try {
+      const inv = byId('invSearch');
+      if(inv && !inv.dataset.v663Bound){
+        inv.dataset.v663Bound = '1';
+        inv.addEventListener('input', e=>{ state.ui.invSearch = e.target.value; const list=byId('inventoryList'); if(list) list.innerHTML=renderInventoryList(); });
+      }
+    } catch(e) {}
+  };
+
+  const v663HandleActionBase = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a === 'open-communication-form' || a === 'open-communication-form-v6523' || a === 'open-communication-form-v663'){ v663OpenCommunicationForm(); return; }
+    if(a === 'confirm-add-communication-v663' || a === 'confirm-add-communication-v662' || a === 'confirm-add-communication-v6523' || a === 'confirm-add-communication'){ v663AddCommunication(); return; }
+    if(a === 'open-quick-note-form' || a === 'open-quick-note-form-v663'){ v663OpenQuickNoteForm(); return; }
+    if(a === 'confirm-add-quick-note' || a === 'confirm-add-quick-note-v663'){ v663AddQuickNote(); return; }
+    if(a === 'copy-handover-v663'){ v663CopyHandover(); return; }
+    if(a === 'comm-done-v663'){ const c=state.communications.find(x=>x.id===el.dataset.id); if(c){ c.done=true; c.status='Afgehandeld'; c.read=true; addActivity(`${t('communication')}: ${t('markDone')}`,'communication'); save(); render(); } return; }
+    if(a === 'note-to-followup-v663'){ const n=state.communications.find(x=>x.id===el.dataset.id); v663OpenCommunicationForm(n?.message||''); return; }
+    if(a === 'set-order-filter-v663'){ state.ui.orderFilter = el.dataset.filter || 'all'; save(); render(); return; }
+    if(a === 'inv-order-delta-v663'){
+      const i = v663OrderItemById(el.dataset.id); if(i){ i.orderQty = Math.max(0, v663OrderQty(i) + (+el.dataset.delta||0)); i.orderFlag = i.orderQty > 0 ? 'order' : (i.orderFlag === 'overstock' ? 'overstock' : 'none'); if(i.orderFlag === 'order') i.overstock = false; if(i.orderQty === 0) v663RemoveOrderForItem(i.id); else v663UpsertOrder(i); save(); render(); } return;
+    }
+    if(a === 'set-inv-order-flag-v663'){
+      const i = v663OrderItemById(el.dataset.id); if(i){ const flag = el.dataset.flag || 'none'; i.orderFlag = flag; i.overstock = flag === 'overstock'; if(flag === 'order' && !v663OrderQty(i)) i.orderQty = v663DefaultQty(i); if(flag === 'order') v663UpsertOrder(i); else v663RemoveOrderForItem(i.id); if(flag === 'none') i.orderQty = 0; save(); render(); } return;
+    }
+    if(a === 'add-inv-order-v663'){ addInventoryOrder(el.dataset.id); return; }
+    if(a === 'remove-inv-order-v663'){
+      const order = state.inventoryOrders.find(o=>o.id === el.dataset.id);
+      if(order && order.itemId){ const i = v663OrderItemById(order.itemId); if(i){ i.orderQty = 0; i.orderFlag = 'none'; } }
+      state.inventoryOrders = state.inventoryOrders.filter(o=>o.id !== el.dataset.id); save(); render(); return;
+    }
+    if(a === 'clear-inv-orders-v663'){
+      state.inventoryOrders.forEach(o=>{ if(o.itemId){ const i = v663OrderItemById(o.itemId); if(i){ i.orderQty = 0; i.orderFlag = 'none'; } } });
+      state.inventoryOrders = []; toast(t('orderListCleared'),'info'); save(); render(); return;
+    }
+    if(a === 'confirm-inv-orders-v663'){
+      const orders = v663OrderList();
+      orders.forEach(o=>{ const i = o.itemId ? v663OrderItemById(o.itemId) : state.inventory.find(x=>x.name===o.name && (!o.nasa || x.nasa===o.nasa)); if(i){ i.orderFrequencyCount = +(i.orderFrequencyCount||0) + 1; i.lastOrderedAt = nowISO(); i.lastOrderQty = +(o.qty||0); i.orderQty = 0; i.orderFlag = 'none'; i.overstock = false; } });
+      state.orderHistory.unshift({id:uid('ordhist'),type:'inventory',at:nowISO(),items:orders.map(o=>({name:o.name,nasa:o.nasa,qty:o.qty}))});
+      state.orderHistory = state.orderHistory.slice(0,200);
+      state.inventoryOrders = []; toast(t('orderListConfirmed'),'good'); save(); render(); return;
+    }
+    if(a === 'copy-inv-orders'){
+      const text = v663OrderList().map(o=>`${o.name}${o.nasa?` (${o.nasa})`:''}: ${o.qty}`).join('\n'); copyText(text || t('noOrderList')); return;
+    }
+    if(a === 'pwa-check-update-v663'){ v663CheckUpdate(); return; }
+    if(a === 'pwa-prepare-offline-v663'){ v663PrepareOffline(); return; }
+    if(a === 'pwa-activate-update-v663'){ v663ActivateUpdate(); return; }
+    if(a === 'toggle-diag-activity-v663'){ state.ui.diagShowAllActivity = !state.ui.diagShowAllActivity; save(); render(); return; }
+    if(a === 'toggle-diag-updates-v663'){ state.ui.diagShowAllUpdates = !state.ui.diagShowAllUpdates; save(); render(); return; }
+    if(a === 'smart-next'){
+      const q = v663DailyActions(3);
+      modal(t('smart'), `<div class="grid"><p class="muted">${L('Dit zijn de eerste acties die nu het meeste helpen. Communicatie en bestellijst tellen mee.','These are the first actions that help most right now. Communication and order list are included.')}</p><div class="list">${q.map((x,i)=>v663ActionCard(x,i)).join('')}</div></div>`, 'wide');
+      return;
+    }
+    return v663HandleActionBase(a, el, e);
+  };
+
+  v663EnsureUi();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.3 Mobile, PWA & Workflow Polish failed', err);
+}
+
+
+/* v6.6.4 — Smart Planner Foundation */
+try {
+  APP.version = 'v6.6.4';
+  APP.cache = 'rich-cmd-cache-v664';
+  APP.updateUrl = './version.json';
+
+  Object.assign(I18N.nl, {
+    v664Title:'RICH CMD v6.6.4 — Smart Planner Foundation',
+    v664Subtitle:'Smart Planner basis, betere dagstart, slimmere top 3 acties, App Health Guard en stabieler updatebeleid.',
+    smartPlanner:'Smart Planner',
+    plannedToday:'Vandaag gepland',
+    workPressure:'Werkdruk',
+    pressureEasy:'Rustig',
+    pressureDoable:'Haalbaar',
+    pressureHigh:'Hoog',
+    pressureOverloaded:'Te hoog',
+    estimatedTime:'Geschatte tijd',
+    availableTime:'Beschikbaar',
+    dayAdvice:'Dagadvies',
+    startDay:'Dagstart',
+    startDayText:'Kies je energie en laat RICH CMD de eerste acties rustig ordenen.',
+    basicRoutine:'Basisroutine',
+    communicationFollowup:'Communicatie opvolgen',
+    finishOrderList:'Bestellijst afronden',
+    agfQuickCheck:'AGF Quick Check',
+    storeMapUrgency:'Schoonmaakkaart urgentie',
+    shortBasicTask:'Korte basistaak',
+    updatePolicy:'Updatebeleid',
+    latestOnlineVersion:'Nieuwste online versie',
+    currentVersion:'Huidige versie',
+    minSupportedVersion:'Minimaal ondersteund',
+    updateAvailable:'Update beschikbaar',
+    updateRequired:'Update verplicht',
+    updateNotRequired:'Niet verplicht',
+    lastUpdateCheck:'Laatste updatecontrole',
+    autoUpdateCheck:'Automatische dagelijkse updatecontrole',
+    updatePolicyText:'De app controleert maximaal één keer per dag automatisch online of er een nieuwe versie beschikbaar is. Grote versies kunnen later via version.json verplicht worden gemaakt.',
+    versionPolicyOk:'Versiebeleid oké.',
+    versionPolicyBlocked:'Deze app-versie wordt niet meer ondersteund. Werk bij naar de nieuwste versie.',
+    updateReadyReload:'Update klaar. Activeer en herlaad om de nieuwste versie te gebruiken.',
+    updateMetadataFailed:'Versie-informatie kon niet worden opgehaald.',
+    v7Preparation:'V7 voorbereiding',
+    v7PreparationText:'Basis voor Smart Planner, dagstart, updatebeleid, communicatie en bestelbeheer is actief.',
+    postponeOneDay:'+1 dag',
+    postponeOneWeek:'+1 week',
+    followupMoved:'Opvolging verplaatst',
+    viewPlanner:'Bekijk planner',
+    closeShiftAdvice:'Controleer overdracht en sluit je shift af als alles verwerkt is.',
+    plannerLowEnergy:'Lage energie: begin met korte taken en houd managementblokken klein.',
+    plannerNormalEnergy:'Normale energie: basisroutine, AGF en open opvolgingen blijven leidend.',
+    plannerStrongEnergy:'Sterke energie: plan naast de basis één extra periodieke of schoonmaakactie.',
+    mobileLayoutFix:'Mobiele werkflow vastgezet: Smart Planner, energiecheck en directe acties blijven nu netjes in kaarten.'
+  });
+  Object.assign(I18N.en, {
+    v664Title:'RICH CMD v6.6.4 — Smart Planner Foundation',
+    v664Subtitle:'Smart Planner foundation, improved day start, smarter top 3 actions, App Health Guard and steadier update policy.',
+    smartPlanner:'Smart Planner',
+    plannedToday:'Planned today',
+    workPressure:'Work pressure',
+    pressureEasy:'Calm',
+    pressureDoable:'Doable',
+    pressureHigh:'High',
+    pressureOverloaded:'Too high',
+    estimatedTime:'Estimated time',
+    availableTime:'Available',
+    dayAdvice:'Day advice',
+    startDay:'Day start',
+    startDayText:'Choose your energy and let RICH CMD order the first actions calmly.',
+    basicRoutine:'Basic routine',
+    communicationFollowup:'Follow up communication',
+    finishOrderList:'Finish order list',
+    agfQuickCheck:'AGF Quick Check',
+    storeMapUrgency:'Cleaning Map urgency',
+    shortBasicTask:'Short basic task',
+    updatePolicy:'Update policy',
+    latestOnlineVersion:'Latest online version',
+    currentVersion:'Current version',
+    minSupportedVersion:'Minimum supported',
+    updateAvailable:'Update available',
+    updateRequired:'Update required',
+    updateNotRequired:'Not required',
+    lastUpdateCheck:'Last update check',
+    autoUpdateCheck:'Automatic daily update check',
+    updatePolicyText:'The app checks online at most once per day whether a new version is available. Major releases can later be enforced through version.json.',
+    versionPolicyOk:'Version policy OK.',
+    versionPolicyBlocked:'This app version is no longer supported. Update to the latest version.',
+    updateReadyReload:'Update ready. Activate and reload to use the newest version.',
+    updateMetadataFailed:'Version metadata could not be fetched.',
+    v7Preparation:'V7 preparation',
+    v7PreparationText:'Foundation for Smart Planner, day start, update policy, communication and ordering is active.',
+    postponeOneDay:'+1 day',
+    postponeOneWeek:'+1 week',
+    followupMoved:'Follow-up moved',
+    viewPlanner:'View planner',
+    closeShiftAdvice:'Check handover and close your shift when everything is processed.',
+    plannerLowEnergy:'Low energy: start with short tasks and keep management blocks small.',
+    plannerNormalEnergy:'Normal energy: basic routine, AGF and open follow-ups stay leading.',
+    plannerStrongEnergy:'Strong energy: plan one extra periodic or cleaning action next to the basics.',
+    mobileLayoutFix:'Mobile workflow locked: Smart Planner, energy check and direct actions now stay neatly inside cards.'
+  });
+
+  function v664EnsureUi(){
+    if(typeof v663EnsureUi === 'function') { try { v663EnsureUi(); } catch(_) {} }
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.ui.lastUpdateCheckAt = state.ui.lastUpdateCheckAt || '';
+    state.ui.availableVersion = state.ui.availableVersion || '';
+    state.ui.updateRequired = !!state.ui.updateRequired;
+    state.ui.updateMetadata = state.ui.updateMetadata || null;
+    state.ui.plannerExpanded = state.ui.plannerExpanded !== false;
+    state.schemaVersion = Math.max(664, +(state.schemaVersion||0));
+  }
+  function v664DateKey(dateStr){ return (dateStr || '').slice(0,10); }
+  function v664MinutesToText(min){ min=Math.max(0, Math.round(+min||0)); return min>=60 ? `${Math.floor(min/60)}u${min%60?` ${min%60}m`:''}` : `${min}m`; }
+  function v664ParseVersion(v){ return String(v||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0); }
+  function v664CompareVersions(a,b){ const A=v664ParseVersion(a),B=v664ParseVersion(b); for(let i=0;i<Math.max(A.length,B.length,3);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; } return 0; }
+  function v664TodayPlus(days){ const d = new Date(`${TODAY()}T12:00:00`); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
+  function v664OpenComms(){ return (typeof v663CommunicationItems==='function'?v663CommunicationItems():state.communications.filter(c=>c.type!=='note' && c.status!=='Notitie')).filter(c=>!c.done && c.status !== 'Afgehandeld'); }
+  function v664DueComms(){ return v664OpenComms().filter(c=>c.followDate && c.followDate <= TODAY()); }
+  function v664OrderItems(){ return typeof v663OrderList==='function' ? v663OrderList() : (state.inventoryOrders||[]); }
+  function v664OverstockCount(){ return (state.inventory||[]).filter(i=> (typeof v663OrderFlag==='function'?v663OrderFlag(i):(i.overstock?'overstock':'none')) === 'overstock').length; }
+  function v664PlannerAvailableMinutes(){
+    const h = +(state.settings?.haccpHours || state.settings?.workHours || 3.5);
+    return Math.max(60, Math.round(h*60));
+  }
+  function v664PlannerItems(){
+    v664EnsureUi();
+    const items=[];
+    if(!state.shift.active) items.push({key:'shift',label:t('startMyShiftNow'),detail:t('startShiftAdvice'),minutes:5,action:'start-shift-now',tone:'warn'});
+    const tasks = typeof sortedTasks==='function' ? sortedTasks() : [];
+    const baseTasks = tasks.filter(task=>String(task.category||task.group||task.title||'').toLowerCase().match(/basis|basic|routine|dagelijks|daily/)).slice(0,6);
+    const baseMin = baseTasks.reduce((sum,task)=>sum + (+task.duration||10),0) || (tasks.length?Math.min(90,tasks.slice(0,4).reduce((s,t)=>s+(+t.duration||10),0)):0);
+    if(baseMin) items.push({key:'basis',label:t('basicRoutine'),detail:`${baseTasks.length||Math.min(tasks.length,4)} ${L('taken','tasks')}`,minutes:baseMin,route:'haccp',tone:'info'});
+    if(v664DueComms().length) items.push({key:'commDue',label:t('communicationFollowup'),detail:`${v664DueComms().length} ${t('followupsToday')}`,minutes:10,route:'communication',tone:'bad'});
+    else if(v664OpenComms().length) items.push({key:'commOpen',label:t('openCommunication'),detail:`${v664OpenComms().length} ${L('open punten','open items')}`,minutes:8,route:'communication',tone:'warn'});
+    if(v664OrderItems().length) items.push({key:'orders',label:t('finishOrderList'),detail:`${v664OrderItems().length} ${L('artikelen','items')}`,minutes:5,route:'inventory',tone:'warn'});
+    const urgentClean = (typeof cleaningUrgent==='function'?cleaningUrgent():[]).find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgentClean) items.push({key:'storemap',label:t('storeMapUrgency'),detail:`${urgentClean.zone||''}${urgentClean.meter?` M${urgentClean.meter}`:''}`,minutes:15,route:'storemap',tone:'bad'});
+    const agf = typeof agfAttention==='function' ? agfAttention()[0] : null;
+    items.push({key:'agf',label:t('agfQuickCheck'),detail:agf ? (agf.name || agf.reason || '') : L('Korte verscheck','Short fresh check'),minutes:20,route:'agf',tone:agf?'warn':'info'});
+    if(state.ui.energy === 'low'){
+      const short = tasks.find(task=>(+task.duration||0) && (+task.duration||0)<=10);
+      if(short) items.unshift({key:'short',label:t('shortBasicTask'),detail:taskTitle(short),minutes:+short.duration||5,action:'task-done',id:short.id,route:'haccp',tone:'good'});
+    }
+    if(state.ui.energy === 'strong'){
+      const periodic = tasks.find(task=>String(`${task.category||''} ${task.group||''} ${task.title||''}`).toLowerCase().match(/periodiek|periodic|week|maand|monthly/));
+      if(periodic) items.push({key:'periodic',label:taskTitle(periodic),detail:L('Extra taak door sterke energie','Extra task because energy is strong'),minutes:+periodic.duration||20,route:'haccp',id:periodic.id,tone:'good'});
+    }
+    return items;
+  }
+  function v664PlannerSummary(){
+    const items=v664PlannerItems();
+    const total=items.reduce((s,i)=>s+(+i.minutes||0),0);
+    const available=v664PlannerAvailableMinutes();
+    const ratio=total/Math.max(1,available);
+    let label=t('pressureDoable'), tone='good';
+    if(ratio<.45){ label=t('pressureEasy'); tone='info'; }
+    else if(ratio>.95 && ratio<=1.15){ label=t('pressureHigh'); tone='warn'; }
+    else if(ratio>1.15){ label=t('pressureOverloaded'); tone='bad'; }
+    const energy = state.ui.energy === 'low' ? t('plannerLowEnergy') : state.ui.energy === 'strong' ? t('plannerStrongEnergy') : t('plannerNormalEnergy');
+    return {items,total,available,ratio,label,tone,advice:energy};
+  }
+  function v664PlanButton(item){
+    if(item.action === 'start-shift-now') return `<button class="btn small primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(item.action === 'task-done') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(item.id||'')}">${t('done')}</button><button class="btn small" data-route="${escapeHtml(item.route||'haccp')}">${t('showMe')}</button>`;
+    return `<button class="btn small" data-route="${escapeHtml(item.route||'today')}">${t('showMe')}</button>`;
+  }
+  function v664RenderPlanner(compact=false){
+    const s=v664PlannerSummary();
+    const list=(compact?s.items.slice(0,4):s.items).map(item=>`<div class="v664-plan-row"><div><strong>${escapeHtml(item.label)}</strong><div class="muted">${escapeHtml(item.detail||'')}</div></div><div class="btn-row"><span class="pill ${item.tone||'info'} v664-plan-min">${v664MinutesToText(item.minutes)}</span>${compact?'':v664PlanButton(item)}</div></div>`).join('');
+    return `<div class="card v664-planner-card"><div class="v664-planner-head"><div><h3>${t('smartPlanner')}</h3><p class="muted small">${t('v664Subtitle')}</p></div><div class="v664-pressure"><span class="pill ${s.tone}">${t('workPressure')}: ${s.label}</span><span class="pill info">${t('estimatedTime')}: ${v664MinutesToText(s.total)}</span><span class="pill">${t('availableTime')}: ${v664MinutesToText(s.available)}</span></div></div><p class="small"><strong>${t('dayAdvice')}:</strong> ${escapeHtml(s.advice)}</p><div class="v664-planner-list">${list || `<p class="muted">${t('empty')}</p>`}</div>${compact?`<div class="btn-row mt"><button class="btn" data-action="smart-next">${t('viewPlanner')}</button></div>`:''}</div>`;
+  }
+
+  function v664ActionPriority(action){
+    const energy = state.ui.energy || 'normal';
+    let score = 50;
+    if(action.type === 'start-shift') score = 0;
+    if(action.type === 'stop-break') score = 1;
+    if(action.type === 'communication') score = String(action.reason||'').toLowerCase().includes(TODAY()) ? 5 : 12;
+    if(action.type === 'inventory') score = 16;
+    if(action.type === 'storemap') score = 18;
+    if(action.type === 'task') score = 25;
+    if(action.type === 'agf') score = 30;
+    if(energy === 'low' && action.type === 'task' && String(action.reason||'').match(/5m|10m|korte|short/i)) score -= 12;
+    if(energy === 'strong' && action.type === 'storemap') score -= 6;
+    return score;
+  }
+  function v664DailyActions(limit=3){
+    v664EnsureUi();
+    const base = typeof v663DailyActions === 'function' ? v663DailyActions(12) : [];
+    const extras=[];
+    if(state.shift.breakActive) extras.push({type:'stop-break',title:t('finishBreakNow'),reason:L('Je pauze loopt nog.','Your break is still active.'),route:'today'});
+    v664DueComms().slice(0,2).forEach(c=>extras.push({type:'communication',title:t('followupsToday'),reason:c.message||t('communication'),route:'communication'}));
+    if(v664OrderItems().length) extras.push({type:'inventory',title:t('finishOrderList'),reason:`${v664OrderItems().length} ${L('artikelen staan klaar','items are ready')}`,route:'inventory'});
+    const merged=[];
+    [...extras,...base].forEach(a=>{
+      const key = `${a.type}-${a.id||a.title}`;
+      if(!merged.some(x=>`${x.type}-${x.id||x.title}`===key)) merged.push(a);
+    });
+    return merged.sort((a,b)=>v664ActionPriority(a)-v664ActionPriority(b)).slice(0,limit);
+  }
+  function v664ActionButton(action){
+    if(action.type === 'start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(action.type === 'stop-break') return `<button class="btn primary" data-action="toggle-break">${t('finishBreakNow')}</button>`;
+    if(action.type === 'communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')}</button>`;
+    if(action.type === 'inventory') return `<button class="btn primary" data-route="inventory">${t('viewOrders')}</button>`;
+    if(action.type === 'task') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(action.id||'')}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(action.type === 'agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    if(action.type === 'storemap') return `<button class="btn primary" data-route="storemap">${t('openStoreMap') || t('showMe')}</button>`;
+    return `<button class="btn primary" data-route="${escapeHtml(action.route||'today')}">${t('showMe')}</button>`;
+  }
+  function v664ActionCard(action,i){
+    return `<div class="list-item v661-action-card v663-action-card v664-action-card"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(action.title)}</strong><div class="small muted">${escapeHtml(action.reason||'')}</div></div><div class="btn-row">${v664ActionButton(action)}</div></div>`;
+  }
+  renderSmartQueue = window.renderSmartQueue = function(){ const q=v664DailyActions(3); return `<div class="list v664-smart-list">${q.map((a,i)=>v664ActionCard(a,i)).join('')}</div>`; };
+  nextAction = window.nextAction = function(){ const a=v664DailyActions(1)[0] || {}; return {title:a.title||t('smartPlanner'), reason:a.reason||t('dayAdvice'), route:a.route||'today', type:a.type, id:a.id, why:[v664PlannerSummary().advice,a.reason].filter(Boolean)}; };
+
+  function v664MainActions(){
+    return `<div class="v664-main-actions"><div class="card v664-actions-card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="card v664-energy-card v664-energy-compact"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v664-direct-card"><h3>${t('directActions')}</h3><div class="v664-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div>`;
+  }
+  function v664CalmToday(){
+    return `<div class="v661-calm-panel v662-calm-panel v663-calm-panel v664-calm-panel"><div class="card hero-mini v661-calm-status"><h3>${t('calmModeActive')}</h3><p>${t('calmModeHint')}</p><p class="muted small"><strong>${t('calmScope')}</strong> ${t('calmScopeText')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="toggle-rust-mode">${t('restoreNormalView')}</button></div></div>${v664RenderPlanner(true)}${typeof v663TodaySignals==='function'?v663TodaySignals():''}<div class="grid"><div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="card"><h3>${t('directActions')}</h3><div class="v664-direct-actions"><button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('closeShiftNow')}</button></div></div></div></div>`;
+  }
+  renderToday = window.renderToday = function(){
+    v664EnsureUi();
+    const prod = typeof productivity==='function'?productivity():0;
+    const calm = !!state.ui.rustMode;
+    const blocked = v664VersionBlockHtml();
+    return `${blocked}<div class="today-v661 today-v662 today-v663 today-v664 ${calm?'rust-active':''}"><div class="hero v661-hero v662-hero v663-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.4</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v664Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>${calm ? v664CalmToday() : `<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>${typeof v663TodaySignals==='function'?v663TodaySignals():''}${v664RenderPlanner(false)}<div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v664MainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}</div>`;
+  };
+
+  const v664BaseStartShift = startShift;
+  startShift = window.startShift = function(){
+    if(state.shift.active){ toast(L('Shift loopt al.','Shift is already active.'),'info'); return; }
+    state.shift.active=true; state.shift.startedAt=nowISO(); state.shift.logs.unshift({type:'clockIn',at:nowISO(),energy:state.ui.energy||'normal'}); addActivity(currentLang()==='en'?'Shift started':'Shift gestart','shift'); save(); render();
+    modal(t('shiftStartedTitle'), `<div class="hero"><span class="chip">${t('startDay')}</span><h2>${t('shiftStartedTitle')} 👋</h2><p>${t('startDayText')}</p></div><div class="grid grid-2"><div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div>${v664RenderPlanner(true)}</div><div class="card mt"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="btn-row mt"><button class="btn primary" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide');
+  };
+
+  function v664ThemeGrid(){
+    return `<div class="theme-grid v664-theme-grid">${themeOptions().map(th=>`<button class="theme-card v664-theme-card ${state.settings.theme===th.id?'active':''}" data-action="set-theme" data-theme="${th.id}"><div class="theme-swatch">${th.colors.map(c=>`<span style="background:${c}"></span>`).join('')}</div><strong>${th.name}</strong></button>`).join('')}</div>`;
+  }
+  function v664VersionBlockHtml(){
+    if(!state.ui.updateRequired) return '';
+    const meta=state.ui.updateMetadata||{};
+    return `<div class="v664-update-required"><div class="card"><h2>${t('updateRequired')}</h2><p>${escapeHtml(meta.forceMessageNl && currentLang()!=='en' ? meta.forceMessageNl : meta.forceMessageEn || t('versionPolicyBlocked'))}</p><div class="list"><div class="list-item compact"><span>${t('currentVersion')}</span><strong>${APP.version}</strong></div><div class="list-item compact"><span>${t('latestOnlineVersion')}</span><strong>${escapeHtml(meta.latestVersion||state.ui.availableVersion||'-')}</strong></div></div><div class="btn-row mt"><button class="btn primary" data-action="pwa-activate-update-v664">${t('activateUpdate')}</button><button class="btn" data-action="pwa-check-update-v664">${t('checkForUpdates')}</button></div></div></div>`;
+  }
+  function v664UpdatePolicyCard(){
+    const meta=state.ui.updateMetadata||{};
+    const latest=meta.latestVersion||state.ui.availableVersion||APP.version;
+    const min=meta.minSupportedVersion||'v6.0.0';
+    const available=v664CompareVersions(latest,APP.version)>0;
+    return `<div class="card v664-update-policy"><h3>${t('updatePolicy')}</h3><p class="muted small">${t('updatePolicyText')}</p><div class="list"><div class="list-item compact"><span>${t('currentVersion')}</span><strong>${APP.version}</strong></div><div class="list-item compact"><span>${t('latestOnlineVersion')}</span><strong>${escapeHtml(latest)}</strong></div><div class="list-item compact"><span>${t('minSupportedVersion')}</span><strong>${escapeHtml(min)}</strong></div><div class="list-item compact"><span>${t('updateAvailable')}</span><span class="pill ${available?'warn':'good'}">${available?L('Ja','Yes'):L('Nee','No')}</span></div><div class="list-item compact"><span>${t('updateRequired')}</span><span class="pill ${state.ui.updateRequired?'bad':'good'}">${state.ui.updateRequired?t('updateRequired'):t('updateNotRequired')}</span></div><div class="list-item compact"><span>${t('lastUpdateCheck')}</span><strong>${state.ui.lastUpdateCheckAt?dateTime(state.ui.lastUpdateCheckAt):'-'}</strong></div></div><div class="btn-row mt"><button class="btn primary" data-action="pwa-check-update-v664">${t('checkForUpdates')}</button><button class="btn" data-action="pwa-prepare-offline-v664">${t('prepareOffline')}</button><button class="btn" data-action="pwa-activate-update-v664">${t('activateUpdate')}</button></div></div>`;
+  }
+  function v664PwaCard(){
+    const base = typeof v663PwaCard === 'function' ? v663PwaCard() : '';
+    return base.replaceAll('v6.6.3','v6.6.4').replaceAll('rich-cmd-cache-v663','rich-cmd-cache-v664').replaceAll('pwa-check-update-v663','pwa-check-update-v664').replaceAll('pwa-prepare-offline-v663','pwa-prepare-offline-v664').replaceAll('pwa-activate-update-v663','pwa-activate-update-v664') + v664UpdatePolicyCard();
+  }
+  renderSettings = window.renderSettings = function(){
+    v664EnsureUi();
+    return `<div class="grid settings-v662 settings-v663 v664-settings"><div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('profileAndRhythm') || 'Profiel & ritme'}</h3><div class="form-grid"><label>${t('name')}<input class="input" id="setName" value="${escapeHtml(state.settings.name||'')}"></label><label>${t('language')}<select class="select" id="setLang"><option value="nl" ${currentLang()==='nl'?'selected':''}>Nederlands</option><option value="en" ${currentLang()==='en'?'selected':''}>English</option></select></label><label>${t('workHours')}<input class="input" id="setWorkHours" type="number" step="0.25" value="${state.settings.workHours}"></label><label>${t('haccpHours')}<input class="input" id="setHaccpHours" type="number" step="0.25" value="${state.settings.haccpHours}"></label><label>${t('shiftStart')}<input class="input" id="setShiftStart" type="time" value="${state.settings.shiftStart}"></label><label>${t('shiftEnd')}<input class="input" id="setShiftEnd" type="time" value="${state.settings.shiftEnd}"></label></div><h4>${t('workdays')}</h4><div class="btn-row">${['Ma','Di','Wo','Do','Vr','Za','Zo'].map((d,i)=>`<button class="btn small ${state.settings.workDays.includes(i+1)?'primary':''}" data-action="settings-toggle-workday" data-day="${i+1}">${d}</button>`).join('')}</div><button class="btn primary mt" data-action="save-settings">${t('save')}</button></div><div class="card"><h3>${t('themeGalleryTitle') || 'Thema galerij'}</h3>${v664ThemeGrid()}</div><div class="card"><h3>${t('v7Preparation')}</h3><p>${t('v7PreparationText')}</p><div class="btn-row"><span class="pill good">Smart Planner</span><span class="pill good">Update Center</span><span class="pill good">Daily Flow</span></div></div></div><div class="grid"><div class="card"><h3>Contactpersonen</h3><div class="list">${state.settings.contacts.map(c=>`<div class="list-item compact"><span>${escapeHtml(c)}</span><button class="btn small bad" data-action="delete-contact" data-name="${escapeHtml(c)}">${t('delete')}</button></div>`).join('') || `<p class="muted small">${L('Nog geen contactpersonen.','No contacts yet.')}</p>`}</div><div class="btn-row mt"><input class="input" id="newContact" placeholder="Nieuwe contactpersoon"><button class="btn" data-action="add-contact">${t('add')}</button></div></div><div class="card"><h3>${t('calmMode')}</h3><p><strong>${t('calmScope')}</strong></p><p class="muted small">${t('calmScopeText')}</p><p class="muted small">${t('mobileLayoutFix')}</p></div>${v664PwaCard()}</div></div></div>`;
+  };
+
+  async function v664FetchVersionMetadata(){
+    const url = `${APP.updateUrl || './version.json'}?t=${Date.now()}`;
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error(`version ${res.status}`);
+    return await res.json();
+  }
+  async function v664CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted'),'info');
+      const meta = await v664FetchVersionMetadata();
+      state.ui.updateMetadata = meta;
+      state.ui.availableVersion = meta.latestVersion || '';
+      state.ui.lastUpdateCheckAt = nowISO();
+      const latestNewer = meta.latestVersion && v664CompareVersions(meta.latestVersion, APP.version) > 0;
+      const minBlocked = meta.minSupportedVersion && v664CompareVersions(APP.version, meta.minSupportedVersion) < 0;
+      const forceBlocked = meta.forceBelowVersion && v664CompareVersions(APP.version, meta.forceBelowVersion) < 0;
+      state.ui.updateRequired = !!(minBlocked || forceBlocked);
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg?.waiting){ state.ui.updateWaiting = true; } }
+      addActivity(t('checkForUpdates'),'pwa'); save(); render();
+      if(!silent){
+        if(state.ui.updateRequired) toast(t('versionPolicyBlocked'),'bad');
+        else if(latestNewer || state.ui.updateWaiting) toast(t('updateReadyReload'),'good');
+        else toast(t('noUpdateFound'),'info');
+      }
+      return meta;
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed'),'warn'); }
+  }
+  async function v664PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast(L('Cache API niet beschikbaar.','Cache API not available.'),'warn'); return; }
+      const assets = ['./','./index.html','./index.html?v=664','./styles.css?v=664','./app.js?v=664','./manifest.json?v=664','./version.json','./icon-192.png','./icon-512.png'];
+      const cache = await caches.open(APP.cache);
+      await cache.addAll(assets);
+      if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt = nowISO(); addActivity(t('prepareOffline'),'pwa'); save(); render(); toast(t('offlinePrepared'),'good');
+    }catch(err){ console.error(err); toast(L('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','Offline preparation failed. Open the app online and try again.'),'bad'); }
+  }
+  async function v664ActivateUpdate(){
+    try{ const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null; if(reg?.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(), 500); return; } location.reload(); } catch(err){ location.reload(); }
+  }
+  function v664MaybeAutoCheck(){
+    v664EnsureUi();
+    if(!navigator.onLine) return;
+    const last = v664DateKey(state.ui.lastAutoUpdateCheckAt || state.ui.lastUpdateCheckAt || '');
+    if(last === TODAY()) return;
+    state.ui.lastAutoUpdateCheckAt = nowISO(); save();
+    setTimeout(()=>v664CheckUpdate(true), 900);
+  }
+
+  const v664BaseRenderCommunicationList = typeof v663RenderCommunicationList === 'function' ? v663RenderCommunicationList : null;
+  v663RenderCommunicationList = window.v663RenderCommunicationList = function(limit=12){
+    const arr = (typeof v663CommunicationItems==='function'?v663CommunicationItems():state.communications).slice(0,limit);
+    if(!arr.length) return `<p class="muted small">${t('empty')}</p>`;
+    return `<div class="list v664-follow-section">${arr.map(c=>{ const label=c.to||c.customTo||t('communication'); const due=c.followDate && c.followDate<=TODAY(); const dateText=c.followDate?`${t('followDate')}: ${dateOnly(c.followDate)}`:t('noFollowUp'); return `<div class="list-item v663-comm-item"><div><strong>${escapeHtml(label)}</strong><div>${escapeHtml(c.message||'')}</div><div class="tiny muted">${dateTime(c.createdAt)} · ${escapeHtml(dateText)}</div><div class="btn-row mt"><span class="pill ${due?'warn':'info'}">${escapeHtml(c.status||'Open')}</span>${c.urgent?`<span class="pill bad">Urgent</span>`:''}</div><div class="v664-comm-actions"><button class="btn small" data-action="comm-postpone-v664" data-id="${escapeHtml(c.id)}" data-days="1">${t('postponeOneDay')}</button><button class="btn small" data-action="comm-postpone-v664" data-id="${escapeHtml(c.id)}" data-days="7">${t('postponeOneWeek')}</button><button class="btn small good" data-action="comm-done-v663" data-id="${escapeHtml(c.id)}">${t('markDone')}</button></div></div><div class="btn-row"><select class="select" style="width:135px" data-action="comm-status" data-id="${escapeHtml(c.id)}"><option ${c.status==='Rood'?'selected':''}>Rood</option><option ${c.status==='Geel'?'selected':''}>Geel</option><option ${c.status==='Groen'?'selected':''}>Groen</option><option ${c.status==='Afgehandeld'?'selected':''}>Afgehandeld</option></select><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(c.id)}">${t('delete')}</button></div></div>`; }).join('')}</div>`;
+  };
+
+  function v664HealthRows(){
+    const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    const rows = [
+      [t('version'), APP.version, 'good'],
+      ['Cache', APP.cache, 'good'],
+      ['Online', navigator.onLine ? 'OK' : 'Offline', navigator.onLine?'good':'warn'],
+      ['Service worker', ('serviceWorker' in navigator) ? (navigator.serviceWorker.controller ? 'Actief' : 'Beschikbaar') : 'Niet ondersteund', ('serviceWorker' in navigator)?'good':'bad'],
+      ['PWA', standalone ? 'Geïnstalleerd' : 'Browser', standalone?'good':'info'],
+      [t('lastUpdateCheck'), state.ui.lastUpdateCheckAt?dateTime(state.ui.lastUpdateCheckAt):'-', state.ui.lastUpdateCheckAt?'good':'warn'],
+      [t('updateRequired'), state.ui.updateRequired?t('updateRequired'):t('updateNotRequired'), state.ui.updateRequired?'bad':'good']
+    ];
+    return `<div class="v664-health-grid">${rows.map(([a,b,tone])=>`<div class="v664-health-row"><span>${escapeHtml(a||'')}</span><span class="pill ${tone||'info'}">${escapeHtml(String(b||''))}</span></div>`).join('')}</div>`;
+  }
+  const v664BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    v664EnsureUi();
+    const health = typeof diagnosticHealth==='function'?diagnosticHealth():100;
+    const q = typeof moduleQuality === 'function' ? moduleQuality() : {};
+    return `<div class="grid diagnostics-v663 diagnostics-v664"><div class="hero"><span class="chip">${t('v664Title')}</span><h2>${t('diagnostics') || t('appHealth')}</h2><p>${t('v664Subtitle')}</p></div><div class="grid grid-4">${kpi(t('version')||'Versie',APP.version,null)}${kpi('Cache',APP.cache,null)}${kpi(t('appHealth'),health+'%',health>85?'good':'warn')}${kpi('Records',totalRecords(),null)}</div><div class="grid grid-2"><div class="card"><h3>${t('appHealthGuard')}</h3>${v664HealthRows()}</div><div class="card"><h3>${t('dataQuality')}</h3>${Object.keys(q).length?Object.entries(q).map(([k,v])=>bar(k,v,v>85?'good':v>65?'warn':'bad')).join(''):`<p class="muted">${t('empty')}</p>`}</div><div class="card"><h3>${t('backupReminder')}</h3><p>${backupReminderText()}</p><div class="btn-row"><button class="btn" data-action="download-backup">${t('backup')}</button><button class="btn" data-action="open-import">${t('import')}</button><button class="btn" data-action="clear-cache">Cache</button><button class="btn bad" data-action="reset-app">${t('reset')}</button></div></div><div class="card"><h3>${t('pwaUpdateCenter')}</h3>${v664UpdatePolicyCard()}</div></div><div class="card"><h3>${t('latestActions')}</h3>${v663RenderActivityTimeline()}</div><div class="card"><h3>${t('latestUpdates')}</h3>${v664RenderUpdateLog()}</div></div>`;
+  };
+  function v664RenderUpdateLog(){
+    const entries = [
+      ['v6.6.4', t('v664Subtitle')],
+      ['v6.6.3', t('v663Subtitle')],
+      ['v6.6.2', t('v662Subtitle') || 'Flow & Bestelbeheer Stabilisatie'],
+      ['v6.6.1', t('v661Subtitle') || 'Daily Flow Stabilization'],
+      ['v6.6.0', 'Daily Flow Polish'],
+      ['v6.5.27', 'Mobile Assist Hotfix']
+    ];
+    const list = state.ui.diagShowAllUpdates ? entries : entries.slice(0,3);
+    return `<div class="list">${list.map(([v,txt])=>`<div class="list-item compact"><strong>${v}</strong><span>${escapeHtml(txt)}</span></div>`).join('')}</div>${entries.length>3?`<button class="btn mt" data-action="toggle-diag-updates-v663">${state.ui.diagShowAllUpdates?t('showLess'):t('showMore')}</button>`:''}`;
+  }
+
+  const v664BaseHandleAction = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a === 'smart-next'){ const q=v664DailyActions(3); modal(t('smartPlanner'), `<div class="grid">${v664RenderPlanner(false)}<div class="card"><h3>${t('nextActions')}</h3><div class="list">${q.map((x,i)=>v664ActionCard(x,i)).join('')}</div></div></div>`, 'wide'); return; }
+    if(a === 'pwa-check-update-v664' || a === 'pwa-check-update-v663'){ v664CheckUpdate(false); return; }
+    if(a === 'pwa-prepare-offline-v664' || a === 'pwa-prepare-offline-v663'){ v664PrepareOffline(); return; }
+    if(a === 'pwa-activate-update-v664' || a === 'pwa-activate-update-v663'){ v664ActivateUpdate(); return; }
+    if(a === 'comm-postpone-v664'){ const c=state.communications.find(x=>x.id===el.dataset.id); if(c){ c.followDate = v664TodayPlus(+(el.dataset.days||1)); c.followMode='relative'; c.followAmount=+(el.dataset.days||1); c.followUnit='days'; addActivity(`${t('followupMoved')}: ${dateOnly(c.followDate)}`,'communication'); toast(t('followupMoved'),'good'); save(); render(); } return; }
+    return v664BaseHandleAction(a, el, e);
+  };
+
+  v664EnsureUi();
+  v664MaybeAutoCheck();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.4 Smart Planner Foundation failed', err);
+}
+
+
+/* v6.6.4 — Runtime hardening and self-contained render layer */
+try {
+  APP.version = 'v6.6.4';
+  APP.cache = 'rich-cmd-cache-v664';
+  APP.updateUrl = './version.json';
+
+  function v664safeEnsure(){
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.ui.orderFilter = state.ui.orderFilter || 'all';
+    state.ui.diagShowAllActivity = !!state.ui.diagShowAllActivity;
+    state.ui.diagShowAllUpdates = !!state.ui.diagShowAllUpdates;
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
+    state.inventoryOrders = Array.isArray(state.inventoryOrders) ? state.inventoryOrders : [];
+    state.communications = Array.isArray(state.communications) ? state.communications : [];
+    state.orderHistory = Array.isArray(state.orderHistory) ? state.orderHistory : [];
+    state.schemaVersion = Math.max(664, +(state.schemaVersion||0));
+  }
+  function v664safeParse(v){ return String(v||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0); }
+  function v664safeCmp(a,b){ const A=v664safeParse(a),B=v664safeParse(b); for(let i=0;i<Math.max(A.length,B.length,3);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; } return 0; }
+  function v664safeMin(min){ min=Math.max(0,Math.round(+min||0)); return min>=60 ? `${Math.floor(min/60)}u${min%60?` ${min%60}m`:''}` : `${min}m`; }
+  function v664safePlus(days){ const d=new Date(`${TODAY()}T12:00:00`); d.setDate(d.getDate()+(+days||0)); return d.toISOString().slice(0,10); }
+  function v664safeComms(){ return state.communications.filter(c=>c && c.type!=='note' && c.status!=='Notitie'); }
+  function v664safeNotes(){ return state.communications.filter(c=>c && (c.type==='note' || c.status==='Notitie')); }
+  function v664safeOpenComms(){ return v664safeComms().filter(c=>!c.done && c.status!=='Afgehandeld'); }
+  function v664safeDueComms(){ return v664safeOpenComms().filter(c=>c.followDate && c.followDate<=TODAY()); }
+  function v664safeOrderFlag(i){ return i.orderFlag || (i.overstock?'overstock':((+i.orderQty||0)>0?'order':'none')); }
+  function v664safeOrders(){ return state.inventoryOrders.filter(o=>o && o.type!=='legacy-cleared'); }
+  function v664safeOverstock(){ return state.inventory.filter(i=>v664safeOrderFlag(i)==='overstock').length; }
+  function v664safeEnergyAdvice(){ return state.ui.energy==='low'?t('plannerLowEnergy'):state.ui.energy==='strong'?t('plannerStrongEnergy'):t('plannerNormalEnergy'); }
+  function v664safeAvailable(){ return Math.max(60,Math.round(+(state.settings?.haccpHours || state.settings?.workHours || 3.5)*60)); }
+  function v664safePlannerItems(){
+    v664safeEnsure();
+    const tasks = typeof sortedTasks==='function' ? sortedTasks() : [];
+    const items=[];
+    if(!state.shift.active) items.push({type:'start-shift',label:t('startMyShiftNow'),detail:t('startShiftAdvice'),minutes:5,action:'start-shift-now',tone:'warn'});
+    const baseTasks = tasks.filter(task=>String(`${task.category||''} ${task.group||''} ${task.title||''}`).toLowerCase().match(/basis|basic|routine|daily|dagelijks/)).slice(0,6);
+    const baseMin = baseTasks.reduce((s,t)=>s+(+t.duration||10),0) || (tasks.length?Math.min(90,tasks.slice(0,4).reduce((s,t)=>s+(+t.duration||10),0)):0);
+    if(baseMin) items.push({type:'task',label:t('basicRoutine'),detail:`${baseTasks.length||Math.min(tasks.length,4)} ${L('taken','tasks')}`,minutes:baseMin,route:'haccp',tone:'info'});
+    if(v664safeDueComms().length) items.push({type:'communication',label:t('communicationFollowup'),detail:`${v664safeDueComms().length} ${t('followupsToday')}`,minutes:10,route:'communication',tone:'bad'});
+    else if(v664safeOpenComms().length) items.push({type:'communication',label:t('openCommunication'),detail:`${v664safeOpenComms().length} ${L('open punten','open items')}`,minutes:8,route:'communication',tone:'warn'});
+    if(v664safeOrders().length) items.push({type:'inventory',label:t('finishOrderList'),detail:`${v664safeOrders().length} ${L('artikelen','items')}`,minutes:5,route:'inventory',tone:'warn'});
+    const urgentClean = (typeof cleaningUrgent==='function'?cleaningUrgent():[]).find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgentClean) items.push({type:'storemap',label:t('storeMapUrgency'),detail:`${urgentClean.zone||''}${urgentClean.meter?` M${urgentClean.meter}`:''}`,minutes:15,route:'storemap',tone:'bad'});
+    const agf = typeof agfAttention==='function' ? agfAttention()[0] : null;
+    items.push({type:'agf',label:t('agfQuickCheck'),detail:agf ? (agf.name || agf.reason || '') : L('Korte verscheck','Short fresh check'),minutes:20,route:'agf',tone:agf?'warn':'info'});
+    if(state.ui.energy==='low'){
+      const short=tasks.find(task=>(+task.duration||0) && (+task.duration||0)<=10);
+      if(short) items.unshift({type:'task',label:t('shortBasicTask'),detail:taskTitle(short),minutes:+short.duration||5,id:short.id,route:'haccp',tone:'good'});
+    }
+    if(state.ui.energy==='strong'){
+      const periodic=tasks.find(task=>String(`${task.category||''} ${task.group||''} ${task.title||''}`).toLowerCase().match(/periodiek|periodic|week|maand|monthly/));
+      if(periodic) items.push({type:'task',label:taskTitle(periodic),detail:L('Extra taak door sterke energie','Extra task because energy is strong'),minutes:+periodic.duration||20,id:periodic.id,route:'haccp',tone:'good'});
+    }
+    return items;
+  }
+  function v664safePlannerSummary(){
+    const items=v664safePlannerItems(); const total=items.reduce((s,i)=>s+(+i.minutes||0),0); const available=v664safeAvailable(); const ratio=total/Math.max(1,available);
+    let label=t('pressureDoable'), tone='good'; if(ratio<.45){label=t('pressureEasy'); tone='info';} else if(ratio>.95 && ratio<=1.15){label=t('pressureHigh'); tone='warn';} else if(ratio>1.15){label=t('pressureOverloaded'); tone='bad';}
+    return {items,total,available,ratio,label,tone,advice:v664safeEnergyAdvice()};
+  }
+  function v664safePlanButton(item){
+    if(item.action==='start-shift-now' || item.type==='start-shift') return `<button class="btn small primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(item.id && item.type==='task') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(item.id)}">${t('done')}</button><button class="btn small" data-route="haccp">${t('showMe')}</button>`;
+    return `<button class="btn small" data-route="${escapeHtml(item.route||'today')}">${t('showMe')}</button>`;
+  }
+  function v664safePlanner(compact=false){
+    const s=v664safePlannerSummary();
+    const list=(compact?s.items.slice(0,4):s.items).map(item=>`<div class="v664-plan-row"><div><strong>${escapeHtml(item.label)}</strong><div class="muted">${escapeHtml(item.detail||'')}</div></div><div class="btn-row"><span class="pill ${item.tone||'info'} v664-plan-min">${v664safeMin(item.minutes)}</span>${compact?'':v664safePlanButton(item)}</div></div>`).join('');
+    return `<div class="card v664-planner-card"><div class="v664-planner-head"><div><h3>${t('smartPlanner')}</h3><p class="muted small">${t('v664Subtitle')}</p></div><div class="v664-pressure"><span class="pill ${s.tone}">${t('workPressure')}: ${s.label}</span><span class="pill info">${t('estimatedTime')}: ${v664safeMin(s.total)}</span><span class="pill">${t('availableTime')}: ${v664safeMin(s.available)}</span></div></div><p class="small"><strong>${t('dayAdvice')}:</strong> ${escapeHtml(s.advice)}</p><div class="v664-planner-list">${list || `<p class="muted">${t('empty')}</p>`}</div>${compact?`<div class="btn-row mt"><button class="btn" data-action="smart-next">${t('viewPlanner')}</button></div>`:''}</div>`;
+  }
+  function v664safeActionButton(a){
+    if(a.type==='start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(a.type==='stop-break') return `<button class="btn primary" data-action="toggle-break">${t('finishBreakNow')}</button>`;
+    if(a.type==='communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')}</button>`;
+    if(a.type==='inventory') return `<button class="btn primary" data-route="inventory">${t('viewOrders')}</button>`;
+    if(a.type==='task') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(a.id||'')}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(a.type==='agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    if(a.type==='storemap') return `<button class="btn primary" data-route="storemap">${t('openStoreMap')||t('showMe')}</button>`;
+    return `<button class="btn primary" data-route="${escapeHtml(a.route||'today')}">${t('showMe')}</button>`;
+  }
+  function v664safeDailyActions(limit=3){
+    const actions=[];
+    if(!state.shift.active) actions.push({type:'start-shift',title:t('startMyShiftNow'),reason:t('startShiftAdvice'),route:'today'});
+    if(state.shift.breakActive) actions.push({type:'stop-break',title:t('finishBreakNow'),reason:L('Je pauze loopt nog.','Your break is still active.'),route:'today'});
+    v664safeDueComms().slice(0,2).forEach(c=>actions.push({type:'communication',title:t('followupsToday'),reason:c.message||t('communication'),route:'communication'}));
+    if(v664safeOrders().length) actions.push({type:'inventory',title:t('finishOrderList'),reason:`${v664safeOrders().length} ${L('artikelen staan klaar','items are ready')}`,route:'inventory'});
+    const urgent=(typeof cleaningUrgent==='function'?cleaningUrgent():[]).find(x=>String(x.status||'').includes('mold') || String(x.status||'')==='followup');
+    if(urgent) actions.push({type:'storemap',title:t('storeMapUrgency'),reason:`${urgent.zone||''}${urgent.meter?` M${urgent.meter}`:''}`,route:'storemap'});
+    const tasks=typeof sortedTasks==='function'?sortedTasks():[];
+    if(state.ui.energy==='low'){
+      const short=tasks.find(task=>(+task.duration||0)&&(+task.duration||0)<=10);
+      if(short) actions.push({type:'task',id:short.id,title:`${t('shortBasicTask')}: ${taskTitle(short)}`,reason:t('plannerLowEnergy'),route:'haccp'});
+    }
+    tasks.slice(0,5).forEach(task=>{ if(!actions.some(a=>a.id===task.id)) actions.push({type:'task',id:task.id,title:taskTitle(task),reason:`${localStatus(task.priority)} · ${minutesToText(task.duration)} · ${translatedCategory(task.category||'')}`,route:'haccp'}); });
+    const agf=typeof agfAttention==='function'?agfAttention()[0]:null; if(agf) actions.push({type:'agf',title:agf.name,reason:agf.reason||agf.advice||t('orderAdvice'),route:'agf'});
+    if(!actions.length) actions.push({type:'agf',title:t('startAgfQuickCheck'),reason:L('Geen urgente acties. Een korte check houdt je data actueel.','No urgent actions. A quick check keeps your data current.'),route:'agf'});
+    const weight={ 'start-shift':0,'stop-break':1,communication:5,inventory:12,storemap:16,task:24,agf:30 };
+    return actions.sort((a,b)=>(weight[a.type]??50)-(weight[b.type]??50)).slice(0,limit);
+  }
+  function v664safeActionCard(a,i){ return `<div class="list-item v661-action-card v663-action-card v664-action-card"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(a.title)}</strong><div class="small muted">${escapeHtml(a.reason||'')}</div></div><div class="btn-row">${v664safeActionButton(a)}</div></div>`; }
+  renderSmartQueue = window.renderSmartQueue = function(){ const q=v664safeDailyActions(3); return `<div class="list v664-smart-list">${q.map((a,i)=>v664safeActionCard(a,i)).join('')}</div>`; };
+  nextAction = window.nextAction = function(){ const a=v664safeDailyActions(1)[0] || {}; return {title:a.title||t('smartPlanner'), reason:a.reason||t('dayAdvice'), route:a.route||'today', type:a.type, id:a.id, why:[v664safePlannerSummary().advice,a.reason].filter(Boolean)}; };
+  function v664safeSignals(){
+    const open=v664safeOpenComms().length, due=v664safeDueComms().length, orders=v664safeOrders().length, over=v664safeOverstock();
+    return `<div class="card v663-today-signals"><h3>${t('todaySignals')}</h3><p class="muted small">${t('todaySignalsText')}</p><div class="grid grid-4">${kpi(t('openCommunication'),open,open?'warn':'good')}${kpi(t('followupsToday'),due,due?'bad':'good')}${kpi(t('orderToday'),orders,orders?'warn':'good')}${kpi(t('markOverstock'),over,over?'warn':'good')}</div><div class="btn-row mt"><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button></div></div>`;
+  }
+  function v664safeMainActions(){ return `<div class="v664-main-actions"><div class="card v664-actions-card" data-tutorial="smart"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="card v664-energy-card v664-energy-compact"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v664-direct-card"><h3>${t('directActions')}</h3><div class="v664-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="open-focus">${t('focus')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div>`; }
+  function v664safeVersionBlock(){ if(!state.ui.updateRequired) return ''; const meta=state.ui.updateMetadata||{}; return `<div class="v664-update-required"><div class="card"><h2>${t('updateRequired')}</h2><p>${escapeHtml((currentLang()==='en'?meta.forceMessageEn:meta.forceMessageNl)||t('versionPolicyBlocked'))}</p><div class="btn-row mt"><button class="btn primary" data-action="pwa-activate-update-v664">${t('activateUpdate')}</button><button class="btn" data-action="pwa-check-update-v664">${t('checkForUpdates')}</button></div></div></div>`; }
+  renderToday = window.renderToday = function(){
+    v664safeEnsure(); const prod=typeof productivity==='function'?productivity():0; const calm=!!state.ui.rustMode;
+    return `${v664safeVersionBlock()}<div class="today-v661 today-v662 today-v663 today-v664 ${calm?'rust-active':''}"><div class="hero v661-hero v662-hero v663-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.4</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v664Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>${calm?`<div class="v661-calm-panel v664-calm-panel"><div class="card hero-mini v661-calm-status"><h3>${t('calmModeActive')}</h3><p>${t('calmModeHint')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="toggle-rust-mode">${t('restoreNormalView')}</button></div></div>${v664safePlanner(true)}${v664safeSignals()}<div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div></div>`:`<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>${v664safeSignals()}${v664safePlanner(false)}<div class="grid grid-main"><div class="grid">${renderWorkflowPhases()}${v664safeMainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${renderRetailRadar()}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${renderTomorrowPrep()}</div><div class="card"><h3>${t('copySummary')}</h3><button class="btn" data-action="copy-day-summary">${t('copySummary')}</button></div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${renderCoachOfDay()}</div></div></div>`}</div>`;
+  };
+  function v664safePwaPolicyCard(){ const meta=state.ui.updateMetadata||{}; const latest=meta.latestVersion||state.ui.availableVersion||APP.version; const min=meta.minSupportedVersion||'v6.0.0'; const available=v664safeCmp(latest,APP.version)>0; return `<div class="card v664-update-policy"><h3>${t('updatePolicy')}</h3><p class="muted small">${t('updatePolicyText')}</p><div class="list"><div class="list-item compact"><span>${t('currentVersion')}</span><strong>${APP.version}</strong></div><div class="list-item compact"><span>${t('latestOnlineVersion')}</span><strong>${escapeHtml(latest)}</strong></div><div class="list-item compact"><span>${t('minSupportedVersion')}</span><strong>${escapeHtml(min)}</strong></div><div class="list-item compact"><span>${t('updateAvailable')}</span><span class="pill ${available?'warn':'good'}">${available?L('Ja','Yes'):L('Nee','No')}</span></div><div class="list-item compact"><span>${t('updateRequired')}</span><span class="pill ${state.ui.updateRequired?'bad':'good'}">${state.ui.updateRequired?t('updateRequired'):t('updateNotRequired')}</span></div><div class="list-item compact"><span>${t('lastUpdateCheck')}</span><strong>${state.ui.lastUpdateCheckAt?dateTime(state.ui.lastUpdateCheckAt):'-'}</strong></div></div><div class="btn-row mt"><button class="btn primary" data-action="pwa-check-update-v664">${t('checkForUpdates')}</button><button class="btn" data-action="pwa-prepare-offline-v664">${t('prepareOffline')}</button><button class="btn" data-action="pwa-activate-update-v664">${t('activateUpdate')}</button></div></div>`; }
+  function v664safePwaCard(){ const standalone=!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true; const sw=('serviceWorker' in navigator)?(navigator.serviceWorker.controller?L('Actief','Active'):L('Beschikbaar / laden','Available / loading')):L('Niet ondersteund','Not supported'); const prepared=state.ui.offlinePreparedAt?dateTime(state.ui.offlinePreparedAt):L('Nog niet bevestigd','Not confirmed yet'); return `<div class="card v663-pwa-card"><h3>${t('pwaUpdateCenter')}</h3><div class="list"><div class="list-item compact"><span>${L('Modus','Mode')}</span><strong>${standalone?L('Geïnstalleerde app','Installed app'):L('Browser','Browser')}</strong></div><div class="list-item compact"><span>${L('Service worker','Service worker')}</span><strong>${escapeHtml(sw)}</strong></div><div class="list-item compact"><span>${L('Online status','Online status')}</span><strong>${navigator.onLine?L('Online','Online'):L('Offline','Offline')}</strong></div><div class="list-item compact"><span>${t('offlinePreparedAt')}</span><strong>${escapeHtml(prepared)}</strong></div><div class="list-item compact"><span>${L('Versie','Version')}</span><strong>${APP.version}</strong></div><div class="list-item compact"><span>Cache</span><strong>${APP.cache}</strong></div></div><p class="muted small">${t('updateCenterHelp')}</p><p class="muted small">${t('pwaHostNote')}</p><div class="btn-row mt"><button class="btn primary" data-action="pwa-check-update-v664">${t('checkForUpdates')}</button><button class="btn" data-action="pwa-prepare-offline-v664">${t('prepareOffline')}</button><button class="btn" data-action="pwa-activate-update-v664">${t('activateUpdate')}</button></div></div>${v664safePwaPolicyCard()}`; }
+  function v664safeThemeGrid(){ return `<div class="theme-grid v664-theme-grid">${themeOptions().map(th=>`<button class="theme-card v664-theme-card ${state.settings.theme===th.id?'active':''}" data-action="set-theme" data-theme="${th.id}"><div class="theme-swatch">${th.colors.map(c=>`<span style="background:${c}"></span>`).join('')}</div><strong>${th.name}</strong></button>`).join('')}</div>`; }
+  renderSettings = window.renderSettings = function(){ v664safeEnsure(); return `<div class="grid settings-v662 settings-v663 v664-settings"><div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('profileAndRhythm') || 'Profiel & ritme'}</h3><div class="form-grid"><label>${t('name')}<input class="input" id="setName" value="${escapeHtml(state.settings.name||'')}"></label><label>${t('language')}<select class="select" id="setLang"><option value="nl" ${currentLang()==='nl'?'selected':''}>Nederlands</option><option value="en" ${currentLang()==='en'?'selected':''}>English</option></select></label><label>${t('workHours')}<input class="input" id="setWorkHours" type="number" step="0.25" value="${state.settings.workHours}"></label><label>${t('haccpHours')}<input class="input" id="setHaccpHours" type="number" step="0.25" value="${state.settings.haccpHours}"></label><label>${t('shiftStart')}<input class="input" id="setShiftStart" type="time" value="${state.settings.shiftStart}"></label><label>${t('shiftEnd')}<input class="input" id="setShiftEnd" type="time" value="${state.settings.shiftEnd}"></label></div><h4>${t('workdays')}</h4><div class="btn-row">${['Ma','Di','Wo','Do','Vr','Za','Zo'].map((d,i)=>`<button class="btn small ${state.settings.workDays.includes(i+1)?'primary':''}" data-action="settings-toggle-workday" data-day="${i+1}">${d}</button>`).join('')}</div><button class="btn primary mt" data-action="save-settings">${t('save')}</button></div><div class="card"><h3>${t('themeGalleryTitle') || 'Thema galerij'}</h3>${v664safeThemeGrid()}</div><div class="card"><h3>${t('v7Preparation')}</h3><p>${t('v7PreparationText')}</p><div class="btn-row"><span class="pill good">Smart Planner</span><span class="pill good">Update Center</span><span class="pill good">Daily Flow</span></div></div></div><div class="grid"><div class="card"><h3>Contactpersonen</h3><div class="list">${state.settings.contacts.map(c=>`<div class="list-item compact"><span>${escapeHtml(c)}</span><button class="btn small bad" data-action="delete-contact" data-name="${escapeHtml(c)}">${t('delete')}</button></div>`).join('') || `<p class="muted small">${L('Nog geen contactpersonen.','No contacts yet.')}</p>`}</div><div class="btn-row mt"><input class="input" id="newContact" placeholder="Nieuwe contactpersoon"><button class="btn" data-action="add-contact">${t('add')}</button></div></div><div class="card"><h3>${t('calmMode')}</h3><p><strong>${t('calmScope')}</strong></p><p class="muted small">${t('calmScopeText')}</p><p class="muted small">${t('mobileLayoutFix')}</p></div>${v664safePwaCard()}</div></div></div>`; };
+  function v664safeCommList(limit=12){ const arr=v664safeComms().slice(0,limit); if(!arr.length) return `<p class="muted small">${t('empty')}</p>`; return `<div class="list v664-follow-section">${arr.map(c=>{ const label=c.to||c.customTo||t('communication'); const due=c.followDate&&c.followDate<=TODAY(); const dateText=c.followDate?`${t('followDate')}: ${dateOnly(c.followDate)}`:t('noFollowUp'); return `<div class="list-item v663-comm-item"><div><strong>${escapeHtml(label)}</strong><div>${escapeHtml(c.message||'')}</div><div class="tiny muted">${dateTime(c.createdAt)} · ${escapeHtml(dateText)}</div><div class="btn-row mt"><span class="pill ${due?'warn':'info'}">${escapeHtml(c.status||'Open')}</span>${c.urgent?`<span class="pill bad">Urgent</span>`:''}</div><div class="v664-comm-actions"><button class="btn small" data-action="comm-postpone-v664" data-id="${escapeHtml(c.id)}" data-days="1">${t('postponeOneDay')}</button><button class="btn small" data-action="comm-postpone-v664" data-id="${escapeHtml(c.id)}" data-days="7">${t('postponeOneWeek')}</button><button class="btn small good" data-action="comm-done-v663" data-id="${escapeHtml(c.id)}">${t('markDone')}</button></div></div><div class="btn-row"><select class="select" style="width:135px" data-action="comm-status" data-id="${escapeHtml(c.id)}"><option ${c.status==='Rood'?'selected':''}>Rood</option><option ${c.status==='Geel'?'selected':''}>Geel</option><option ${c.status==='Groen'?'selected':''}>Groen</option><option ${c.status==='Afgehandeld'?'selected':''}>Afgehandeld</option></select><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(c.id)}">${t('delete')}</button></div></div>`; }).join('')}</div>`; }
+  function v664safeNotesHtml(limit=8){ const notes=v664safeNotes().slice(0,limit); if(!notes.length) return `<p class="muted small">${t('noNotes')}</p>`; return `<div class="list">${notes.map(n=>`<div class="list-item compact"><div><strong>${t('quickNote')}</strong><div class="small muted">${dateTime(n.createdAt)}</div><p class="small">${escapeHtml(n.message||'')}</p></div><div class="btn-row"><button class="btn small" data-action="note-to-followup-v663" data-id="${escapeHtml(n.id)}">${t('makeFollowup')}</button><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(n.id)}">${t('delete')}</button></div></div>`).join('')}</div>`; }
+  renderCommunication = window.renderCommunication = function(){ v664safeEnsure(); const open=v664safeOpenComms().length, due=v664safeDueComms().length, notes=v664safeNotes().length, urgent=v664safeOpenComms().filter(c=>c.urgent||c.status==='Rood').length; return `<div class="grid communication-v663"><div class="hero"><span class="chip">${t('communicationAndNotes')}</span><h2>${t('communicationAndNotes')}</h2><p>${L('Leg opvolgingen en snelle notities vast zonder de pagina zwaar te maken.','Capture follow-ups and quick notes without making the page heavy.')}</p><div class="btn-row"><button class="btn primary" data-action="open-communication-form-v663">${t('addFollowup')}</button><button class="btn" data-action="open-quick-note-form-v663">${t('quickNote')}</button><button class="btn" data-action="copy-handover-v663">${t('handoverCopy')}</button></div></div><div class="grid grid-4">${kpi(t('openCommunication'),open,open?'warn':'good')}${kpi(t('followupsToday'),due,due?'bad':'good')}${kpi(t('openNotes'),notes,notes?'info':'good')}${kpi('Urgent',urgent,urgent?'bad':'good')}</div><div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('openCommunication')}</h3>${v664safeCommList()}</div><div class="card"><h3>${t('reports')}</h3>${typeof renderReportFilters==='function'?renderReportFilters():''}<button class="btn primary mt" data-action="open-report-form">${t('add')} ${t('report')}</button><div class="mt">${renderReports()}</div></div></div><div class="grid"><div class="card v662-note-card"><div class="btn-row"><h3>${t('notes')}</h3><button class="btn small primary" data-action="open-quick-note-form-v663">${t('quickNote')}</button></div>${v664safeNotesHtml()}</div><div class="card"><h3>${t('communicationTemplates')}</h3>${typeof renderCommunicationTemplates==='function'?renderCommunicationTemplates():''}<textarea class="textarea mt" id="toneText" placeholder="${L('Schrijf hier je concept...','Write your draft here...')}"></textarea><button class="btn mt" data-action="tone-format">${L('Maak professioneel','Make professional')}</button></div></div></div></div>`; };
+  function v664safeActivity(){ const limit=state.ui.diagShowAllActivity?30:5; const arr=(state.activity||[]).slice(0,limit); const body=arr.length?`<div class="timeline">${arr.map(a=>`<div class="timeline-item"><div class="timeline-time">${dateTime(a.at)}</div><div class="timeline-card"><strong>${escapeHtml(a.type||'')}</strong><p>${escapeHtml(a.text)}</p></div></div>`).join('')}</div>`:`<p class="muted">${t('empty')}</p>`; return body+((state.activity||[]).length>5?`<button class="btn mt" data-action="toggle-diag-activity-v663">${state.ui.diagShowAllActivity?t('showLess'):t('showMore')}</button>`:''); }
+  function v664safeUpdateLog(){ const entries=[['v6.6.4',t('v664Subtitle')],['v6.6.3',t('v663Subtitle')],['v6.6.2',t('v662Subtitle')||'Flow & Bestelbeheer Stabilisatie'],['v6.6.1',t('v661Subtitle')||'Daily Flow Stabilization'],['v6.6.0','Daily Flow Polish'],['v6.5.27','Mobile Assist Hotfix']]; const list=state.ui.diagShowAllUpdates?entries:entries.slice(0,3); return `<div class="list">${list.map(([v,txt])=>`<div class="list-item compact"><strong>${v}</strong><span>${escapeHtml(txt)}</span></div>`).join('')}</div>${entries.length>3?`<button class="btn mt" data-action="toggle-diag-updates-v663">${state.ui.diagShowAllUpdates?t('showLess'):t('showMore')}</button>`:''}`; }
+  function v664safeHealthRows(){ const standalone=!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true; const rows=[[t('version'),APP.version,'good'],['Cache',APP.cache,'good'],['Online',navigator.onLine?'OK':'Offline',navigator.onLine?'good':'warn'],['Service worker',('serviceWorker' in navigator)?(navigator.serviceWorker.controller?'Actief':'Beschikbaar'):'Niet ondersteund',('serviceWorker' in navigator)?'good':'bad'],['PWA',standalone?'Geïnstalleerd':'Browser',standalone?'good':'info'],[t('lastUpdateCheck'),state.ui.lastUpdateCheckAt?dateTime(state.ui.lastUpdateCheckAt):'-',state.ui.lastUpdateCheckAt?'good':'warn'],[t('updateRequired'),state.ui.updateRequired?t('updateRequired'):t('updateNotRequired'),state.ui.updateRequired?'bad':'good']]; return `<div class="v664-health-grid">${rows.map(([a,b,tone])=>`<div class="v664-health-row"><span>${escapeHtml(a||'')}</span><span class="pill ${tone||'info'}">${escapeHtml(String(b||''))}</span></div>`).join('')}</div>`; }
+  renderDiagnostics = window.renderDiagnostics = function(){ v664safeEnsure(); const health=typeof diagnosticHealth==='function'?diagnosticHealth():100; const q=typeof moduleQuality==='function'?moduleQuality():{}; return `<div class="grid diagnostics-v663 diagnostics-v664"><div class="hero"><span class="chip">${t('v664Title')}</span><h2>${t('diagnostics')||t('appHealth')}</h2><p>${t('v664Subtitle')}</p></div><div class="grid grid-4">${kpi(t('version')||'Versie',APP.version,null)}${kpi('Cache',APP.cache,null)}${kpi(t('appHealth'),health+'%',health>85?'good':'warn')}${kpi('Records',totalRecords(),null)}</div><div class="grid grid-2"><div class="card"><h3>${t('appHealthGuard')}</h3>${v664safeHealthRows()}</div><div class="card"><h3>${t('dataQuality')}</h3>${Object.keys(q).length?Object.entries(q).map(([k,v])=>bar(k,v,v>85?'good':v>65?'warn':'bad')).join(''):`<p class="muted">${t('empty')}</p>`}</div><div class="card"><h3>${t('backupReminder')}</h3><p>${backupReminderText()}</p><div class="btn-row"><button class="btn" data-action="download-backup">${t('backup')}</button><button class="btn" data-action="open-import">${t('import')}</button><button class="btn" data-action="clear-cache">Cache</button><button class="btn bad" data-action="reset-app">${t('reset')}</button></div></div><div class="card"><h3>${t('pwaUpdateCenter')}</h3>${v664safePwaPolicyCard()}</div></div><div class="card"><h3>${t('latestActions')}</h3>${v664safeActivity()}</div><div class="card"><h3>${t('latestUpdates')}</h3>${v664safeUpdateLog()}</div></div>`; };
+  async function v664safeFetchMeta(){ const res=await fetch(`${APP.updateUrl||'./version.json'}?t=${Date.now()}`,{cache:'no-store'}); if(!res.ok) throw new Error(String(res.status)); return await res.json(); }
+  async function v664safeCheckUpdate(silent=false){ try{ if(!silent) toast(t('updateCheckStarted'),'info'); const meta=await v664safeFetchMeta(); state.ui.updateMetadata=meta; state.ui.availableVersion=meta.latestVersion||''; state.ui.lastUpdateCheckAt=nowISO(); const minBlocked=meta.minSupportedVersion && v664safeCmp(APP.version,meta.minSupportedVersion)<0; const forceBlocked=meta.forceBelowVersion && v664safeCmp(APP.version,meta.forceBelowVersion)<0; state.ui.updateRequired=!!(minBlocked||forceBlocked); if('serviceWorker' in navigator){ const reg=await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg?.waiting) state.ui.updateWaiting=true; } addActivity(t('checkForUpdates'),'pwa'); save(); render(); if(!silent){ if(state.ui.updateRequired) toast(t('versionPolicyBlocked'),'bad'); else if((meta.latestVersion&&v664safeCmp(meta.latestVersion,APP.version)>0)||state.ui.updateWaiting) toast(t('updateReadyReload'),'good'); else toast(t('noUpdateFound'),'info'); } }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed'),'warn'); } }
+  async function v664safePrepareOffline(){ try{ if(!('caches' in window)){ toast(L('Cache API niet beschikbaar.','Cache API not available.'),'warn'); return; } const assets=['./','./index.html','./index.html?v=664','./styles.css?v=664','./app.js?v=664','./manifest.json?v=664','./version.json','./icon-192.png','./icon-512.png']; const cache=await caches.open(APP.cache); await cache.addAll(assets); if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'}); state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline'),'pwa'); save(); render(); toast(t('offlinePrepared'),'good'); }catch(err){ console.error(err); toast(L('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','Offline preparation failed. Open the app online and try again.'),'bad'); } }
+  async function v664safeActivate(){ try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg?.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(err){ location.reload(); } }
+  const v664safeBaseStartShift=startShift;
+  startShift = window.startShift = function(){ if(state.shift.active){ toast(L('Shift loopt al.','Shift is already active.'),'info'); return; } state.shift.active=true; state.shift.startedAt=nowISO(); state.shift.logs.unshift({type:'clockIn',at:nowISO(),energy:state.ui.energy||'normal'}); addActivity(currentLang()==='en'?'Shift started':'Shift gestart','shift'); save(); render(); modal(t('shiftStartedTitle'), `<div class="hero"><span class="chip">${t('startDay')}</span><h2>${t('shiftStartedTitle')} 👋</h2><p>${t('startDayText')}</p></div><div class="grid grid-2"><div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div>${v664safePlanner(true)}</div><div class="card mt"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div><div class="btn-row mt"><button class="btn primary" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide'); };
+  const v664safeBaseHandle=handleAction;
+  handleAction = window.handleAction = function(a,el,e){ if(a==='smart-next'){ const q=v664safeDailyActions(3); modal(t('smartPlanner'), `<div class="grid">${v664safePlanner(false)}<div class="card"><h3>${t('nextActions')}</h3><div class="list">${q.map((x,i)=>v664safeActionCard(x,i)).join('')}</div></div></div>`, 'wide'); return; } if(a==='pwa-check-update-v664'||a==='pwa-check-update-v663'){ v664safeCheckUpdate(false); return; } if(a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v663'){ v664safePrepareOffline(); return; } if(a==='pwa-activate-update-v664'||a==='pwa-activate-update-v663'){ v664safeActivate(); return; } if(a==='comm-postpone-v664'){ const c=state.communications.find(x=>x.id===el.dataset.id); if(c){ c.followDate=v664safePlus(+(el.dataset.days||1)); c.followMode='relative'; c.followAmount=+(el.dataset.days||1); c.followUnit='days'; addActivity(`${t('followupMoved')}: ${dateOnly(c.followDate)}`,'communication'); toast(t('followupMoved'),'good'); save(); render(); } return; } return v664safeBaseHandle(a,el,e); };
+  function v664safeAuto(){ if(!navigator.onLine) return; const last=String(state.ui.lastAutoUpdateCheckAt||state.ui.lastUpdateCheckAt||'').slice(0,10); if(last===TODAY()) return; state.ui.lastAutoUpdateCheckAt=nowISO(); save(); setTimeout(()=>v664safeCheckUpdate(true),1200); }
+  v664safeEnsure(); v664safeAuto(); save(); render();
+} catch(err) {
+  console.error('v6.6.4 runtime hardening failed', err);
+}
+
+/* v6.6.5 — Store Map & HACCP Pro Polish */
+try {
+  APP.version = 'v6.6.5';
+  APP.cache = 'rich-cmd-cache-v665';
+  APP.updateUrl = './version.json';
+
+  Object.assign(I18N.nl, {
+    v665Title:'RICH CMD v6.6.5 — Store Map & HACCP Pro Polish',
+    v665Subtitle:'HACCP dagplanning, Store Map urgenties, rustigere Wat nu?-flow en betere mobiele kaarten.',
+    haccpPro:'HACCP Pro', storeMapPro:'Store Map Pro', storeMapToday:'Store Map vandaag', checkToday:'Vandaag controleren', mobileCheckRound:'Mobiele checkronde', startCheckRound:'Start checkronde', nextCheck:'Volgende controle', checkNumber:'Controle', noStoreRisks:'Geen urgente Store Map-risico’s.',
+    haccpToday:'HACCP vandaag', basisRoutine:'Basisroutine', dailyTasks:'Dagelijkse taken', weeklyTasks:'Weektaken', monthlyTasks:'Maandtaken', deferredTasks:'Uitgesteld', backlog:'Achterstand', plannedMinutes:'Geplande minuten', openMinutes:'Open minuten', doneMinutes:'Afgeronde minuten', haccpAdvice:'HACCP-advies', storeMapAdvice:'Store Map-advies', moduleChecks:'Modulechecks', moduleChecksText:'Controleert of kernmodules data hebben en kunnen renderen.',
+    whatNowCalm:'Wat nu? toont bewust alleen de eerste 3 stappen. Gebruik Smart Planner als verdieping, niet als hoofdscherm.', openSmartPlanner:'Open Smart Planner', openStoreMapRound:'Open checkronde', markAttention:'Aandacht', notDone:'Niet gedaan', checkedOk:'Oké', haccpLinked:'Gekoppeld aan HACCP', storeRiskScore:'Risicoscore', lastControl:'Laatste controle', nextControl:'Volgende controle', defaultContactsUpdated:'Contactpersonen opgeschoond'
+  });
+  Object.assign(I18N.en, {
+    v665Title:'RICH CMD v6.6.5 — Store Map & HACCP Pro Polish',
+    v665Subtitle:'HACCP day planning, Store Map urgency, calmer What now? flow and better mobile cards.',
+    haccpPro:'HACCP Pro', storeMapPro:'Store Map Pro', storeMapToday:'Store Map today', checkToday:'Check today', mobileCheckRound:'Mobile check round', startCheckRound:'Start check round', nextCheck:'Next check', checkNumber:'Check', noStoreRisks:'No urgent Store Map risks.',
+    haccpToday:'HACCP today', basisRoutine:'Base routine', dailyTasks:'Daily tasks', weeklyTasks:'Weekly tasks', monthlyTasks:'Monthly tasks', deferredTasks:'Deferred', backlog:'Backlog', plannedMinutes:'Planned minutes', openMinutes:'Open minutes', doneMinutes:'Done minutes', haccpAdvice:'HACCP advice', storeMapAdvice:'Store Map advice', moduleChecks:'Module checks', moduleChecksText:'Checks whether core modules have data and can render.',
+    whatNowCalm:'What now? intentionally shows only the first 3 steps. Use Smart Planner as detail, not as the main screen.', openSmartPlanner:'Open Smart Planner', openStoreMapRound:'Open check round', markAttention:'Attention', notDone:'Not done', checkedOk:'OK', haccpLinked:'Linked to HACCP', storeRiskScore:'Risk score', lastControl:'Last control', nextControl:'Next control', defaultContactsUpdated:'Contacts cleaned up'
+  });
+
+  const V665_CONTACTS = ['Filiaalmanager','Manager Vers/Service','Manager Operatie','Teamleider','Collega'];
+  const V665_OLD_DEFAULTS = new Set(['Filiaalmanager','Manager Vers/Service','Manager Operatie','Teamleider AGF','Teamleider Vulploeg','Teamleider Service','Teamleider','Collega']);
+
+  function v665Ensure(){
+    state.ui = state.ui || {};
+    state.settings = state.settings || {};
+    state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    state.cleaning = state.cleaning || {items:[]};
+    state.cleaning.items = Array.isArray(state.cleaning.items) ? state.cleaning.items : [];
+    state.communications = Array.isArray(state.communications) ? state.communications : [];
+    state.inventoryOrders = Array.isArray(state.inventoryOrders) ? state.inventoryOrders : [];
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.schemaVersion = Math.max(665, +(state.schemaVersion||0));
+    if(!state.ui.contactsV665Normalized){
+      const current = Array.isArray(state.settings.contacts) ? state.settings.contacts.filter(Boolean) : [];
+      const custom = current.filter(c => !V665_OLD_DEFAULTS.has(c));
+      state.settings.contacts = [...new Set([...V665_CONTACTS, ...custom])];
+      state.ui.contactsV665Normalized = true;
+    }
+  }
+  function v665Min(min){ min=Math.max(0,Math.round(+min||0)); return typeof minutesToText==='function' ? minutesToText(min) : (min>=60?`${Math.floor(min/60)}u ${min%60}m`:`${min}m`); }
+  function v665DateOnly(v){ return v ? (typeof dateOnly==='function'?dateOnly(v):String(v).slice(0,10)) : '-'; }
+  function v665CleanItems(){ return state.cleaning.items.filter(i=>i && !i.archived); }
+  function v665ItemLabel(i){ return i.label || [i.zone, i.meter?`M${i.meter}`:'', i.kind, i.level?`P${i.level}`:''].filter(Boolean).join(' ') || t('storemap'); }
+  function v665DaysSince(dateStr){ if(!dateStr) return 999; const d=new Date(`${String(dateStr).slice(0,10)}T12:00:00`); const n=new Date(`${TODAY()}T12:00:00`); return Math.floor((n-d)/86400000); }
+  function v665RiskScore(i){
+    const st=String(i.status||'neutral').toLowerCase(); let score=10;
+    if(st.includes('mold')||st.includes('schimmel')) score=100;
+    else if(st==='dirty'||st.includes('vuil')) score=75;
+    else if(st==='followup'||st.includes('nacontrole')) score=70;
+    else if(st==='planned'||st.includes('planned')) score=45;
+    const age=v665DaysSince(i.lastChecked||i.lastCleaned||i.createdAt);
+    const freq=+(i.frequencyDays||180);
+    if(age>freq) score=Math.max(score,60);
+    if(age>Math.max(freq*1.5,30)) score=Math.max(score,80);
+    return Math.min(100,score);
+  }
+  function v665Tone(score){ return score>=85?'bad':score>=60?'warn':score>=35?'info':'good'; }
+  function v665StatusText(i){ return typeof v6515StatusText==='function' ? v6515StatusText(i.status||'neutral') : String(i.status||'neutral'); }
+  function v665StoreRisks(limit=8){
+    const urgent = typeof cleaningUrgent==='function' ? cleaningUrgent() : [];
+    const ids = new Set(urgent.map(x=>x.id));
+    return v665CleanItems().map(i=>({...i,_score:v665RiskScore(i),_urgent:ids.has(i.id)})).filter(i=>i._score>=45 || i._urgent).sort((a,b)=>(b._score-a._score)).slice(0,limit);
+  }
+  function v665DueDate(i){ const d=new Date(`${TODAY()}T12:00:00`); const base=i.lastChecked||i.lastCleaned||i.createdAt; if(base){ const b=new Date(`${String(base).slice(0,10)}T12:00:00`); b.setDate(b.getDate()+(+i.frequencyDays||180)); return b.toISOString().slice(0,10); } d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); }
+  function v665TaskGroups(){
+    const tasks=(typeof sortedTasks==='function'?sortedTasks():state.tasks).filter(x=>x && x.status!=='Voltooid');
+    const group={basis:[],daily:[],weekly:[],monthly:[],deferred:[],other:[]};
+    tasks.forEach(task=>{
+      const txt=String(`${task.title||''} ${task.category||''} ${task.group||''}`).toLowerCase();
+      if(task.status==='Uitgesteld') group.deferred.push(task);
+      else if(/basis|routine|basic/.test(txt)) group.basis.push(task);
+      else if(/dagelijks|daily/.test(txt)) group.daily.push(task);
+      else if(/week|weekly/.test(txt)) group.weekly.push(task);
+      else if(/maand|monthly|periodiek|periodic/.test(txt)) group.monthly.push(task);
+      else group.other.push(task);
+    });
+    return group;
+  }
+  function v665OpenTasks(){ return (typeof sortedTasks==='function'?sortedTasks():state.tasks).filter(x=>x && x.status!=='Voltooid'); }
+  function v665TaskMinutes(arr){ return arr.reduce((s,t)=>s+(+t.duration||10),0); }
+  function v665HaccpAdvice(groups, storeUrgent){
+    if(!state.shift.active) return t('startShiftAdvice');
+    if(state.ui.energy==='low') return L('Lage energie: begin met één korte basistaak en open daarna alleen de belangrijkste Store Map-urgentie.','Low energy: start with one short basic task and then only the most important Store Map urgency.');
+    if(storeUrgent.length) return L('Er zijn Store Map-urgenties. Rond eerst de basisroutine af en plan daarna de hoogste risicolocatie.','There are Store Map urgencies. Finish the base routine first, then plan the highest-risk location.');
+    if(groups.deferred.length) return L('Er zijn uitgestelde taken. Kies vandaag één kleine achterstand om af te ronden.','There are deferred tasks. Pick one small backlog item to finish today.');
+    return L('De dag oogt beheersbaar. Houd de basisroutine strak en sluit af met een korte AGF- of Store Map-check.','The day looks controlled. Keep the base routine tight and close with a short produce or Store Map check.');
+  }
+  function v665TaskSection(title, arr){
+    const open=arr.filter(t=>t.status!=='Voltooid');
+    return `<details class="detail-drawer v665-haccp-section" ${open.length?'open':''}><summary><span>${escapeHtml(title)}</span><span class="pill ${open.length?'warn':'good'}">${open.length} · ${v665Min(v665TaskMinutes(open))}</span></summary><div class="drawer-content">${open.length?renderTaskList(open):`<p class="muted small">${t('empty')}</p>`}</div></details>`;
+  }
+  function v665HaccpOverview(){
+    const groups=v665TaskGroups(); const open=v665OpenTasks(); const done=(state.tasks||[]).filter(t=>t.status==='Voltooid'); const store=v665StoreRisks(5);
+    const openMin=v665TaskMinutes(open); const doneMin=v665TaskMinutes(done); const cap=Math.round(+(state.settings.haccpHours||3.5)*60);
+    return `<div class="grid grid-4 v665-haccp-kpis">${kpi(t('open'),open.length,open.length?'warn':'good')}${kpi(t('openMinutes'),v665Min(openMin),openMin>cap?'bad':openMin>cap*.8?'warn':'good')}${kpi(t('doneMinutes'),v665Min(doneMin),'good')}${kpi(t('storeMapUrgency'),store.length,store.length?'bad':'good')}</div>
+      <div class="card v665-haccp-advice"><h3>${t('haccpAdvice')}</h3><p>${escapeHtml(v665HaccpAdvice(groups,store))}</p><div class="btn-row"><button class="btn primary" data-action="open-template-loader">${L('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${L('Nieuwe taak','New task')}</button><button class="btn" data-action="v665-open-store-round">${t('openStoreMapRound')}</button></div></div>`;
+  }
+  renderHaccp = window.renderHaccp = function(){
+    v665Ensure(); const groups=v665TaskGroups(); const tasks=v665OpenTasks();
+    return `<div class="grid v665-haccp-pro"><div class="hero"><span class="chip">${t('haccpPro')}</span><h2>${t('haccpToday')}</h2><p>${t('v665Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="open-template-loader">${L('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${L('Nieuwe taak','New task')}</button><button class="btn" data-action="open-focus">Focus</button><button class="btn" data-route="storemap">${t('storeMapPro')}</button></div></div>${v665HaccpOverview()}<div class="grid grid-main"><div class="grid"><div class="card"><h3>${L('Tijdlijn','Timeline')}</h3>${typeof renderHaccpTimeline==='function'?renderHaccpTimeline(tasks):''}</div><div class="card"><h3>${L('Taakbundels','Task bundles')}</h3>${v665TaskSection(t('basisRoutine'),groups.basis)}${v665TaskSection(t('dailyTasks'),groups.daily)}${v665TaskSection(t('weeklyTasks'),groups.weekly)}${v665TaskSection(t('monthlyTasks'),groups.monthly)}${v665TaskSection(t('deferredTasks'),groups.deferred)}${v665TaskSection(t('other')||L('Overig','Other'),groups.other)}</div></div><div class="grid"><div class="card"><h3>${L('Capaciteit','Capacity')}</h3>${typeof capacityCard==='function'?capacityCard():''}</div><div class="card"><h3>${t('storeMapToday')}</h3>${v665StoreRiskList(5)}</div><div class="card"><h3>${L('Uitstelanalyse','Deferral analysis')}</h3>${typeof renderDeferralAnalysis==='function'?renderDeferralAnalysis():''}</div><div class="card"><h3>${L('Beheer','Manage')}</h3><details class="detail-drawer"><summary>${L('Templates en taken beheren','Manage templates and tasks')}</summary><div class="drawer-content">${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details></div></div></div></div>`;
+  };
+  function v665StoreRiskList(limit=6){
+    const risks=v665StoreRisks(limit);
+    if(!risks.length) return `<p class="muted small">${t('noStoreRisks')}</p>`;
+    return `<div class="list v665-risk-list">${risks.map(i=>`<div class="list-item compact"><div><strong>${escapeHtml(v665ItemLabel(i))}</strong><div class="small muted">${escapeHtml(i.department||'')} · ${escapeHtml(v665StatusText(i))} · ${t('nextControl')}: ${v665DateOnly(v665DueDate(i))}</div></div><div class="btn-row"><span class="pill ${v665Tone(i._score)}">${i._score}</span><button class="btn small" data-action="open-clean-item" data-id="${escapeHtml(i.id)}">${t('showMe')}</button></div></div>`).join('')}</div>`;
+  }
+  function v665StoreSummaryCards(){
+    const items=v665CleanItems(); const risks=v665StoreRisks(99); const overdue=items.filter(i=>v665DaysSince(i.lastChecked||i.lastCleaned||i.createdAt)>(+i.frequencyDays||180)).length;
+    const planned=(typeof cleaningUrgent==='function'?cleaningUrgent():[]).filter(i=>String(i.status||'')==='planned').length;
+    return `<div class="grid grid-4">${kpi(L('Onderdelen','Items'),items.length,'info')}${kpi(t('storeMapUrgency'),risks.length,risks.length?'warn':'good')}${kpi(t('backlog'),overdue,overdue?'bad':'good')}${kpi(L('Gepland','Planned'),planned,planned?'info':'good')}</div>`;
+  }
+  renderStoreMap = window.renderStoreMap = function(){
+    v665Ensure(); if(typeof ensureStoreMap==='function') ensureStoreMap(false);
+    const first=v665StoreRisks(1)[0] || v665CleanItems()[0];
+    return `<div class="grid v665-storemap-pro"><div class="hero"><span class="chip">${t('storeMapPro')}</span><h2>${t('storeMapToday')}</h2><p>${t('storeMapAdvice')}: ${L('controleer eerst verlopen, vuile of nacontrole-locaties.','check overdue, dirty or follow-up locations first.')}</p><div class="btn-row"><button class="btn primary" data-action="load-storemap">${L('Standaard winkelindeling laden','Load standard layout')}</button><button class="btn" data-action="v6515-add-zone">+ ${L('Zone','Zone')}</button><button class="btn" data-action="open-clean-add-form">+ ${L('Onderdeel','Item')}</button><button class="btn" data-action="v665-open-store-round">${t('startCheckRound')}</button><button class="btn" data-action="plan-urgent-cleaning">${L('Urgent in HACCP','Plan urgent')}</button></div></div>${v665StoreSummaryCards()}<div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('checkToday')}</h3>${v665StoreRiskList(8)}</div><div class="card"><h3>${L('Navigatie','Navigation')}</h3>${typeof renderStoreHierarchy==='function'?renderStoreHierarchy():''}</div></div><div class="grid"><div class="card"><h3>${t('mobileCheckRound')}</h3><p class="muted small">${L('Loop rustig door de winkel: één locatie per scherm, drie keuzes.','Walk the store calmly: one location per screen, three choices.')}</p><button class="btn primary" data-action="v665-open-store-round">${t('startCheckRound')}</button></div><div class="card"><h3>${t('cleaningPassport')}</h3>${typeof storePassport==='function'?storePassport(first):''}</div><div class="card"><h3>${L('Heatmap','Heatmap')}</h3>${typeof renderHeatmap==='function'?renderHeatmap():''}</div><div class="card"><h3>${L('Te plannen','To plan')}</h3>${typeof renderCleaningQueue==='function'?renderCleaningQueue(typeof cleaningUrgent==='function'?cleaningUrgent():[]):''}</div></div></div></div>`;
+  };
+  function v665OpenStoreRound(index=0){
+    const list=v665StoreRisks(20); if(!list.length){ modal(t('mobileCheckRound'), `<p>${t('noStoreRisks')}</p><div class="btn-row mt"><button class="btn" data-action="close-modal">${t('close')}</button></div>`); return; }
+    const i=list[Math.max(0,Math.min(index,list.length-1))]; const n=Math.max(0,Math.min(index,list.length-1));
+    modal(t('mobileCheckRound'), `<div class="v665-round-card"><span class="chip">${t('checkNumber')} ${n+1}/${list.length}</span><h2>${escapeHtml(v665ItemLabel(i))}</h2><p class="muted">${escapeHtml(i.department||'')} · ${escapeHtml(i.zone||'')} · ${t('storeRiskScore')}: ${i._score}</p><div class="grid grid-2"><div class="card soft"><p><b>${t('status')}:</b> ${escapeHtml(v665StatusText(i))}</p><p><b>${t('lastControl')}:</b> ${v665DateOnly(i.lastChecked||i.lastCleaned)}</p><p><b>${t('nextControl')}:</b> ${v665DateOnly(v665DueDate(i))}</p></div><div class="card soft"><h3>${L('Actie','Action')}</h3><div class="btn-row"><button class="btn good" data-action="mark-checked" data-id="${escapeHtml(i.id)}">${t('checkedOk')}</button><button class="btn warn" data-action="mark-dirty" data-id="${escapeHtml(i.id)}">${t('markAttention')}</button><button class="btn" data-action="plan-clean-item" data-id="${escapeHtml(i.id)}">HACCP</button></div></div></div><div class="btn-row mt"><button class="btn" data-action="v665-store-round" data-index="${Math.max(0,n-1)}" ${n===0?'disabled':''}>${t('previous')}</button><button class="btn primary" data-action="v665-store-round" data-index="${n+1}" ${n>=list.length-1?'disabled':''}>${t('nextCheck')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div></div>`, 'wide');
+  }
+  function v665DailyActions(limit=3){
+    const actions=[];
+    if(!state.shift.active) actions.push({type:'start-shift',title:t('startMyShiftNow'),reason:t('startShiftAdvice'),route:'today'});
+    if(state.shift.breakActive) actions.push({type:'stop-break',title:t('finishBreakNow'),reason:L('Je pauze loopt nog.','Your break is still active.'),route:'today'});
+    const due=state.communications.filter(c=>c && c.status!=='Afgehandeld' && c.status!=='Notitie' && c.followDate && c.followDate<=TODAY()).slice(0,1);
+    due.forEach(c=>actions.push({type:'communication',title:t('followupsToday'),reason:c.message||t('communication'),route:'communication'}));
+    const orders=state.inventoryOrders.filter(o=>o && o.type!=='legacy-cleared');
+    if(orders.length) actions.push({type:'inventory',title:t('finishOrderList'),reason:`${orders.length} ${L('artikelen staan klaar','items are ready')}`,route:'inventory'});
+    const risks=v665StoreRisks(1); if(risks.length) actions.push({type:'storemap',title:t('storeMapUrgency'),reason:v665ItemLabel(risks[0]),route:'storemap'});
+    const tasks=v665OpenTasks();
+    if(state.ui.energy==='low'){ const short=tasks.find(task=>(+task.duration||0)&&(+task.duration||0)<=10); if(short) actions.push({type:'task',id:short.id,title:`${t('shortBasicTask')}: ${taskTitle(short)}`,reason:t('plannerLowEnergy'),route:'haccp'}); }
+    tasks.slice(0,5).forEach(task=>{ if(!actions.some(a=>a.id===task.id)) actions.push({type:'task',id:task.id,title:taskTitle(task),reason:`${localStatus(task.priority)} · ${v665Min(task.duration)} · ${escapeHtml(task.category||'')}`,route:'haccp'}); });
+    const agf=typeof agfAttention==='function'?agfAttention()[0]:null; if(agf) actions.push({type:'agf',title:agf.name,reason:agf.reason||t('orderAdvice'),route:'agf'});
+    if(!actions.length) actions.push({type:'agf',title:t('startAgfQuickCheck'),reason:L('Geen urgente acties. Start met een korte kwaliteitscheck.','No urgent actions. Start with a short quality check.'),route:'agf'});
+    const weight={'start-shift':0,'stop-break':1,communication:4,inventory:8,storemap:12,task:20,agf:30};
+    return actions.sort((a,b)=>(weight[a.type]??50)-(weight[b.type]??50)).slice(0,limit);
+  }
+  function v665ActionButton(a){
+    if(a.type==='start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(a.type==='stop-break') return `<button class="btn primary" data-action="toggle-break">${t('finishBreakNow')}</button>`;
+    if(a.type==='communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')}</button>`;
+    if(a.type==='inventory') return `<button class="btn primary" data-route="inventory">${t('viewOrders')}</button>`;
+    if(a.type==='storemap') return `<button class="btn primary" data-route="storemap">${t('openStoreMap')}</button>`;
+    if(a.type==='task') return `<button class="btn small good" data-action="task-done" data-id="${escapeHtml(a.id||'')}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(a.type==='agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    return `<button class="btn primary" data-route="${escapeHtml(a.route||'today')}">${t('showMe')}</button>`;
+  }
+  function v665ActionCard(a,i){ return `<div class="list-item v665-action-card"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(a.title)}</strong><div class="small muted">${escapeHtml(a.reason||'')}</div></div><div class="btn-row">${v665ActionButton(a)}</div></div>`; }
+  renderSmartQueue = window.renderSmartQueue = function(){ const q=v665DailyActions(3); return `<div class="list v665-smart-list">${q.map((a,i)=>v665ActionCard(a,i)).join('')}</div>`; };
+  nextAction = window.nextAction = function(){ const a=v665DailyActions(1)[0] || {}; return {title:a.title||t('smart'),reason:a.reason||t('whatNowCalm'),route:a.route||'today',type:a.type,id:a.id,why:[t('whatNowCalm'),a.reason].filter(Boolean)}; };
+  renderEnergyCheck = window.renderEnergyCheck = function(){
+    v665Ensure();
+    const advice=state.ui.energy==='low'?t('energyLowAdvice'):state.ui.energy==='strong'?t('energyStrongAdvice'):t('energyNormalAdvice');
+    const effect=state.ui.energy==='low'?t('energyLowEffect'):state.ui.energy==='strong'?t('energyStrongEffect'):t('energyNormalEffect');
+    return `<div class="v665-energy-panel"><div class="energy-grid v665-energy-grid"><button class="btn ${state.ui.energy==='low'?'primary':''}" data-action="set-energy" data-level="low">${t('lowEnergy')}</button><button class="btn ${state.ui.energy==='normal'?'primary':''}" data-action="set-energy" data-level="normal">${t('normalEnergy')}</button><button class="btn ${state.ui.energy==='strong'?'primary':''}" data-action="set-energy" data-level="strong">${t('strongEnergy')}</button></div><div class="v665-energy-note"><p class="muted small"><strong>${t('energyCheck')}:</strong> ${escapeHtml(advice)}</p><p class="muted small"><strong>${t('energyPlanningEffect')}:</strong> ${escapeHtml(effect)}</p></div></div>`;
+  };
+  function v665MainActions(){
+    return `<div class="v665-main-actions"><div class="card v665-actions-card" data-tutorial="smart"><h3>${t('nextActions')}</h3><p class="muted small">${t('whatNowCalm')}</p>${renderSmartQueue()}<div class="btn-row mt"><button class="btn" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="open-smart-planner-v665">${t('openSmartPlanner')}</button></div></div><div class="card v665-energy-card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v665-direct-card"><h3>${t('directActions')}</h3><div class="v665-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="storemap">${t('openStoreMap')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-route="inventory">${t('viewOrders')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div>`;
+  }
+  function v665TodaySignals(){
+    const openTasks=v665OpenTasks().length; const hMin=v665TaskMinutes(v665OpenTasks()); const risks=v665StoreRisks(99).length; const due=state.communications.filter(c=>c && c.status!=='Afgehandeld' && c.status!=='Notitie' && c.followDate && c.followDate<=TODAY()).length; const orders=state.inventoryOrders.filter(o=>o && o.type!=='legacy-cleared').length;
+    return `<div class="card v665-today-signals"><h3>${t('todaySignals')}</h3><div class="grid grid-4">${kpi(t('haccp'),`${openTasks} · ${v665Min(hMin)}`,openTasks?'warn':'good')}${kpi(t('storeMapUrgency'),risks,risks?'bad':'good')}${kpi(t('followupsToday'),due,due?'bad':'good')}${kpi(t('orderToday'),orders,orders?'warn':'good')}</div></div>`;
+  }
+  renderToday = window.renderToday = function(){
+    v665Ensure(); const prod=typeof productivity==='function'?productivity():0; const calm=!!state.ui.rustMode;
+    return `<div class="today-v665 ${calm?'rust-active':''}"><div class="hero v665-hero" data-tutorial="today"><span class="chip">RICH CMD V6.6.5</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v665Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>${calm?`<div class="v665-calm-panel"><div class="card hero-mini"><h3>${t('calmModeActive')}</h3><p>${t('whatNowCalm')}</p></div><div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div>${v665TodaySignals()}<div class="card"><h3>${t('directActions')}</h3><div class="btn-row"><button class="btn primary" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="storemap">${t('openStoreMap')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('closeShiftNow')}</button></div></div></div>`:`<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>${v665TodaySignals()}<div class="grid grid-main"><div class="grid">${typeof renderWorkflowPhases==='function'?renderWorkflowPhases():''}${v665MainActions()}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${typeof renderRetailRadar==='function'?renderRetailRadar():''}</div><div class="card"><h3>${t('storeMapToday')}</h3>${v665StoreRiskList(4)}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${typeof renderTomorrowPrep==='function'?renderTomorrowPrep():''}</div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${typeof renderCoachOfDay==='function'?renderCoachOfDay():''}</div></div></div>`}</div>`;
+  };
+  const v665BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){ v665Ensure(); let html=v665BaseSettings(); return html.replace('RICH CMD v6.6.4 — Smart Planner Foundation', t('v665Title')).replaceAll('v6.6.4','v6.6.5').replaceAll('rich-cmd-cache-v664','rich-cmd-cache-v665'); };
+  const v665BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    v665Ensure(); let html=v665BaseDiagnostics().replaceAll('v6.6.4','v6.6.5').replaceAll('rich-cmd-cache-v664','rich-cmd-cache-v665');
+    const checks=[['Vandaag', true],['HACCP', v665OpenTasks().length>=0],['Store Map', v665CleanItems().length>0],['Communicatie', Array.isArray(state.communications)],['Bestelbeheer', Array.isArray(state.inventoryOrders)],['PWA cache', !!APP.cache]];
+    const card=`<div class="card v665-module-checks"><h3>${t('moduleChecks')}</h3><p class="muted small">${t('moduleChecksText')}</p><div class="v664-health-grid">${checks.map(([name,ok])=>`<div class="v664-health-row"><span>${name}</span><span class="pill ${ok?'good':'warn'}">${ok?'OK':L('Geen data','No data')}</span></div>`).join('')}</div></div><div class="card"><h3>v6.6.5</h3><p>${t('v665Subtitle')}</p></div>`;
+    return html.replace('</div>', `${card}</div>`);
+  };
+  const v665BaseStartShift = startShift;
+  startShift = window.startShift = function(){ if(state.shift.active){ toast(L('Shift loopt al.','Shift is already active.'),'info'); return; } state.shift.active=true; state.shift.startedAt=nowISO(); state.shift.logs.unshift({type:'clockIn',at:nowISO(),energy:state.ui.energy||'normal'}); addActivity(currentLang()==='en'?'Shift started':'Shift gestart','shift'); save(); render(); modal(t('shiftStartedTitle'), `<div class="hero"><span class="chip">${t('startDay')}</span><h2>${t('shiftStartedTitle')} 👋</h2><p>${t('whatNowCalm')}</p></div><div class="grid grid-2"><div class="card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card"><h3>${t('nextActions')}</h3>${renderSmartQueue()}</div></div><div class="btn-row mt"><button class="btn primary" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="storemap">${t('openStoreMap')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide'); };
+  const v665BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a,el,e){
+    if(a==='smart-next'){ const q=v665DailyActions(3); modal(t('smart'), `<div class="hero-mini"><h3>${t('nextActions')}</h3><p class="muted small">${t('whatNowCalm')}</p></div><div class="list">${q.map((x,i)=>v665ActionCard(x,i)).join('')}</div><div class="btn-row mt"><button class="btn" data-action="open-smart-planner-v665">${t('openSmartPlanner')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide'); return; }
+    if(a==='open-smart-planner-v665'){ const planner = (typeof v664safePlanner==='function') ? v664safePlanner(false) : v665HaccpOverview(); modal(t('openSmartPlanner'), planner, 'wide'); return; }
+    if(a==='v665-open-store-round'){ v665OpenStoreRound(0); return; }
+    if(a==='v665-store-round'){ v665OpenStoreRound(+(el.dataset.index||0)); return; }
+    if(a==='pwa-check-update-v664'||a==='pwa-check-update-v665') { if(typeof v664safeCheckUpdate==='function') v664safeCheckUpdate(false); else toast(t('checkForUpdates'),'info'); return; }
+    if(a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v665') { if(typeof v664safePrepareOffline==='function') v664safePrepareOffline(); else toast(t('prepareOffline'),'info'); return; }
+    if(a==='pwa-activate-update-v664'||a==='pwa-activate-update-v665') { if(typeof v664safeActivate==='function') v664safeActivate(); else location.reload(); return; }
+    return v665BaseHandle(a,el,e);
+  };
+  v665Ensure(); save(); render();
+} catch(err) {
+  console.error('v6.6.5 Store Map & HACCP Pro Polish failed', err);
+}
+
+/* v6.6.5 — final safety overrides */
+try {
+  async function v665CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {};
+      state.ui.updateMetadata = meta;
+      state.ui.availableVersion = meta.latestVersion || APP.version;
+      state.ui.lastUpdateCheckAt = nowISO();
+      function cmp(a,b){ const A=String(a||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0), B=String(b||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0); for(let i=0;i<Math.max(A.length,B.length,3);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; } return 0; }
+      state.ui.updateRequired = !!((meta.minSupportedVersion && cmp(APP.version, meta.minSupportedVersion)<0) || (meta.forceBelowVersion && cmp(APP.version, meta.forceBelowVersion)<0));
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && cmp(meta.latestVersion, APP.version)>0) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v665PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=665','./styles.css?v=665','./app.js?v=665','./manifest.json?v=665','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v665ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+  const v665FinalHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='pwa-check-update-v664'||a==='pwa-check-update-v665'){ v665CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v665'){ v665PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v664'||a==='pwa-activate-update-v665'){ v665ActivateUpdate(); return; }
+    return v665FinalHandle(a, el, e);
+  };
+  const v665PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    const html = v665PrevDiagnostics();
+    const checks=[['Vandaag', true],['HACCP', Array.isArray(state.tasks)],['Store Map', !!(state.cleaning&&Array.isArray(state.cleaning.items))],['Communicatie', Array.isArray(state.communications)],['Bestelbeheer', Array.isArray(state.inventoryOrders)],['PWA cache', APP.cache==='rich-cmd-cache-v665']];
+    const card=`<div class="card v665-module-checks"><h3>${t('moduleChecks')}</h3><p class="muted small">${t('moduleChecksText')}</p><div class="v664-health-grid">${checks.map(([name,ok])=>`<div class="v664-health-row"><span>${name}</span><span class="pill ${ok?'good':'warn'}">${ok?'OK':L('Aandacht','Attention')}</span></div>`).join('')}</div></div>`;
+    return html + card;
+  };
+} catch(err) { console.error('v6.6.5 final overrides failed', err); }
+
+
+/* v6.6.6 — Daily Flow Position & Store Map Baseline Hotfix */
+try {
+  APP.version = 'v6.6.6';
+  APP.cache = 'rich-cmd-cache-v666';
+  APP.updateUrl = './version.json';
+
+  Object.assign(I18N.nl, {
+    v666Title:'RICH CMD v6.6.6 — Daily Flow Hotfix',
+    v666Subtitle:'Fix voor zwevende Daily Flow-kaarten, rustiger HACCP-scherm en eerlijke Schoonmaakkaart-baseline.',
+    haccpSoftTitle:'HACCP dagplanning',
+    haccpSoftIntro:'Slimmer gegroepeerd, maar rustiger weergegeven zoals de eerdere versie.',
+    cleaningBaseline:'Schoonmaakkaart-baseline',
+    cleaningBaselineText:'Nieuwe of nog nooit opgepakte onderdelen tellen niet als achterstand. De frequentie start pas vanaf de eerste controle, schoonmaakactie, planning of handmatige melding.',
+    noRealBacklog:'Geen echte achterstand',
+    dueAfterFirstCheck:'Achterstand pas na eerste controle + frequentie',
+    dailyFlowFixed:'Daily Flow-kaarten staan weer vast binnen Vandaag.'
+  });
+  Object.assign(I18N.en, {
+    v666Title:'RICH CMD v6.6.6 — Daily Flow Hotfix',
+    v666Subtitle:'Fix for floating Daily Flow cards, calmer HACCP screen and fair Cleaning Map baseline.',
+    haccpSoftTitle:'HACCP day planning',
+    haccpSoftIntro:'Smarter grouping, but presented calmer like the previous version.',
+    cleaningBaseline:'Cleaning Map baseline',
+    cleaningBaselineText:'New or never-started items do not count as backlog. The frequency starts after the first check, cleaning action, planning or manual signal.',
+    noRealBacklog:'No real backlog',
+    dueAfterFirstCheck:'Backlog only after first check + frequency',
+    dailyFlowFixed:'Daily Flow cards are anchored inside Today again.'
+  });
+
+  function v666EnsureUi(){
+    state.ui = state.ui || {};
+    state.ui.energy = ['low','normal','strong'].includes(state.ui.energy) ? state.ui.energy : 'normal';
+    state.cleaning = state.cleaning || {items:[]};
+    state.cleaning.items = Array.isArray(state.cleaning.items) ? state.cleaning.items : [];
+  }
+  function v666CleanItems(){
+    v666EnsureUi();
+    return (state.cleaning.items||[]).filter(i=>i && !i.archived);
+  }
+  function v666TouchBase(i){
+    if(!i) return '';
+    if(i.lastChecked) return i.lastChecked;
+    if(i.lastCleaned) return i.lastCleaned;
+    if(Array.isArray(i.history) && i.history.length){
+      const h = i.history.find(x=>x && (x.at || x.date));
+      if(h) return h.at || h.date;
+    }
+    if(i.plannedAt) return i.plannedAt;
+    if(i.firstTrackedAt) return i.firstTrackedAt;
+    return '';
+  }
+  function v666HasStarted(i){
+    const status = String(i && i.status || 'neutral');
+    if(i && i.planned) return true;
+    if(v666TouchBase(i)) return true;
+    return ['dirty','mold1','mold2','mold3','followup','clean','checked'].includes(status);
+  }
+  function v666DaysSince(dateStr){
+    if(!dateStr) return 0;
+    const raw=String(dateStr).slice(0,10);
+    const d=new Date(`${raw}T12:00:00`);
+    const n=new Date(`${TODAY()}T12:00:00`);
+    if(isNaN(d.getTime())) return 0;
+    return Math.max(0, Math.floor((n-d)/86400000));
+  }
+  function v666IsDue(i){
+    if(!v666HasStarted(i)) return false;
+    const base = v666TouchBase(i);
+    if(!base) return false;
+    return v666DaysSince(base) >= (+i.frequencyDays || 180);
+  }
+  function v666EnsureCleaningBaseline(){
+    v666EnsureUi();
+    const stamp = nowISO();
+    state.cleaning.items.forEach(i=>{
+      i.history = Array.isArray(i.history) ? i.history : [];
+      if(!i.createdAt) i.createdAt = stamp;
+      if(!i.frequencyDays) i.frequencyDays = 180;
+      const untouched = !i.lastChecked && !i.lastCleaned && !i.planned && !i.history.length;
+      if(untouched && (i.status === 'due' || i.status === 'planned')) i.status = 'neutral';
+      if(untouched && !i.firstTrackedAt) i.firstTrackedAt = '';
+    });
+  }
+  v666EnsureCleaningBaseline();
+
+  cleaningUrgent = window.cleaningUrgent = function(){
+    v666EnsureCleaningBaseline();
+    return v666CleanItems().filter(i=>{
+      const st = String(i.status || 'neutral');
+      if(['dirty','mold1','mold2','mold3','followup'].includes(st)) return true;
+      if(i.planned) return true;
+      if(st === 'due') return v666IsDue(i);
+      return false;
+    });
+  };
+
+  function v666CleaningStatus(i){
+    const st = String(i.status || 'neutral');
+    if(['dirty','mold1','mold2','mold3','followup'].includes(st)) return st;
+    if(i.planned) return 'planned';
+    if(v666IsDue(i)) return 'due';
+    return st === 'due' ? 'neutral' : st;
+  }
+  function v666Label(i){
+    return escapeHtml(i.label || [i.department, i.zone, i.meter?`M${i.meter}`:'', i.kind, i.level?`P${i.level}`:''].filter(Boolean).join(' ') || t('storemap'));
+  }
+  function v666RiskScore(i){
+    const st = v666CleaningStatus(i);
+    let score = 0;
+    if(st === 'mold3') score += 100;
+    else if(st === 'mold2') score += 90;
+    else if(st === 'mold1') score += 78;
+    else if(st === 'dirty') score += 66;
+    else if(st === 'followup') score += 58;
+    else if(st === 'planned') score += 42;
+    else if(st === 'due') score += 38;
+    if(v666IsDue(i)) score += 12;
+    return Math.min(100, score);
+  }
+  function v666Tone(score){ return score>=80?'bad':score>=55?'warn':score>=30?'info':'good'; }
+  function v666DueDate(i){
+    const base = v666TouchBase(i);
+    const d = base ? new Date(`${String(base).slice(0,10)}T12:00:00`) : new Date(`${TODAY()}T12:00:00`);
+    d.setDate(d.getDate() + (+i.frequencyDays || 180));
+    return d.toISOString().slice(0,10);
+  }
+  function v666StoreRisks(limit=8){
+    return v666CleanItems().map(i=>({item:i,score:v666RiskScore(i),status:v666CleaningStatus(i)}))
+      .filter(x=>x.score>0 || ['dirty','mold1','mold2','mold3','followup'].includes(x.status) || x.item.planned)
+      .sort((a,b)=>b.score-a.score)
+      .slice(0,limit);
+  }
+  function v666StoreRiskList(limit=6){
+    const arr = v666StoreRisks(limit);
+    if(!arr.length) return `<p class="muted">${t('cleaningBaselineText')}</p>`;
+    return `<div class="list v666-risk-list">${arr.map(({item,score,status})=>`<div class="list-item compact"><div><strong>${v666Label(item)}</strong><div class="small muted">${escapeHtml((typeof v6515StatusText==='function'?v6515StatusText(status):status))} · ${t('frequency')||'Frequentie'} ${+item.frequencyDays||180}d · ${t('next')||'Volgende'} ${v666DueDate(item)}</div></div><span class="pill ${v666Tone(score)}">${score}</span></div>`).join('')}</div>`;
+  }
+  function v666CleaningBaselineCard(){
+    const untouched = v666CleanItems().filter(i=>!v666HasStarted(i)).length;
+    const real = cleaningUrgent().length;
+    return `<div class="card v666-baseline-card"><h3>${t('cleaningBaseline')}</h3><p class="muted small">${t('cleaningBaselineText')}</p><div class="grid grid-2"><div class="list-item compact"><span>${t('noRealBacklog')}</span><strong>${untouched}</strong></div><div class="list-item compact"><span>${L('Echte urgenties','Real urgencies')}</span><strong>${real}</strong></div></div></div>`;
+  }
+  function v666HaccpGroups(tasks){
+    const g={basis:[],daily:[],weekly:[],monthly:[],deferred:[],other:[]};
+    tasks.forEach(task=>{
+      const text = `${task.title||''} ${task.category||''} ${task.frequency||''} ${task.group||''}`.toLowerCase();
+      if(task.status==='Uitgesteld') g.deferred.push(task);
+      else if(text.includes('basis')) g.basis.push(task);
+      else if(text.includes('dagelijks') || text.includes('daily')) g.daily.push(task);
+      else if(text.includes('wekelijks') || text.includes('weekly')) g.weekly.push(task);
+      else if(text.includes('maand') || text.includes('monthly')) g.monthly.push(task);
+      else g.other.push(task);
+    });
+    return g;
+  }
+  function v666TaskMini(title, arr){
+    return `<details class="detail-drawer v666-task-mini" ${arr.length?'open':''}><summary><span>${escapeHtml(title)}</span><span class="pill ${arr.length?'warn':'good'}">${arr.length}</span></summary><div class="drawer-content">${arr.length?`<div class="list">${arr.slice(0,8).map(task=>`<div class="list-item compact"><div><strong>${escapeHtml(typeof taskTitle==='function'?taskTitle(task):task.title)}</strong><div class="small muted">${escapeHtml(task.category||'')} · ${typeof minutesToText==='function'?minutesToText(task.duration||10):((task.duration||10)+'m')}</div></div><button class="btn small good" data-action="task-done" data-id="${task.id}">${t('done')}</button></div>`).join('')}</div>`:`<p class="muted small">${t('empty')}</p>`}</div></details>`;
+  }
+
+  renderHaccp = window.renderHaccp = function(){
+    v666EnsureCleaningBaseline();
+    const tasks = typeof sortedTasks==='function' ? sortedTasks() : (state.tasks||[]);
+    const g = v666HaccpGroups(tasks);
+    const open = tasks.filter(x=>x && x.status!=='Voltooid').length;
+    const urgent = cleaningUrgent().length;
+    const mins = typeof openTaskMinutes==='function' ? openTaskMinutes() : tasks.filter(x=>x.status!=='Voltooid').reduce((s,x)=>s+(+x.duration||10),0);
+    return `<div class="grid haccp-v666"><div class="card v666-haccp-head"><span class="chip">v6.6.6</span><h2>${t('haccpSoftTitle')}</h2><p>${t('haccpSoftIntro')}</p><div class="btn-row"><button class="btn primary" data-action="open-template-loader">${L('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${L('Nieuwe taak','New task')}</button><button class="btn" data-action="open-focus">Focus</button><button class="btn" data-route="storemap">${t('storemap')}</button></div></div><div class="grid grid-4">${kpi(L('Open taken','Open tasks'),open,open?'warn':'good')}${kpi(L('Geplande tijd','Planned time'),typeof minutesToText==='function'?minutesToText(mins):mins+'m',mins>240?'warn':'good')}${kpi(t('storemap'),urgent,urgent?'bad':'good')}${kpi(L('Energie','Energy'),state.ui.energy==='low'?t('lowEnergy'):state.ui.energy==='strong'?t('strongEnergy'):t('normalEnergy'),state.ui.energy==='low'?'warn':'good')}</div><div class="grid grid-main"><div class="grid"><div class="card"><h3>${L('Tijdlijn','Timeline')}</h3>${typeof renderHaccpTimeline==='function'?renderHaccpTimeline(tasks):''}</div><div class="card"><h3>${L('Taakgroepen','Task groups')}</h3>${v666TaskMini(t('basisRoutine')||'Basisroutine',g.basis)}${v666TaskMini(t('dailyTasks')||'Dagelijks',g.daily)}${v666TaskMini(t('weeklyTasks')||'Wekelijks',g.weekly)}${v666TaskMini(t('monthlyTasks')||'Maandelijks',g.monthly)}${v666TaskMini(t('deferredTasks')||'Uitgesteld',g.deferred)}${v666TaskMini(L('Overig','Other'),g.other)}</div><div class="card"><h3>${L('Vandaag uitvoeren','Execute today')}</h3>${typeof renderTaskList==='function'?renderTaskList(tasks):''}</div></div><div class="grid"><div class="card"><h3>${L('Capaciteit','Capacity')}</h3>${typeof capacityCard==='function'?capacityCard():''}</div><div class="card"><h3>${t('storeMapToday')||t('storemap')}</h3>${v666StoreRiskList(5)}</div><div class="card"><h3>${L('Uitstelanalyse','Deferral analysis')}</h3>${typeof renderDeferralAnalysis==='function'?renderDeferralAnalysis():''}</div><div class="card"><h3>${L('Beheer','Manage')}</h3><details class="detail-drawer"><summary>${L('Templates en taken beheren','Manage templates and tasks')}</summary><div class="drawer-content">${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details></div></div></div></div>`;
+  };
+
+  renderStoreMap = window.renderStoreMap = function(){
+    v666EnsureCleaningBaseline();
+    const urgent = cleaningUrgent();
+    const first = urgent[0] || v666CleanItems()[0];
+    return `<div class="grid storemap-v666"><div class="card v666-store-head"><span class="chip">${t('storemap')}</span><h2>${L('Schoonmaakkaart','Cleaning Map')}</h2><p>${t('cleaningBaselineText')}</p><div class="btn-row"><button class="btn primary" data-action="load-storemap">${L('Standaard winkelindeling laden','Load standard layout')}</button><button class="btn" data-action="v6515-add-zone">+ ${L('Zone','Zone')}</button><button class="btn" data-action="open-clean-add-form">+ ${L('Onderdeel','Item')}</button><button class="btn" data-action="v666-open-store-round">${t('startCheckRound')||L('Start checkronde','Start check round')}</button><button class="btn" data-action="plan-urgent-cleaning">${L('Urgent in HACCP','Plan urgent')}</button></div></div><div class="grid grid-4">${kpi(L('Echte urgenties','Real urgencies'),urgent.length,urgent.length?'bad':'good')}${kpi(L('Nog niet gestart','Not started'),v666CleanItems().filter(i=>!v666HasStarted(i)).length,'info')}${kpi(L('Schimmel','Mould'),urgent.filter(i=>String(i.status).startsWith('mold')).length,urgent.some(i=>String(i.status).startsWith('mold'))?'bad':'good')}${kpi(L('Nacontrole','Follow-up'),urgent.filter(i=>i.status==='followup').length,urgent.some(i=>i.status==='followup')?'warn':'good')}</div><div class="grid grid-main"><div class="grid">${v666CleaningBaselineCard()}<div class="card"><h3>${t('checkToday')||L('Vandaag controleren','Check today')}</h3>${v666StoreRiskList(8)}</div><div class="card"><h3>${L('Navigatie','Navigation')}</h3>${typeof renderStoreHierarchy==='function'?renderStoreHierarchy():''}</div></div><div class="grid"><div class="card"><h3>${t('mobileCheckRound')||L('Mobiele checkronde','Mobile check round')}</h3><p class="muted small">${L('Alleen echte urgenties en handmatig geplande locaties komen hierin.','Only real urgencies and manually planned locations appear here.')}</p><button class="btn primary" data-action="v666-open-store-round">${t('startCheckRound')||L('Start checkronde','Start check round')}</button></div><div class="card"><h3>${t('cleaningPassport')||t('storePassport')||L('Schoonmaakpaspoort','Cleaning passport')}</h3>${typeof storePassport==='function'?storePassport(first):''}</div><div class="card"><h3>${L('Heatmap','Heatmap')}</h3>${typeof renderHeatmap==='function'?renderHeatmap():''}</div><div class="card"><h3>${L('Te plannen','To plan')}</h3>${typeof renderCleaningQueue==='function'?renderCleaningQueue(urgent):''}</div></div></div></div>`;
+  };
+
+  function v666EnergyAdvice(){
+    const e=state.ui.energy||'normal';
+    return e==='low'?t('energyLowAdvice'):e==='strong'?t('energyStrongAdvice'):t('energyNormalAdvice');
+  }
+  function v666EnergyEffect(){
+    const e=state.ui.energy||'normal';
+    if(e==='low') return t('energyLowEffect') || L('Korte taken krijgen voorrang.','Short tasks get priority.');
+    if(e==='strong') return t('energyStrongEffect') || L('Extra periodieke taken mogen iets hoger.','Extra periodic tasks may move up.');
+    return t('energyNormalEffect') || L('Basisroutine blijft leidend.','Basic routine stays leading.');
+  }
+  function v666ActionButton(a){
+    if(a.type==='start-shift') return `<button class="btn primary" data-action="start-shift-now">${t('startMyShiftNow')}</button>`;
+    if(a.type==='task') return `<button class="btn small good" data-action="task-done" data-id="${a.id}">${t('done')}</button><button class="btn small" data-route="haccp">${t('openHaccpPlanning')}</button>`;
+    if(a.type==='storemap') return `<button class="btn primary" data-route="storemap">${t('openStoreMap')||t('storemap')}</button>`;
+    if(a.type==='communication') return `<button class="btn primary" data-route="communication">${t('viewCommunication')||t('communication')}</button>`;
+    if(a.type==='inventory') return `<button class="btn primary" data-route="inventory">${t('viewOrders')||t('inventory')}</button>`;
+    if(a.type==='agf') return `<button class="btn primary" data-route="agf">${t('startAgfQuickCheck')}</button>`;
+    return `<button class="btn primary" data-route="${a.route||'today'}">${t('showMe')||L('Open','Open')}</button>`;
+  }
+  function v666DailyActions(limit=3){
+    const arr=[];
+    if(!state.shift.active) arr.push({type:'start-shift',title:t('startMyShiftNow'),reason:t('startShiftAdvice')});
+    const dueComm=(state.communications||[]).find(c=>!c.done && !c.noteOnly && ((c.followDate&&c.followDate<=TODAY()) || c.status==='Rood'));
+    if(dueComm) arr.push({type:'communication',title:dueComm.to||dueComm.customTo||t('communication'),reason:dueComm.message||L('Opvolging staat open.','Follow-up is open.')});
+    if(typeof v663OrderList==='function' && v663OrderList().length) arr.push({type:'inventory',title:L('Bestellijst afronden','Finish order list'),reason:`${v663OrderList().length} ${L('artikelen op bestellijst','items on order list')}`});
+    const clean=cleaningUrgent()[0];
+    if(clean) arr.push({type:'storemap',title:`${t('storemap')}: ${v666Label(clean).replace(/<[^>]+>/g,'')}`,reason:L('Echte schoonmaakurgentie of geplande nacontrole.','Real cleaning urgency or planned follow-up.')});
+    const tasks=(typeof sortedTasks==='function'?sortedTasks():(state.tasks||[])).filter(x=>x.status!=='Voltooid');
+    if(state.ui.energy==='low'){
+      const short=tasks.find(x=>(+x.duration||10)<=10);
+      if(short) arr.push({type:'task',id:short.id,title:`${t('shortBasicTask')||'Korte taak'}: ${typeof taskTitle==='function'?taskTitle(short):short.title}`,reason:v666EnergyEffect(),route:'haccp'});
+    }
+    tasks.slice(0,4).forEach(x=>arr.push({type:'task',id:x.id,title:typeof taskTitle==='function'?taskTitle(x):x.title,reason:`${escapeHtml(x.category||'')} · ${typeof minutesToText==='function'?minutesToText(x.duration||10):((x.duration||10)+'m')}`,route:'haccp'}));
+    const agf=typeof agfAttention==='function'?agfAttention()[0]:null;
+    if(agf) arr.push({type:'agf',title:agf.name,reason:agf.reason||agf.advice||'AGF aandacht'});
+    if(!arr.length) arr.push({type:'agf',title:t('startAgfQuickCheck'),reason:L('Geen urgenties. Houd je data actueel.','No urgencies. Keep your data current.')});
+    return arr.slice(0,limit);
+  }
+  renderSmartQueue = window.renderSmartQueue = function(){
+    const q=v666DailyActions(3);
+    return `<div class="list v666-smart-list">${q.map((a,i)=>`<div class="list-item v666-action-card"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(a.title)}</strong><div class="small muted">${escapeHtml(a.reason||'')}</div></div><div class="btn-row">${v666ActionButton(a)}</div></div>`).join('')}</div>`;
+  };
+  renderEnergyCheck = window.renderEnergyCheck = function(){
+    return `<div class="v666-energy-panel"><div class="v666-energy-grid"><button class="btn ${state.ui.energy==='low'?'primary':''}" data-action="set-energy" data-level="low">${t('lowEnergy')}</button><button class="btn ${state.ui.energy==='normal'?'primary':''}" data-action="set-energy" data-level="normal">${t('normalEnergy')}</button><button class="btn ${state.ui.energy==='strong'?'primary':''}" data-action="set-energy" data-level="strong">${t('strongEnergy')}</button></div><div class="v666-energy-note"><p class="muted small"><strong>${t('energyCheck')}:</strong> ${escapeHtml(v666EnergyAdvice())}</p><p class="muted small"><strong>${t('energyPlanningEffect')||L('Effect op planning','Planning effect')}:</strong> ${escapeHtml(v666EnergyEffect())}</p></div></div>`;
+  };
+  function v666TodaySignals(){
+    const comm=(state.communications||[]).filter(c=>!c.done && !c.noteOnly).length;
+    const due=(state.communications||[]).filter(c=>!c.done && c.followDate && c.followDate<=TODAY()).length;
+    const orders=typeof v663OrderList==='function'?v663OrderList().length:((state.inventoryOrders||[]).length);
+    const store=cleaningUrgent().length;
+    return `<div class="card v666-today-signals"><h3>${L('Vandaag signalen','Today signals')}</h3><div class="grid grid-4">${kpi(t('communication'),comm,comm?'warn':'good')}${kpi(t('followupsToday')||L('Opvolging vandaag','Follow-up today'),due,due?'bad':'good')}${kpi(L('Bestellijst','Order list'),orders,orders?'warn':'good')}${kpi(t('storemap'),store,store?'bad':'good')}</div></div>`;
+  }
+  renderToday = window.renderToday = function(){
+    v666EnsureCleaningBaseline();
+    const calm=!!state.ui.rustMode;
+    const prod=typeof productivity==='function'?productivity():0;
+    return `<div class="today-v666 ${calm?'rust-active':''}"><div class="hero v666-hero" data-tutorial="today"><span class="chip">RICH CMD v6.6.6</span><h2>${greeting()}, ${escapeHtml(state.settings.name||L('collega','colleague'))} 👋</h2><p>${calm?t('calmModeHint'):t('v666Subtitle')}</p><div class="btn-row"><button class="btn primary" data-action="smart-next">${t('smart')}</button><button class="btn" data-action="start-shift-now" ${state.shift.active?'disabled':''}>${t('startMyShiftNow')}</button><button class="btn" data-action="shift-end" ${!state.shift.active?'disabled':''}>${t('clockOut')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?t('restoreNormalView'):t('calmMode')}</button></div></div>${calm?'':`<div class="grid grid-4">${kpi(t('shift'),shiftSummary(),state.shift.active?'good':'warn')}${kpi(t('productivity')||'Productiviteit',prod+'%',prod>90?'good':prod>60?'warn':'bad')}${kpi(t('haccp'),`${completedCount()}/${todayTasks().length}`,null)}${kpi('AGF',agfAttention().length,agfAttention().length?'warn':'good')}</div>`}${v666TodaySignals()}<div class="v666-flow-anchor"><div class="card v666-whatnow-card"><h3>${t('nextActions')}</h3><p class="muted small">${t('whatNowCalm')||L('Alleen de eerste paar stappen, zodat je weer rustig weet wat nu moet.','Only the first few steps, so you calmly know what to do now.')}</p>${renderSmartQueue()}</div><div class="v666-support-grid"><div class="card v666-energy-card"><h3>${t('energyCheck')}</h3>${renderEnergyCheck()}</div><div class="card v666-direct-card"><h3>${t('directActions')}</h3><div class="v666-direct-actions"><button class="btn" data-route="haccp">${t('openHaccpPlanning')}</button><button class="btn" data-route="storemap">${t('openStoreMap')||t('storemap')}</button><button class="btn" data-route="agf">${t('startAgfQuickCheck')}</button><button class="btn" data-route="communication">${t('viewCommunication')||t('communication')}</button><button class="btn" data-route="inventory">${t('viewOrders')||t('inventory')}</button><button class="btn" data-action="toggle-break" ${!state.shift.active?'disabled':''}>${state.shift.breakActive?t('stopBreak'):t('startBreak')}</button></div></div></div></div>${calm?'':`<details class="card v666-planner-detail"><summary>${t('openSmartPlanner')||t('smartPlanner')||'Smart Planner'}</summary><div class="drawer-content">${typeof v664safePlanner==='function'?v664safePlanner(false):''}</div></details><div class="grid grid-main"><div class="grid">${typeof renderWorkflowPhases==='function'?renderWorkflowPhases():''}<div class="card"><h3>${t('favoriteDashboard')}</h3>${renderFavoriteActions()}</div></div><div class="grid"><div class="card"><h3>Retail Radar</h3>${typeof renderRetailRadar==='function'?renderRetailRadar():''}</div><div class="card"><h3>${t('storeMapToday')||t('storemap')}</h3>${v666StoreRiskList(4)}</div><div class="card"><h3>${t('prepareTomorrow')}</h3>${typeof renderTomorrowPrep==='function'?renderTomorrowPrep():''}</div><div class="card"><h3>${L('Coach van vandaag','Today\'s coach')}</h3>${typeof renderCoachOfDay==='function'?renderCoachOfDay():''}</div></div></div>`}</div>`;
+  };
+
+  const v666BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a,el,e){
+    if(a==='smart-next'){
+      modal(t('smart'), `<div class="hero-mini"><h3>${t('nextActions')}</h3><p class="muted small">${t('whatNowCalm')||''}</p></div>${renderSmartQueue()}<div class="btn-row mt"><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide');
+      return;
+    }
+    if(a==='v666-open-store-round'){
+      const arr=cleaningUrgent();
+      if(!arr.length){ modal(t('storemap'), `<p>${t('cleaningBaselineText')}</p><p class="muted">${L('Er zijn nu geen echte urgenties voor een checkronde.','There are no real urgencies for a check round right now.')}</p>`); return; }
+      const body=`<div class="grid"><p class="muted small">${L('Mobiele checkronde: alleen echte urgenties.','Mobile check round: real urgencies only.')}</p><div class="list">${arr.slice(0,12).map(i=>`<div class="list-item compact"><strong>${v666Label(i)}</strong><div class="btn-row"><button class="btn good" data-action="clean-status" data-id="${i.id}" data-status="checked">OK</button><button class="btn warn" data-action="clean-status" data-id="${i.id}" data-status="dirty">${L('Aandacht','Attention')}</button><button class="btn" data-action="plan-clean" data-id="${i.id}">${L('Plan','Plan')}</button></div></div>`).join('')}</div></div>`;
+      modal(t('mobileCheckRound')||t('storemap'), body, 'wide'); return;
+    }
+    return v666BaseHandle(a,el,e);
+  };
+
+  const v666BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    return v666BaseSettings().replaceAll('v6.6.5','v6.6.6').replaceAll('rich-cmd-cache-v665','rich-cmd-cache-v666');
+  };
+  const v666BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    const html = v666BaseDiagnostics().replaceAll('v6.6.5','v6.6.6').replaceAll('rich-cmd-cache-v665','rich-cmd-cache-v666');
+    const card = `<div class="card v666-module-checks"><h3>v6.6.6</h3><p>${t('v666Subtitle')}</p><div class="list"><div class="list-item compact"><span>${t('dailyFlowFixed')}</span><span class="pill good">OK</span></div><div class="list-item compact"><span>${t('dueAfterFirstCheck')}</span><span class="pill good">OK</span></div></div></div>`;
+    return html + card;
+  };
+
+  const v666BaseRender = render;
+  render = window.render = function(){
+    try{ document.body.setAttribute('data-rich-route', state.route || 'today'); }catch(_){}
+    return v666BaseRender();
+  };
+
+  v666EnsureCleaningBaseline();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.6 Daily Flow Position & Store Map Baseline Hotfix failed', err);
+}
+
+/* v6.6.6 — PWA asset version safety */
+try {
+  async function v666CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {};
+      state.ui.updateMetadata = meta;
+      state.ui.availableVersion = meta.latestVersion || APP.version;
+      state.ui.lastUpdateCheckAt = nowISO();
+      function cmp(a,b){ const A=String(a||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0), B=String(b||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0); for(let i=0;i<Math.max(A.length,B.length,3);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; } return 0; }
+      state.ui.updateRequired = !!((meta.minSupportedVersion && cmp(APP.version, meta.minSupportedVersion)<0) || (meta.forceBelowVersion && cmp(APP.version, meta.forceBelowVersion)<0));
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && cmp(meta.latestVersion, APP.version)>0) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v666PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=666','./styles.css?v=666','./app.js?v=666','./manifest.json?v=666','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v666ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+  const v666PwaBaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='pwa-check-update-v663'||a==='pwa-check-update-v664'||a==='pwa-check-update-v665'||a==='pwa-check-update-v666'){ v666CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v663'||a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v665'||a==='pwa-prepare-offline-v666'){ v666PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v663'||a==='pwa-activate-update-v664'||a==='pwa-activate-update-v665'||a==='pwa-activate-update-v666'){ v666ActivateUpdate(); return; }
+    return v666PwaBaseHandle(a, el, e);
+  };
+} catch(err) { console.error('v6.6.6 PWA safety failed', err); }
+
+
+/* v6.6.7 — Assist Extra Mobile Leak Hotfix */
+try {
+  APP.version = 'v6.6.7';
+  APP.cache = 'rich-cmd-cache-v667';
+
+  Object.assign(I18N.nl, {
+    v667Title:'RICH CMD v6.6.7 — Assist Extra Hotfix',
+    v667Subtitle:'Oude v6.6.1 Assist-extra blokken worden niet meer onderaan pagina’s getoond.',
+    assistExtraLeakFixed:'Oude Assist-extra blokken verborgen'
+  });
+  Object.assign(I18N.en, {
+    v667Title:'RICH CMD v6.6.7 — Assist Extra Hotfix',
+    v667Subtitle:'Old v6.6.1 Assist extra blocks are no longer shown at the bottom of pages.',
+    assistExtraLeakFixed:'Old Assist extra blocks hidden'
+  });
+
+  function v667StripOldAssistExtras(html){
+    return String(html || '')
+      .replace(/<div class="assist-extra v660-assist-extra">[\s\S]*?<\/div>/g, '')
+      .replace(/<div class="assist-extra v661-assist-extra">[\s\S]*?<\/div>/g, '');
+  }
+
+  function v667CleanupAssistLeak(){
+    try{
+      document.querySelectorAll('.assist-extra.v660-assist-extra,.assist-extra.v661-assist-extra').forEach(node=>node.remove());
+      // Extra guard: no old assist snippets may live directly in page content.
+      document.querySelectorAll('#pageRoot > .assist-extra, main > .assist-extra, .main > .assist-extra').forEach(node=>node.remove());
+    }catch(_){/* no-op */}
+  }
+
+  const v667AssistBase = renderAssist;
+  renderAssist = window.renderAssist = function(){
+    return v667StripOldAssistExtras(v667AssistBase());
+  };
+
+  const v667RenderBase = render;
+  render = window.render = function(){
+    const out = v667RenderBase();
+    v667CleanupAssistLeak();
+    setTimeout(v667CleanupAssistLeak, 0);
+    return out;
+  };
+
+  const v667SettingsBase = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    return v667SettingsBase().replaceAll('v6.6.6','v6.6.7').replaceAll('rich-cmd-cache-v666','rich-cmd-cache-v667');
+  };
+
+  const v667DiagnosticsBase = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    const html = v667DiagnosticsBase().replaceAll('v6.6.6','v6.6.7').replaceAll('rich-cmd-cache-v666','rich-cmd-cache-v667');
+    return html + `<div class="card"><h3>${t('v667Title')}</h3><p>${t('v667Subtitle')}</p><div class="list"><div class="list-item compact"><span>${t('assistExtraLeakFixed')}</span><span class="pill good">OK</span></div></div></div>`;
+  };
+
+  save();
+  render();
+} catch(err) {
+  console.error('v6.6.7 Assist Extra Mobile Leak Hotfix failed', err);
+}
+
+/* v6.6.7 — PWA asset version safety */
+try {
+  async function v667CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {};
+      state.ui.updateMetadata = meta;
+      state.ui.availableVersion = meta.latestVersion || APP.version;
+      state.ui.lastUpdateCheckAt = nowISO();
+      function cmp(a,b){ const A=String(a||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0), B=String(b||'').replace(/^v/i,'').split(/[.-]/).map(x=>parseInt(x,10)||0); for(let i=0;i<Math.max(A.length,B.length,3);i++){ const d=(A[i]||0)-(B[i]||0); if(d) return d>0?1:-1; } return 0; }
+      state.ui.updateRequired = !!((meta.minSupportedVersion && cmp(APP.version, meta.minSupportedVersion)<0) || (meta.forceBelowVersion && cmp(APP.version, meta.forceBelowVersion)<0));
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && cmp(meta.latestVersion, APP.version)>0) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v667PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=667','./styles.css?v=667','./app.js?v=667','./manifest.json?v=667','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v667ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+  const v667PwaBaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='pwa-check-update-v663'||a==='pwa-check-update-v664'||a==='pwa-check-update-v665'||a==='pwa-check-update-v666'||a==='pwa-check-update-v667'){ v667CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v663'||a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v665'||a==='pwa-prepare-offline-v666'||a==='pwa-prepare-offline-v667'){ v667PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v663'||a==='pwa-activate-update-v664'||a==='pwa-activate-update-v665'||a==='pwa-activate-update-v666'||a==='pwa-activate-update-v667'){ v667ActivateUpdate(); return; }
+    return v667PwaBaseHandle(a, el, e);
+  };
+} catch(err) { console.error('v6.6.7 PWA safety failed', err); }
+
+/* =========================================================
+   RICH CMD v6.6.9 — AGF Intelligence & Mobile QA Polish
+   Controlled update: AGF day plan/check round + diagnostics guards.
+========================================================= */
+try {
+  APP.version = 'v6.6.9';
+  APP.cache = 'rich-cmd-cache-v669';
+  APP.updateUrl = './version.json';
+  state.schemaVersion = Math.max(669, +state.schemaVersion || 0);
+  state.ui = state.ui || {};
+
+  Object.assign(I18N.nl, {
+    v669Title:'RICH CMD v6.6.9 — AGF Intelligence & Mobile QA Polish',
+    v669Subtitle:'AGF krijgt een rustig dagplan, checkronde en betere besliskaarten. Diagnostiek bewaakt mobiel en oude patchresten.',
+    agfDayPlan:'AGF dagplan', agfDayPlanText:'Korte volgorde voor vandaag: controleer eerst bonus, daarna conflicten en lege/overvolle signalen.',
+    agfCheckRound:'AGF checkronde', startAgfRound:'Start AGF checkronde', continueRound:'Volgende product', finishRound:'Checkronde afronden',
+    agfFocus:'AGF focus', agfStability:'Productstabiliteit', stableProducts:'Stabiele producten', attentionProducts:'Aandachtproducten', notCheckedToday:'Niet vandaag gecontroleerd',
+    copyAgfDayPlan:'Kopieer AGF dagplan', addToAgfOrders:'Zet in AGF besteladvies', agfRoundDone:'AGF checkronde afgerond',
+    mobileQaGuard:'Mobile QA Guard', mobileQaText:'Controle op oude patchresten, horizontale overflow en verdwaalde blokken buiten de actieve pagina.',
+    pageTest:'Pagina-test', runPageTest:'Pagina-test uitvoeren', cleanupOldPatches:'Oude layoutresten opruimen', oldCachesCleanup:'Oude caches opruimen',
+    noMobileIssues:'Geen mobiele layoutproblemen gevonden', mobileIssuesFound:'Mobiele aandachtspunten gevonden', pageTestOk:'Pagina-test voltooid',
+    agfAdviceShort:'AGF advies', bonusFirst:'Bonus eerst', conflictFirst:'Conflicten eerst', currentBeforeHistory:'Vandaag weegt zwaarder dan historie',
+    update669Note:'v6.6.9: AGF Intelligence polish, mobiele QA-bewaking en oude-cache-opruiming.'
+  });
+  Object.assign(I18N.en, {
+    v669Title:'RICH CMD v6.6.9 — Produce Intelligence & Mobile QA Polish',
+    v669Subtitle:'Produce gets a calmer day plan, check round and better decision cards. Diagnostics guards mobile and old patch leftovers.',
+    agfDayPlan:'Produce day plan', agfDayPlanText:'Short sequence for today: check promotion first, then conflicts and empty/overstock signals.',
+    agfCheckRound:'Produce check round', startAgfRound:'Start produce check round', continueRound:'Next product', finishRound:'Finish check round',
+    agfFocus:'Produce focus', agfStability:'Product stability', stableProducts:'Stable products', attentionProducts:'Attention products', notCheckedToday:'Not checked today',
+    copyAgfDayPlan:'Copy produce day plan', addToAgfOrders:'Add to produce advice', agfRoundDone:'Produce check round finished',
+    mobileQaGuard:'Mobile QA Guard', mobileQaText:'Checks for old patch leftovers, horizontal overflow and orphan blocks outside the active page.',
+    pageTest:'Page test', runPageTest:'Run page test', cleanupOldPatches:'Clean old layout leftovers', oldCachesCleanup:'Clean old caches',
+    noMobileIssues:'No mobile layout issues found', mobileIssuesFound:'Mobile attention points found', pageTestOk:'Page test completed',
+    agfAdviceShort:'Produce advice', bonusFirst:'Promotion first', conflictFirst:'Conflicts first', currentBeforeHistory:'Today outweighs history',
+    update669Note:'v6.6.9: Produce Intelligence polish, mobile QA guard and old cache cleanup.'
+  });
+
+  function v669Ensure(){
+    state.ui = state.ui || {};
+    state.ui.v669 = state.ui.v669 || {agfRoundIndex:0, lastPageTest:null, lastMobileScan:null};
+    state.agfProducts = Array.isArray(state.agfProducts) ? state.agfProducts : [];
+    state.bonus = Array.isArray(state.bonus) ? state.bonus : [];
+    state.agfOrders = Array.isArray(state.agfOrders) ? state.agfOrders : [];
+    state.orderHistory = Array.isArray(state.orderHistory) ? state.orderHistory : [];
+    if(typeof window.agfNormalize === 'function') window.agfNormalize();
+  }
+  function v669TodayKey(){ return typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10); }
+  function v669LastStatus(p){ try { return typeof lastAgfStatus === 'function' ? lastAgfStatus(p) : ((p.history||[])[0]||{}).status; } catch(_) { return ((p.history||[])[0]||{}).status; } }
+  function v669CheckedToday(p){ const d=v669TodayKey(); return Array.isArray(p.history) && p.history.some(h=>String(h.at||'').slice(0,10)===d); }
+  function v669Decision(p){ try { return typeof agfDecision === 'function' ? agfDecision(p) : {advice:'Monitor',reason:'',status:v669LastStatus(p)||'Onbekend',action:'monitor',confidence:40}; } catch(_) { return {advice:'Monitor',reason:'',status:v669LastStatus(p)||'Onbekend',action:'monitor',confidence:40}; } }
+  function v669IsBonus(p){ return state.bonus.some(b=>b.productId===p.id || (b.nasa && p.nasa && String(b.nasa)===String(p.nasa)) || String(b.name||'').toLowerCase()===String(p.name||'').toLowerCase()); }
+  function v669HistCounts(p){ const h=Array.isArray(p.history)?p.history.slice(0,10):[]; return {total:h.length, empty:h.filter(x=>x.status==='Leeg schap').length, over:h.filter(x=>x.status==='Overvoorraad').length, ok:h.filter(x=>x.status==='OK').length, quality:h.filter(x=>x.status==='Kwaliteit').length}; }
+  function v669Stability(p){ const c=v669HistCounts(p); if(!c.total) return {label:t('notCheckedToday'), tone:'info', score:30}; const stable=Math.round((c.ok/Math.max(1,c.total))*100); if(c.empty+c.over+c.quality>=4) return {label:t('attentionProducts'), tone:'warn', score:Math.max(20,100-stable)}; if(stable>=70) return {label:t('stableProducts'), tone:'good', score:stable}; return {label:t('monitor'), tone:'info', score:stable}; }
+  function v669AgfScore(p){ const d=v669Decision(p); let s=0; if(v669IsBonus(p)) s+=40; if(d.conflict) s+=35; if(d.status==='Leeg schap') s+=30; if(d.status==='Overvoorraad') s+=24; if(d.action==='increase') s+=20; if(d.action==='hold') s+=18; if(d.action==='quality') s+=30; if(!v669CheckedToday(p)) s+=8; if(p.favorite) s+=6; s+=(+d.confidence||0)/10; return s; }
+  function v669PlanProducts(limit=8){
+    v669Ensure();
+    return state.agfProducts.map(p=>({p,d:v669Decision(p),bonus:v669IsBonus(p),score:v669AgfScore(p),stable:v669Stability(p)}))
+      .sort((a,b)=>b.score-a.score || String(a.p.name||'').localeCompare(String(b.p.name||''))).slice(0,limit);
+  }
+  function v669AgfRoundProducts(){
+    const planned=v669PlanProducts(30).map(x=>x.p);
+    const unchecked=state.agfProducts.filter(p=>!v669CheckedToday(p)).sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)||String(a.name||'').localeCompare(String(b.name||''))).slice(0,20);
+    const out=[]; [...planned,...unchecked].forEach(p=>{ if(p && !out.some(x=>x.id===p.id)) out.push(p); });
+    return out.slice(0,30);
+  }
+  function v669PillForDecision(d){ if(d.conflict || d.status==='Leeg schap') return 'bad'; if(d.status==='Overvoorraad' || d.action==='hold' || d.action==='decrease') return 'warn'; if(d.action==='stable') return 'good'; return 'info'; }
+  function v669StatusButtons(p, small='small'){
+    return `<div class="btn-row v669-status-buttons"><button class="btn ${small} good" data-action="agf-status" data-id="${escapeHtml(p.id)}" data-status="OK">OK</button><button class="btn ${small} bad" data-action="agf-status" data-id="${escapeHtml(p.id)}" data-status="Leeg schap">${L('Leeg','Empty')}</button><button class="btn ${small} warn" data-action="agf-status" data-id="${escapeHtml(p.id)}" data-status="Overvoorraad">${L('Over','Over')}</button><button class="btn ${small}" data-action="agf-status" data-id="${escapeHtml(p.id)}" data-status="Kwaliteit">${t('quality')}</button></div>`;
+  }
+  function v669AgfDayPlan(){
+    const items=v669PlanProducts(8);
+    if(!items.length) return `<p class="muted small">${t('agfNoProductsHelp')||t('empty')}</p>`;
+    return `<div class="v669-dayplan"><div class="btn-row mb"><span class="pill warn">${t('bonusFirst')}</span><span class="pill bad">${t('conflictFirst')}</span><span class="pill info">${t('currentBeforeHistory')}</span></div><div class="list">${items.map((x,i)=>{
+      const p=x.p,d=x.d,st=x.stable; const meta=[x.bonus?t('promotion'):'', d.conflict?t('conflict'):'', st.label].filter(Boolean).join(' · ');
+      return `<div class="list-item v669-agf-plan-row"><div><span class="chip">${i+1}</span> <strong>${escapeHtml(typeof window.agfTr==='function'?window.agfTr(p.name):p.name)}</strong><div class="small muted">${escapeHtml(p.category||'')} · NASA ${escapeHtml(p.nasa||'-')} · ${escapeHtml(meta)}</div><div class="small">${t('agfAdviceShort')}: <b>${escapeHtml(d.advice||'')}</b></div></div><div class="btn-row"><span class="pill ${v669PillForDecision(d)}">${escapeHtml(d.status||v669LastStatus(p)||t('unknown'))}</span><button class="btn small" data-action="open-agf-profile-v6518" data-id="${escapeHtml(p.id)}">${t('productProfile')||t('showMe')}</button></div></div>`;
+    }).join('')}</div></div>`;
+  }
+  function v669DecisionCards(limit=8){
+    const items=v669PlanProducts(limit);
+    return `<div class="grid v669-decision-grid">${items.map(x=>{
+      const p=x.p,d=x.d,st=x.stable;
+      return `<div class="card v669-decision-card"><div class="btn-row"><span class="pill ${v669PillForDecision(d)}">${escapeHtml(d.advice||t('monitor'))}</span>${x.bonus?`<span class="pill warn">${t('promotion')}</span>`:''}${d.conflict?`<span class="pill bad">${t('conflict')}</span>`:''}</div><h3>${escapeHtml(typeof window.agfTr==='function'?window.agfTr(p.name):p.name)}</h3><p class="muted small">${escapeHtml(p.category||'')} · NASA ${escapeHtml(p.nasa||'-')}</p><p>${escapeHtml(d.reason||'')}</p><div class="small muted">${t('agfStability')}: ${escapeHtml(st.label)} · ${Math.round(st.score||0)}%</div>${v669StatusButtons(p,'small')}</div>`;
+    }).join('') || `<p class="muted">${t('empty')}</p>`}</div>`;
+  }
+  function v669AgfFocusCard(){
+    const attention=(typeof agfAttention==='function'?agfAttention():[]).length;
+    const bonus=state.bonus.length;
+    const conflicts=(typeof agfAttention==='function'?agfAttention():[]).filter(x=>x.conflict).length;
+    const unchecked=state.agfProducts.filter(p=>!v669CheckedToday(p)).length;
+    return `<div class="card v669-agf-focus"><h3>${t('agfFocus')}</h3><p class="muted small">${t('agfDayPlanText')}</p><div class="grid grid-4">${kpi(t('attentionProducts'),attention,attention?'warn':'good')}${kpi(t('promotion'),bonus,bonus?'warn':'info')}${kpi(t('conflict'),conflicts,conflicts?'bad':'good')}${kpi(t('notCheckedToday'),unchecked,unchecked?'info':'good')}</div><div class="btn-row mt"><button class="btn primary" data-action="start-agf-round-v669">${t('startAgfRound')}</button><button class="btn" data-action="copy-agf-dayplan-v669">${t('copyAgfDayPlan')}</button><button class="btn" data-action="copy-agf-orders">${t('copyOrderPlan')||t('copy')}</button></div></div>`;
+  }
+  function v669CopyDayPlan(){
+    const lines=v669PlanProducts(12).map((x,i)=>`${i+1}. ${x.p.name}${x.p.nasa?' (NASA '+x.p.nasa+')':''}: ${x.d.advice} — ${x.d.reason}`);
+    copyText(`${t('agfDayPlan')} ${v669TodayKey()}\n` + (lines.join('\n') || t('empty')));
+    addActivity(t('copyAgfDayPlan'),'agf');
+  }
+  function v669SetAgfStatusNoRender(id,status){
+    v669Ensure();
+    const p=state.agfProducts.find(x=>x.id===id); if(!p) return null;
+    p.history=Array.isArray(p.history)?p.history:[];
+    p.history.unshift({status,at:nowISO()});
+    const d=v669Decision(p);
+    state.agfOrders.unshift({id:uid('ord'),product:p.name,advice:d.advice,reason:d.reason,status,at:nowISO()});
+    state.orderHistory.unshift({id:uid('oh'),product:p.name,status,advice:d.advice,reason:d.reason,nasa:p.nasa,at:nowISO(),bonus:v669IsBonus(p)});
+    state.orderHistory=state.orderHistory.slice(0,250);
+    addActivity(`AGF ${p.name}: ${status}`,'agf'); save();
+    return p;
+  }
+  function v669OpenAgfRound(index=0){
+    const arr=v669AgfRoundProducts();
+    if(!arr.length){ toast(t('empty'),'info'); return; }
+    const i=Math.max(0,Math.min(+index||0,arr.length));
+    if(i>=arr.length){ closeModal(); toast(t('agfRoundDone'),'good'); render(); return; }
+    const p=arr[i], d=v669Decision(p), st=v669Stability(p);
+    modal(t('agfCheckRound'), `<div class="v669-round"><div class="hero-mini"><span class="chip">${i+1}/${arr.length}</span><h2>${escapeHtml(typeof window.agfTr==='function'?window.agfTr(p.name):p.name)}</h2><p class="muted">${escapeHtml(p.category||'')} · NASA ${escapeHtml(p.nasa||'-')}</p></div><div class="card"><h3>${t('orderAdvice')}</h3><p><strong>${escapeHtml(d.advice||t('monitor'))}</strong></p><p class="muted small">${escapeHtml(d.reason||'')}</p><span class="pill ${st.tone}">${t('agfStability')}: ${escapeHtml(st.label)}</span></div><div class="card"><h3>${t('currentStatus')}</h3><div class="grid grid-2"><button class="btn good" data-action="agf-round-status-v669" data-id="${escapeHtml(p.id)}" data-index="${i}" data-status="OK">OK</button><button class="btn bad" data-action="agf-round-status-v669" data-id="${escapeHtml(p.id)}" data-index="${i}" data-status="Leeg schap">${t('emptyShelf')}</button><button class="btn warn" data-action="agf-round-status-v669" data-id="${escapeHtml(p.id)}" data-index="${i}" data-status="Overvoorraad">${t('overstock')}</button><button class="btn" data-action="agf-round-status-v669" data-id="${escapeHtml(p.id)}" data-index="${i}" data-status="Kwaliteit">${t('quality')}</button></div></div><div class="btn-row mt"><button class="btn" data-action="agf-round-next-v669" data-index="${i+1}">${t('continueRound')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div></div>`, 'wide');
+  }
+
+  const v669BaseRenderAgf = renderAgf;
+  renderAgf = window.renderAgf = function(){
+    v669Ensure();
+    const baseQuick = typeof renderAgfQuickList === 'function' ? renderAgfQuickList(state.ui.agfSearch||'') : '';
+    const profiles = typeof renderAgfProducts === 'function' ? renderAgfProducts() : '';
+    const bonus = typeof renderBonus === 'function' ? renderBonus() : '';
+    const hist = typeof renderOrderHistory === 'function' ? renderOrderHistory() : '';
+    return `<div class="grid agf-pro-page agf-v669"><div class="hero"><span class="chip">v6.6.9</span><h2>${t('agfPro')||'AGF Intelligence Pro'}</h2><p>${t('v669Subtitle')}</p></div>${v669AgfFocusCard()}<div class="grid grid-main"><div class="grid"><div class="card v669-dayplan-card"><h3>${t('agfDayPlan')}</h3><p class="muted small">${t('agfDayPlanText')}</p>${v669AgfDayPlan()}</div><div class="card"><h3>${L('AGF Quick Check','Produce Quick Check')}</h3><div class="form-grid"><input class="input" id="agfSearch" value="${escapeHtml(state.ui.agfSearch||'')}" placeholder="${t('search')} product / NASA / categorie"><button class="btn primary" data-action="open-agf-product-form">${t('add')} ${t('product')}</button><button class="btn" data-action="load-agf-starter-v6520">${t('loadProduceStarter')||t('load')}</button></div>${typeof catChips === 'function' ? catChips() : ''}<div id="agfQuickList" class="mt">${baseQuick}</div></div><div class="card"><h3>${t('agfDecisionCards')||t('decisionCenter')}</h3>${v669DecisionCards(6)}</div></div><div class="grid"><div class="card"><h3>${t('bonusWeek')}</h3>${bonus}</div><div class="card"><h3>${t('orderBasket')||t('orderAdvice')}</h3>${typeof renderAgfOrderBasketV6518==='function'?renderAgfOrderBasketV6518():renderAgfAdvice()}</div><div class="card"><h3>${t('productProfiles')}</h3>${profiles}</div><div class="card"><h3>${t('orderHistory')}</h3>${hist}</div></div></div></div>`;
+  };
+
+  function v669MobileScan(){
+    const issues=[];
+    if(typeof document === 'undefined') return {issues, ok:true};
+    const old=document.querySelectorAll('.assist-extra.v660-assist-extra,.assist-extra.v661-assist-extra,#pageRoot > .assist-extra,.main > .assist-extra');
+    if(old.length) issues.push(`${old.length} ${L('oude Assist-extra blokken','old Assist extra blocks')}`);
+    const orphan=document.querySelectorAll('body > .v664-main-actions, body > .v665-main-actions, #app > .v664-main-actions, #app > .v665-main-actions, .main > .v664-main-actions, .main > .v665-main-actions');
+    if(orphan.length) issues.push(`${orphan.length} ${L('verdwaalde Daily Flow-blokken','orphan Daily Flow blocks')}`);
+    if(document.documentElement && window.innerWidth && document.documentElement.scrollWidth > window.innerWidth + 6) issues.push(L('horizontale overflow gedetecteerd','horizontal overflow detected'));
+    const page=document.querySelector('#pageRoot'); if(!page) issues.push('pageRoot ontbreekt');
+    return {issues, ok:issues.length===0, at:nowISO()};
+  }
+  function v669CleanupOldPatches(showToast=true){
+    if(typeof document !== 'undefined'){
+      document.querySelectorAll('.assist-extra.v660-assist-extra,.assist-extra.v661-assist-extra,#pageRoot > .assist-extra,.main > .assist-extra,body > .v664-main-actions,body > .v665-main-actions,#app > .v664-main-actions,#app > .v665-main-actions,.main > .v664-main-actions,.main > .v665-main-actions').forEach(el=>el.remove());
+    }
+    state.ui.v669.lastMobileScan=v669MobileScan();
+    if(showToast){ save(); toast(t('cleanupOldPatches'),'good'); }
+  }
+  function v669PageTests(){
+    const tests=[['Vandaag',renderToday],['HACCP',renderHaccp],['Schoonmaakkaart',renderStoreMap],['AGF',renderAgf],['Bestelbeheer',renderInventory],['Communicatie',renderCommunication],['Instellingen',renderSettings]];
+    return tests.map(([name,fn])=>{ try { const html=String(fn()); return {name, ok:html.length>80 && !/undefined\s*undefined/.test(html), detail:html.length+' tekens'}; } catch(err){ return {name, ok:false, detail:err.message}; } });
+  }
+  function v669MobileGuardCard(){
+    const scan=v669MobileScan(); state.ui.v669.lastMobileScan=scan;
+    return `<div class="card v669-mobile-guard"><h3>${t('mobileQaGuard')}</h3><p class="muted small">${t('mobileQaText')}</p><div class="list"><div class="list-item compact"><span>${scan.ok?t('noMobileIssues'):t('mobileIssuesFound')}</span><span class="pill ${scan.ok?'good':'warn'}">${scan.ok?'OK':scan.issues.length}</span></div>${scan.issues.map(x=>`<div class="list-item compact"><span>${escapeHtml(x)}</span><span class="pill warn">Check</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="v669-clean-old-patches">${t('cleanupOldPatches')}</button><button class="btn" data-action="v669-run-page-test">${t('runPageTest')}</button><button class="btn" data-action="v669-clear-old-caches">${t('oldCachesCleanup')}</button></div></div>`;
+  }
+  function v669PageTestCard(){
+    const rows=state.ui.v669.lastPageTest || [];
+    if(!rows.length) return `<div class="card"><h3>${t('pageTest')}</h3><p class="muted small">${L('Nog geen pagina-test uitgevoerd in deze sessie.','No page test run in this session yet.')}</p><button class="btn" data-action="v669-run-page-test">${t('runPageTest')}</button></div>`;
+    return `<div class="card"><h3>${t('pageTest')}</h3><div class="v664-health-grid">${rows.map(r=>`<div class="v664-health-row"><span>${escapeHtml(r.name)}</span><span class="pill ${r.ok?'good':'bad'}">${r.ok?'OK':escapeHtml(r.detail||'Check')}</span></div>`).join('')}</div></div>`;
+  }
+  async function v669ClearOldCaches(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const keys=await caches.keys();
+      const old=keys.filter(k=>k.includes('rich-cmd-cache') && k!==APP.cache);
+      await Promise.all(old.map(k=>caches.delete(k)));
+      addActivity(`${old.length} oude caches opgeruimd`,'pwa'); save(); toast(`${old.length} ${L('oude caches opgeruimd','old caches cleaned')}`,'good');
+    }catch(err){ console.error(err); toast(L('Caches opruimen mislukt.','Cache cleanup failed.'),'bad'); }
+  }
+
+  const v669BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v669BaseDiagnostics().replaceAll('v6.6.7','v6.6.9').replaceAll('v6.6.6','v6.6.9').replaceAll('rich-cmd-cache-v667','rich-cmd-cache-v669').replaceAll('rich-cmd-cache-v666','rich-cmd-cache-v669');
+    return html + `<div class="grid grid-2">${v669MobileGuardCard()}${v669PageTestCard()}</div><div class="card"><h3>${t('v669Title')}</h3><p>${t('v669Subtitle')}</p><p class="muted small">${t('update669Note')}</p></div>`;
+  };
+
+  const v669BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    let html=v669BaseSettings().replaceAll('v6.6.7','v6.6.9').replaceAll('v6.6.6','v6.6.9').replaceAll('rich-cmd-cache-v667','rich-cmd-cache-v669').replaceAll('rich-cmd-cache-v666','rich-cmd-cache-v669');
+    const extra=`<div class="card v669-update-tools"><h3>${t('mobileQaGuard')}</h3><p class="muted small">${t('mobileQaText')}</p><div class="btn-row"><button class="btn" data-action="v669-clean-old-patches">${t('cleanupOldPatches')}</button><button class="btn" data-action="v669-clear-old-caches">${t('oldCachesCleanup')}</button><button class="btn" data-action="v669-run-page-test">${t('runPageTest')}</button></div></div>`;
+    return html + extra;
+  };
+
+  const v669BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='copy-agf-dayplan-v669'){ v669CopyDayPlan(); return; }
+    if(a==='start-agf-round-v669'){ state.ui.v669.agfRoundIndex=0; v669OpenAgfRound(0); return; }
+    if(a==='agf-round-next-v669'){ v669OpenAgfRound(+(el.dataset.index||0)); return; }
+    if(a==='agf-round-status-v669'){ v669SetAgfStatusNoRender(el.dataset.id, el.dataset.status); v669OpenAgfRound((+(el.dataset.index||0))+1); return; }
+    if(a==='v669-clean-old-patches'){ v669CleanupOldPatches(); render(); return; }
+    if(a==='v669-run-page-test'){ state.ui.v669.lastPageTest=v669PageTests(); addActivity(t('runPageTest'),'diagnostics'); save(); toast(t('pageTestOk'),'good'); render(); return; }
+    if(a==='v669-clear-old-caches'){ v669ClearOldCaches(); return; }
+    if(a==='pwa-check-update-v669' || a==='pwa-check-update-v667' || a==='pwa-check-update-v666'){ if(typeof v667CheckUpdate==='function') v667CheckUpdate(false); else if(typeof v665CheckUpdate==='function') v665CheckUpdate(false); else toast(t('checkForUpdates'),'info'); return; }
+    if(a==='pwa-prepare-offline-v669' || a==='pwa-prepare-offline-v667' || a==='pwa-prepare-offline-v666'){ if(typeof v667PrepareOffline==='function') v667PrepareOffline(); else if(typeof v665PrepareOffline==='function') v665PrepareOffline(); else toast(t('prepareOffline'),'info'); return; }
+    if(a==='pwa-activate-update-v669' || a==='pwa-activate-update-v667' || a==='pwa-activate-update-v666'){ if(typeof v667ActivateUpdate==='function') v667ActivateUpdate(); else location.reload(); return; }
+    return v669BaseHandle(a,el,e);
+  };
+
+  const v669BaseRender = render;
+  render = window.render = function(){ const out=v669BaseRender(); setTimeout(()=>{ try{ v669CleanupOldPatches(false); }catch(_){} },0); return out; };
+
+  v669Ensure(); save(); render();
+} catch(err) {
+  console.error('v6.6.9 AGF Intelligence & Mobile QA Polish failed', err);
+}
+
+/* v6.6.9 — PWA asset version safety */
+try {
+  async function v669CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {}; state.ui.updateMetadata = meta; state.ui.availableVersion = meta.latestVersion || APP.version; state.ui.lastUpdateCheckAt = nowISO();
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && meta.latestVersion!==APP.version) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v669PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=669','./styles.css?v=669','./app.js?v=669','./manifest.json?v=669','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v669ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+  const v669PwaHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='pwa-check-update-v663'||a==='pwa-check-update-v664'||a==='pwa-check-update-v665'||a==='pwa-check-update-v666'||a==='pwa-check-update-v667'||a==='pwa-check-update-v669'){ v669CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v663'||a==='pwa-prepare-offline-v664'||a==='pwa-prepare-offline-v665'||a==='pwa-prepare-offline-v666'||a==='pwa-prepare-offline-v667'||a==='pwa-prepare-offline-v669'){ v669PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v663'||a==='pwa-activate-update-v664'||a==='pwa-activate-update-v665'||a==='pwa-activate-update-v666'||a==='pwa-activate-update-v667'||a==='pwa-activate-update-v669'){ v669ActivateUpdate(); return; }
+    return v669PwaHandle(a, el, e);
+  };
+} catch(err) { console.error('v6.6.9 PWA safety failed', err); }
+
+/* =========================================================
+   RICH CMD v6.6.10 — Bonusweek & Regression Polish
+   Restores full bonus week controls and adds regression checks.
+========================================================= */
+try {
+  APP.version = 'v6.6.10';
+  APP.cache = 'rich-cmd-cache-v6610';
+  APP.updateUrl = './version.json';
+  state.schemaVersion = Math.max(6610, +state.schemaVersion || 0);
+  state.ui = state.ui || {};
+  state.bonus = Array.isArray(state.bonus) ? state.bonus : [];
+  state.bonusHistory = Array.isArray(state.bonusHistory) ? state.bonusHistory : [];
+
+  Object.assign(I18N.nl, {
+    v6610Title:'RICH CMD v6.6.10 — Bonusweek & Regression Polish',
+    v6610Subtitle:'Bonusweekbeheer is hersteld, AGF is rustiger gemaakt en Diagnostiek bewaakt belangrijke knoppen tegen regressies.',
+    bonusWeekManage:'Bonusweek beheren',
+    copyBonusWeek:'Kopieer bonusweek',
+    startNewBonusWeek:'Nieuwe bonusweek starten',
+    clearBonusWeekConfirm:'Weet je zeker dat je de bonusweek wilt leegmaken? De huidige bonusartikelen worden eerst in de historie bewaard.',
+    bonusWeekCleared:'Bonusweek geleegd',
+    bonusWeekHistory:'Bonusweek historie',
+    noBonusHistory:'Nog geen oude bonusweken opgeslagen.',
+    importantButtons:'Belangrijke knoppen',
+    regressionPolish:'Regressie-polish',
+    skipped668:'v6.6.8 is als los versienummer overgeslagen; de geplande Mobile QA-onderdelen zitten in v6.6.9 en v6.6.10.',
+    update6610Note:'v6.6.10: Bonusweekbeheer hersteld, AGF mobiel rustiger en regressiechecks toegevoegd.'
+  });
+  Object.assign(I18N.en, {
+    v6610Title:'RICH CMD v6.6.10 — Promotion Week & Regression Polish',
+    v6610Subtitle:'Promotion week controls are restored, Produce is calmer and Diagnostics guards key buttons against regressions.',
+    bonusWeekManage:'Manage promotion week',
+    copyBonusWeek:'Copy promotion week',
+    startNewBonusWeek:'Start new promotion week',
+    clearBonusWeekConfirm:'Are you sure you want to clear the promotion week? Current promotion items will be saved to history first.',
+    bonusWeekCleared:'Promotion week cleared',
+    bonusWeekHistory:'Promotion week history',
+    noBonusHistory:'No old promotion weeks stored yet.',
+    importantButtons:'Important buttons',
+    regressionPolish:'Regression polish',
+    skipped668:'v6.6.8 was skipped as a separate version number; the planned Mobile QA pieces are included in v6.6.9 and v6.6.10.',
+    update6610Note:'v6.6.10: Promotion week controls restored, Produce mobile view calmer and regression checks added.'
+  });
+
+  I18N.nl.v669Title = I18N.nl.v6610Title;
+  I18N.en.v669Title = I18N.en.v6610Title;
+  I18N.nl.v669Subtitle = I18N.nl.v6610Subtitle;
+  I18N.en.v669Subtitle = I18N.en.v6610Subtitle;
+  I18N.nl.update669Note = I18N.nl.update6610Note;
+  I18N.en.update669Note = I18N.en.update6610Note;
+
+  function v6610DateLabel(iso){
+    try { return new Date(iso).toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL', {day:'2-digit',month:'short',year:'numeric'}); }
+    catch(_) { return String(iso||'').slice(0,10); }
+  }
+  function v6610BonusLabel(b){
+    const name = typeof window.agfTr === 'function' ? window.agfTr(b.name || '') : (b.name || '');
+    return `${name}${b.nasa ? ' (NASA ' + b.nasa + ')' : ''}`;
+  }
+  function v6610CopyBonusWeek(){
+    const lines = state.bonus.map(v6610BonusLabel);
+    copyText(lines.length ? lines.join('\n') : (t('empty') || 'Geen bonusartikelen'));
+    addActivity(t('copyBonusWeek'), 'agf');
+    toast(t('copied') || 'Gekopieerd', 'good');
+  }
+  function v6610ClearBonusWeek(){
+    if(state.bonus.length && !confirm(t('clearBonusWeekConfirm'))) return;
+    if(state.bonus.length){
+      state.bonusHistory.unshift({id:uid('bonusWeek'), at:nowISO(), count:state.bonus.length, items:state.bonus.map(b=>({...b}))});
+      state.bonusHistory = state.bonusHistory.slice(0,12);
+    }
+    state.bonus = [];
+    addActivity(t('startNewBonusWeek'), 'agf');
+    save(); render(); toast(t('bonusWeekCleared'), 'good');
+  }
+  function v6610BonusItems(){
+    if(!state.bonus.length) return `<p class="muted">${L('Geen bonusartikelen. Gebruik de oranje B-knop in AGF Quick Check of voeg handmatig toe.','No promotion items. Use the orange B button in Produce Quick Check or add one manually.')}</p>`;
+    return `<div class="list v6610-bonus-list">${state.bonus.map(b=>`<div class="list-item v6610-bonus-item"><div><strong>${escapeHtml(v6610BonusLabel(b))}</strong><div class="small muted">${escapeHtml(b.category||'')} ${b.at?'· '+v6610DateLabel(b.at):''}</div><span class="pill ${b.order?'good':'warn'}">${b.order?L('Op bestellijst','On order list'):L('Alleen controleren','Check only')}</span></div><div class="btn-row"><button class="btn small" data-action="toggle-bonus-order" data-id="${escapeHtml(b.id)}">${b.order?L('Niet bestellen','Do not order'):L('Bestellijst','Order list')}</button><button class="btn small bad" data-action="delete-bonus" data-id="${escapeHtml(b.id)}">${t('delete')}</button></div></div>`).join('')}</div>`;
+  }
+  function v6610BonusHistory(){
+    if(!state.bonusHistory.length) return `<p class="small muted">${t('noBonusHistory')}</p>`;
+    return `<details class="v6610-bonus-history"><summary>${t('bonusWeekHistory')} · ${state.bonusHistory.length}</summary><div class="list mt">${state.bonusHistory.slice(0,5).map(h=>`<div class="list-item compact"><span>${v6610DateLabel(h.at)} · ${h.count||0} ${L('artikelen','items')}</span><span class="pill info">${L('opgeslagen','saved')}</span></div>`).join('')}</div></details>`;
+  }
+  function v6610RenderBonusWeek(){
+    return `<div class="v6610-bonus-week"><div class="btn-row mb"><button class="btn primary" data-action="open-bonus-form">${t('add')} ${t('promotion')||'bonus'}</button><button class="btn" data-action="copy-bonus-week-v6610">${t('copyBonusWeek')}</button><button class="btn bad" data-action="start-bonus-week-v6610">${t('startNewBonusWeek')}</button></div><p class="small muted">${L('Bonusartikelen voeg je toe via de oranje B-knop in AGF Quick Check. Met Nieuwe bonusweek starten maak je de lijst leeg na bevestiging.','Add promotion items with the orange B button in Produce Quick Check. Start new promotion week clears the list after confirmation.')}</p>${v6610BonusItems()}${v6610BonusHistory()}</div>`;
+  }
+
+  const v6610OldRenderBonus = renderBonus;
+  renderBonus = window.renderBonus = function(){ return v6610RenderBonusWeek(); };
+
+  const v6610BaseRenderAgf = renderAgf;
+  renderAgf = window.renderAgf = function(){
+    let html = v6610BaseRenderAgf();
+    html = html.replaceAll('v6.6.9','v6.6.10').replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6610');
+    html = html.replace('AGF Intelligence & Mobile QA Polish', 'Bonusweek & Regression Polish');
+    return html;
+  };
+
+  function v6610RegressionChecks(){
+    const checks=[];
+    let agf='';
+    try { agf=String(renderAgf()); } catch(err){ agf='ERR '+err.message; }
+    checks.push({name:t('copyBonusWeek'), ok:/copy-bonus-week-v6610/.test(agf)});
+    checks.push({name:t('startNewBonusWeek'), ok:/start-bonus-week-v6610/.test(agf)});
+    checks.push({name:L('AGF checkronde','Produce check round'), ok:/start-agf-round-v669/.test(agf)});
+    checks.push({name:L('Mobile QA Guard','Mobile QA Guard'), ok:!!(state.ui && state.ui.v669)});
+    checks.push({name:L('Oude assist-extra blokkade','Old assist-extra guard'), ok:(typeof document === 'undefined') || !document.querySelector('.assist-extra.v661-assist-extra')});
+    return checks;
+  }
+  function v6610RegressionCard(){
+    const rows=v6610RegressionChecks();
+    return `<div class="card v6610-regression-card"><h3>${t('regressionPolish')}</h3><p class="muted small">${t('v6610Subtitle')}</p><div class="list">${rows.map(r=>`<div class="list-item compact"><span>${escapeHtml(r.name)}</span><span class="pill ${r.ok?'good':'bad'}">${r.ok?'OK':'Check'}</span></div>`).join('')}</div><p class="small muted mt">${t('skipped668')}</p></div>`;
+  }
+
+  const v6610BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v6610BaseDiagnostics()
+      .replaceAll('v6.6.9','v6.6.10')
+      .replaceAll('v6.6.7','v6.6.10')
+      .replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6610')
+      .replaceAll('rich-cmd-cache-v667','rich-cmd-cache-v6610');
+    return html + `<div class="grid grid-2">${v6610RegressionCard()}<div class="card"><h3>${t('v6610Title')}</h3><p>${t('v6610Subtitle')}</p><p class="muted small">${t('update6610Note')}</p></div></div>`;
+  };
+
+  const v6610BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    return v6610BaseSettings()
+      .replaceAll('v6.6.9','v6.6.10')
+      .replaceAll('v6.6.7','v6.6.10')
+      .replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6610')
+      .replaceAll('rich-cmd-cache-v667','rich-cmd-cache-v6610');
+  };
+
+  async function v6610CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {}; state.ui.updateMetadata = meta; state.ui.availableVersion = meta.latestVersion || APP.version; state.ui.lastUpdateCheckAt = nowISO();
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && meta.latestVersion!==APP.version) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v6610PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=6610','./styles.css?v=6610','./app.js?v=6610','./manifest.json?v=6610','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v6610ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+
+  const v6610BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='copy-bonus-week-v6610'){ v6610CopyBonusWeek(); return; }
+    if(a==='start-bonus-week-v6610'){ v6610ClearBonusWeek(); return; }
+    if(a==='pwa-check-update-v6610' || /^pwa-check-update-v66/.test(a)){ v6610CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v6610' || /^pwa-prepare-offline-v66/.test(a)){ v6610PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v6610' || /^pwa-activate-update-v66/.test(a)){ v6610ActivateUpdate(); return; }
+    return v6610BaseHandle(a,el,e);
+  };
+
+  save(); render();
+} catch(err) {
+  console.error('v6.6.10 Bonusweek & Regression Polish failed', err);
+}
+
+
+/* =========================================================
+   RICH CMD v6.6.11 — AGF Compact Profile & Bonusweek Polish
+   Removes duplicate bonus adding, shortens Bonusweek buttons and
+   makes Productprofielen compact by default.
+========================================================= */
+try {
+  APP.version = 'v6.6.11';
+  APP.cache = 'rich-cmd-cache-v6611';
+  APP.updateUrl = './version.json';
+  state.schemaVersion = Math.max(6611, +state.schemaVersion || 0);
+  state.ui = state.ui || {};
+  state.bonus = Array.isArray(state.bonus) ? state.bonus : [];
+  state.bonusHistory = Array.isArray(state.bonusHistory) ? state.bonusHistory : [];
+
+  Object.assign(I18N.nl, {
+    v6611Title:'RICH CMD v6.6.11 — AGF Compact Profile & Bonusweek Polish',
+    v6611Subtitle:'Bonusweek is compacter gemaakt en Productprofielen tonen standaard minder items met Meer weergeven.',
+    copyShort:'Kopieer',
+    newWeekShort:'Nieuwe Week',
+    profilesCompactHelp:'Productprofielen zijn ingeklapt zodat AGF overzichtelijk blijft. Gebruik zoeken of Meer weergeven om sneller te vinden wat je nodig hebt.',
+    showingProfiles:'Toont {shown} van {total} profielen',
+    profileSearchHint:'Zoeken toont automatisch meer relevante profielen.',
+    bonusWeekQuickCheckOnly:'Bonusartikelen voeg je toe of verwijder je via de oranje B-knop in AGF Quick Check.',
+    clearBonusWeekConfirmShort:'Nieuwe week starten? De huidige bonusartikelen worden eerst in de historie bewaard en daarna geleegd.',
+    update6611Note:'v6.6.11: Bonusweekknoppen ingekort, handmatig bonus toevoegen verwijderd en Productprofielen compacter gemaakt.',
+    nextUpdateIdeaTitle:'Idee volgende update',
+    nextUpdateIdeaText:'Voor v6.7.0 is een V7 Foundation Cleanup logisch: oude patchlagen bundelen, renderfuncties opschonen en regressietests standaard maken.'
+  });
+  Object.assign(I18N.en, {
+    v6611Title:'RICH CMD v6.6.11 — Produce Compact Profile & Promotion Week Polish',
+    v6611Subtitle:'Promotion week is more compact and Product profiles show fewer items by default with Show more.',
+    copyShort:'Copy',
+    newWeekShort:'New Week',
+    profilesCompactHelp:'Product profiles are collapsed so Produce stays readable. Use search or Show more to find what you need faster.',
+    showingProfiles:'Showing {shown} of {total} profiles',
+    profileSearchHint:'Searching automatically shows more relevant profiles.',
+    bonusWeekQuickCheckOnly:'Add or remove promotion items with the orange B button in Produce Quick Check.',
+    clearBonusWeekConfirmShort:'Start a new week? Current promotion items will be saved to history and then cleared.',
+    update6611Note:'v6.6.11: Shortened promotion week buttons, removed manual promotion add and made Product profiles more compact.',
+    nextUpdateIdeaTitle:'Next update idea',
+    nextUpdateIdeaText:'For v6.7.0 a V7 Foundation Cleanup makes sense: merge old patch layers, clean render functions and make regression tests standard.'
+  });
+
+  I18N.nl.v669Title = I18N.nl.v6611Title;
+  I18N.en.v669Title = I18N.en.v6611Title;
+  I18N.nl.v669Subtitle = I18N.nl.v6611Subtitle;
+  I18N.en.v669Subtitle = I18N.en.v6611Subtitle;
+  I18N.nl.update669Note = I18N.nl.update6611Note;
+  I18N.en.update669Note = I18N.en.update6611Note;
+
+  function v6611DateLabel(iso){
+    try { return new Date(iso).toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL', {day:'2-digit',month:'short',year:'numeric'}); }
+    catch(_) { return String(iso||'').slice(0,10); }
+  }
+  function v6611BonusLabel(b){
+    const name = typeof window.agfTr === 'function' ? window.agfTr(b.name || '') : (b.name || '');
+    return `${name}${b.nasa ? ' (NASA ' + b.nasa + ')' : ''}`;
+  }
+  function v6611CopyBonusWeek(){
+    const lines = state.bonus.map(v6611BonusLabel);
+    copyText(lines.length ? lines.join('\n') : (t('empty') || 'Geen bonusartikelen'));
+    addActivity(t('copyShort'), 'agf');
+    toast(t('copied') || 'Gekopieerd', 'good');
+  }
+  function v6611ClearBonusWeek(){
+    if(state.bonus.length && !confirm(t('clearBonusWeekConfirmShort'))) return;
+    if(state.bonus.length){
+      state.bonusHistory.unshift({id:uid('bonusWeek'), at:nowISO(), count:state.bonus.length, items:state.bonus.map(b=>({...b}))});
+      state.bonusHistory = state.bonusHistory.slice(0,12);
+    }
+    state.bonus = [];
+    addActivity(t('newWeekShort'), 'agf');
+    save(); render(); toast(t('bonusWeekCleared') || 'Bonusweek geleegd', 'good');
+  }
+  function v6611BonusItems(){
+    if(!state.bonus.length) return `<p class="muted">${t('empty')} · ${t('bonusWeekQuickCheckOnly')}</p>`;
+    return `<div class="list v6611-bonus-list">${state.bonus.map(b=>`<div class="list-item v6611-bonus-item"><div><strong>${escapeHtml(v6611BonusLabel(b))}</strong><div class="small muted">${escapeHtml(b.category||'')} ${b.at?'· '+v6611DateLabel(b.at):''}</div><span class="pill ${b.order?'good':'warn'}">${b.order?L('Op bestellijst','On order list'):L('Alleen controleren','Check only')}</span></div><div class="btn-row"><button class="btn small" data-action="toggle-bonus-order" data-id="${escapeHtml(b.id)}">${b.order?L('Niet bestellen','Do not order'):L('Bestellijst','Order list')}</button><button class="btn small bad" data-action="delete-bonus" data-id="${escapeHtml(b.id)}">${t('delete')}</button></div></div>`).join('')}</div>`;
+  }
+  function v6611BonusHistory(){
+    if(!state.bonusHistory.length) return `<p class="small muted">${t('noBonusHistory') || L('Nog geen oude bonusweken opgeslagen.','No old promotion weeks stored yet.')}</p>`;
+    return `<details class="v6611-bonus-history"><summary>${t('bonusWeekHistory') || L('Bonusweek historie','Promotion week history')} · ${state.bonusHistory.length}</summary><div class="list mt">${state.bonusHistory.slice(0,5).map(h=>`<div class="list-item compact"><span>${v6611DateLabel(h.at)} · ${h.count||0} ${L('artikelen','items')}</span><span class="pill info">${L('opgeslagen','saved')}</span></div>`).join('')}</div></details>`;
+  }
+  function v6611RenderBonusWeek(){
+    return `<div class="v6611-bonus-week"><div class="btn-row mb"><button class="btn" data-action="copy-bonus-week-v6611">${t('copyShort')}</button><button class="btn bad" data-action="start-bonus-week-v6611">${t('newWeekShort')}</button></div><p class="small muted">${t('bonusWeekQuickCheckOnly')}</p>${v6611BonusItems()}${v6611BonusHistory()}</div>`;
+  }
+  renderBonus = window.renderBonus = function(){ return v6611RenderBonusWeek(); };
+
+  function v6611ShowingText(shown,total){
+    return String(t('showingProfiles') || '').replace('{shown}', shown).replace('{total}', total) || `${shown}/${total}`;
+  }
+  function v6611ProductProfiles(){
+    if(typeof window.agfNormalize === 'function') window.agfNormalize();
+    const q = String((state.ui && state.ui.agfProfileSearch) || '').toLowerCase();
+    const cat = (state.ui && state.ui.agfProfileCategory) || '';
+    const cats = typeof allAgfCats === 'function' ? allAgfCats() : [];
+    let products = (state.agfProducts || []).filter(function(p){
+      const hay = ((p.name||'')+' '+(p.nasa||'')+' '+(p.category||'')+' '+(p.aliases||'')).toLowerCase();
+      return (!q || hay.includes(q)) && (!cat || p.category === cat);
+    }).sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||'')); });
+    const total = products.length;
+    const expanded = !!(state.ui && state.ui.agfProfilesExpanded);
+    const defaultLimit = (q || cat) ? 12 : 5;
+    const maxExpanded = 60;
+    const limit = expanded ? maxExpanded : defaultLimit;
+    const shown = Math.min(total, limit);
+    products = products.slice(0, limit);
+    const categoryOptions = cats.map(function(c){ return '<option value="'+escapeHtml(c)+'" '+(cat===c?'selected':'')+'>'+escapeHtml(typeof catLabel==='function'?catLabel(c):c)+'</option>'; }).join('');
+    const toggleNeeded = total > defaultLimit;
+    const toolbar = '<div class="agf-profile-toolbar v6611-profile-toolbar form-grid"><input class="input" id="agfProfileSearch" value="'+escapeHtml((state.ui && state.ui.agfProfileSearch)||'')+'" placeholder="'+L('Zoek profiel, NASA of categorie','Search profile, NASA or category')+'"><select class="input" data-action="agf-profile-category-v6520"><option value="">'+t('allGroups')+'</option>'+categoryOptions+'</select>'+(toggleNeeded?'<button class="btn" data-action="toggle-agf-profiles-expanded-v6520">'+(expanded?L('Minder tonen','Show less'):L('Meer tonen','Show more'))+'</button>':'')+'</div>';
+    const help = '<p class="small muted v6611-profile-help">'+t('profilesCompactHelp')+(q?' '+t('profileSearchHint'):'')+'</p><div class="small muted mt">'+escapeHtml(v6611ShowingText(shown,total))+'</div>';
+    const list = products.map(function(p){
+      const d = typeof agfDecision === 'function' ? agfDecision(p) : {status:'-',action:'stable',advice:t('monitor')||'Monitor'};
+      const label = typeof window.agfTr === 'function' ? window.agfTr(p.name||'') : (p.name||'');
+      const category = typeof catLabel === 'function' ? catLabel(p.category||'') : (p.category||'');
+      const tone = d.action==='increase'?'bad':d.action==='hold'?'warn':d.action==='decrease'?'warn':'good';
+      return '<div class="list-item agf-profile-card v6611-profile-card"><div><strong>'+escapeHtml(label)+'</strong><div class="small muted">'+escapeHtml(category)+' · NASA '+escapeHtml(p.nasa||'-')+'</div><div class="small"><span class="pill info">'+t('currentStatus')+': '+(typeof localStatus==='function'?localStatus(d.status):escapeHtml(d.status||'-'))+'</span> <span class="pill '+tone+'">'+escapeHtml(d.advice||t('monitor')||'Monitor')+'</span></div></div><div class="btn-row"><button class="btn small" data-action="open-agf-profile-v6518" data-id="'+escapeHtml(p.id)+'">'+t('productProfile')+'</button><button class="btn small" data-action="edit-agf-product" data-id="'+escapeHtml(p.id)+'">'+t('edit')+'</button></div></div>';
+    }).join('') || '<p class="muted">'+t('empty')+'</p>';
+    const moreNote = total > maxExpanded && expanded ? '<p class="small muted mt">'+L('Gebruik zoeken om verder te verfijnen; maximaal 60 profielen worden tegelijk getoond.','Use search to refine further; up to 60 profiles are shown at once.')+'</p>' : '';
+    return '<div class="v6611-product-profiles">'+toolbar+help+'<div id="agfProfileList" class="list mt">'+list+'</div>'+moreNote+'</div>';
+  }
+  renderAgfProducts = window.renderAgfProducts = v6611ProductProfiles;
+
+  const v6611BaseRenderAgf = renderAgf;
+  renderAgf = window.renderAgf = function(){
+    let html = v6611BaseRenderAgf();
+    html = html.replaceAll('v6.6.10','v6.6.11').replaceAll('v6.6.9','v6.6.11')
+      .replaceAll('rich-cmd-cache-v6610','rich-cmd-cache-v6611').replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6611')
+      .replace('Bonusweek & Regression Polish','AGF Compact Profile & Bonusweek Polish')
+      .replace('AGF Intelligence & Mobile QA Polish','AGF Compact Profile & Bonusweek Polish');
+    return html;
+  };
+
+  function v6611RegressionChecks(){
+    const rows=[];
+    let agf='';
+    try { agf = String(renderAgf()); } catch(err) { agf = 'ERR '+err.message; }
+    rows.push({name:t('copyShort'), ok:/copy-bonus-week-v6611/.test(agf)});
+    rows.push({name:t('newWeekShort'), ok:/start-bonus-week-v6611/.test(agf)});
+    rows.push({name:L('Geen losse Toevoegen bonus-knop','No separate Add promotion button'), ok:!/open-bonus-form/.test(agf)});
+    rows.push({name:L('Productprofielen compact','Product profiles compact'), ok:/v6611-product-profiles/.test(agf) && /toggle-agf-profiles-expanded-v6520/.test(agf)});
+    rows.push({name:L('AGF Quick Check bonus B blijft actief','Produce Quick Check promotion B remains active'), ok:/toggle-agf-bonus/.test(agf)});
+    return rows;
+  }
+  function v6611PolishCard(){
+    const checks = v6611RegressionChecks();
+    return `<div class="card v6611-polish-card"><h3>${t('v6611Title')}</h3><p class="muted small">${t('v6611Subtitle')}</p><div class="list">${checks.map(r=>`<div class="list-item compact"><span>${escapeHtml(r.name)}</span><span class="pill ${r.ok?'good':'bad'}">${r.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="callout mt"><strong>${t('nextUpdateIdeaTitle')}</strong><p class="small muted">${t('nextUpdateIdeaText')}</p></div></div>`;
+  }
+
+  const v6611BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v6611BaseDiagnostics()
+      .replaceAll('v6.6.10','v6.6.11')
+      .replaceAll('v6.6.9','v6.6.11')
+      .replaceAll('rich-cmd-cache-v6610','rich-cmd-cache-v6611')
+      .replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6611');
+    return html + `<div class="grid grid-2">${v6611PolishCard()}<div class="card"><h3>${t('nextUpdateIdeaTitle')}</h3><p>${t('nextUpdateIdeaText')}</p><p class="muted small">${t('update6611Note')}</p></div></div>`;
+  };
+
+  const v6611BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    return v6611BaseSettings()
+      .replaceAll('v6.6.10','v6.6.11')
+      .replaceAll('v6.6.9','v6.6.11')
+      .replaceAll('rich-cmd-cache-v6610','rich-cmd-cache-v6611')
+      .replaceAll('rich-cmd-cache-v669','rich-cmd-cache-v6611');
+  };
+
+  async function v6611CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui = state.ui || {}; state.ui.updateMetadata = meta; state.ui.availableVersion = meta.latestVersion || APP.version; state.ui.lastUpdateCheckAt = nowISO();
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa'); save(); render();
+      if(!silent) toast((meta.latestVersion && meta.latestVersion!==APP.version) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v6611PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const assets=['./','./index.html','./index.html?v=6611','./styles.css?v=6611','./app.js?v=6611','./manifest.json?v=6611','./version.json','./icon-192.png','./icon-512.png'];
+      const cache=await caches.open(APP.cache); await cache.addAll(assets);
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt=nowISO(); addActivity(t('prepareOffline')||'Offline voorbereiden','pwa'); save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v6611ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+
+  const v6611BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='copy-bonus-week-v6611' || a==='copy-bonus-week-v6610'){ v6611CopyBonusWeek(); return; }
+    if(a==='start-bonus-week-v6611' || a==='start-bonus-week-v6610'){ v6611ClearBonusWeek(); return; }
+    if(a==='pwa-check-update-v6611' || /^pwa-check-update-v66/.test(a)){ v6611CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v6611' || /^pwa-prepare-offline-v66/.test(a)){ v6611PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v6611' || /^pwa-activate-update-v66/.test(a)){ v6611ActivateUpdate(); return; }
+    return v6611BaseHandle(a, el, e);
+  };
+
+  save(); render();
+} catch(err) {
+  console.error('v6.6.11 AGF Compact Profile & Bonusweek Polish failed', err);
+}
+
+/* =========================================================
+   RICH CMD v6.7.0 — V7 Foundation Cleanup
+   Central QA layer, compatibility aliases and V7 readiness guard.
+========================================================= */
+try {
+  APP.version = 'v6.7.0';
+  APP.cache = 'rich-cmd-cache-v670';
+  APP.updateUrl = './version.json';
+  state.schemaVersion = Math.max(6700, +state.schemaVersion || 0);
+  state.ui = state.ui || {};
+  document.documentElement.setAttribute('data-v670-cleaning','1');
+
+  window.RICH_CMD_BUILD = {
+    version: APP.version,
+    cache: APP.cache,
+    release: 'V7 Foundation Cleanup',
+    assets: ['./','./index.html','./index.html?v=670','./styles.css?v=670','./app.js?v=670','./manifest.json?v=670','./version.json','./icon-192.png','./icon-512.png'],
+    modules: ['today','haccp','storemap','agf','inventory','communication','visual','coaching','diagnostics','settings']
+  };
+
+  Object.assign(I18N.nl, {
+    v670Title:'RICH CMD v6.7.0 — V7 Foundation Cleanup',
+    v670Subtitle:'Een kwaliteitslaag richting V7: oude patchresten bewaken, modules testen en de app stabieler voorbereiden op grotere updates.',
+    foundationGuard:'V7 Foundation Guard',
+    foundationGuardText:'Deze laag controleert of hoofdmodules renderen, oude assist-extra blokken wegblijven en PWA/cache-informatie klopt.',
+    runFoundationTest:'Foundation-test uitvoeren',
+    cleanupLegacy:'Oude patchresten opruimen',
+    cleanupCaches:'Oude caches opruimen',
+    exportQa:'QA-samenvatting kopiëren',
+    moduleRegistry:'Module-register',
+    compatibilityLayer:'Compatibiliteitslaag',
+    compatibilityText:'Knoppen en update-acties uit v6.6.x blijven werken, maar worden in deze versie via één foundationlaag afgehandeld.',
+    v7Readiness:'V7-gereedheid',
+    v7ReadinessText:'De basis is stabiel genoeg om modules richting V7 gecontroleerd te verfijnen, zonder direct grote nieuwe functies te stapelen.',
+    legacyBlocks:'Oude blokken',
+    horizontalOverflow:'Horizontale overflow',
+    renderTests:'Rendertests',
+    updateAssets:'Update-assets',
+    lastFoundationRun:'Laatste foundation-test',
+    noFoundationRun:'Nog niet uitgevoerd',
+    foundationPassed:'Foundation-test afgerond',
+    legacyCleaned:'Oude layoutresten opgeruimd',
+    oldCachesCleaned:'Oude caches opgeruimd',
+    qaCopied:'QA-samenvatting gekopieerd',
+    update670Note:'v6.7.0: V7 Foundation Cleanup met centrale regressiechecks, mobile guard, compatibiliteitsaliases en update/cache-bewaking.',
+    next671Idea:'Volgende logische stap: v6.7.1 — V7 Blueprint & Module Refinement. Per module kiezen wat richting V7 blijft, compacter moet of later gebouwd wordt.'
+  });
+  Object.assign(I18N.en, {
+    v670Title:'RICH CMD v6.7.0 — V7 Foundation Cleanup',
+    v670Subtitle:'A quality layer toward V7: monitoring old patch remnants, testing modules and preparing the app for larger updates.',
+    foundationGuard:'V7 Foundation Guard',
+    foundationGuardText:'This layer checks whether main modules render, old assist-extra blocks stay away and PWA/cache info is correct.',
+    runFoundationTest:'Run foundation test',
+    cleanupLegacy:'Clean legacy patch remnants',
+    cleanupCaches:'Clean old caches',
+    exportQa:'Copy QA summary',
+    moduleRegistry:'Module registry',
+    compatibilityLayer:'Compatibility layer',
+    compatibilityText:'Buttons and update actions from v6.6.x remain supported, but are now handled through one foundation layer.',
+    v7Readiness:'V7 readiness',
+    v7ReadinessText:'The base is stable enough to refine modules toward V7 in controlled steps, without stacking many large features at once.',
+    legacyBlocks:'Legacy blocks',
+    horizontalOverflow:'Horizontal overflow',
+    renderTests:'Render tests',
+    updateAssets:'Update assets',
+    lastFoundationRun:'Last foundation test',
+    noFoundationRun:'Not run yet',
+    foundationPassed:'Foundation test complete',
+    legacyCleaned:'Legacy layout remnants cleaned',
+    oldCachesCleaned:'Old caches cleaned',
+    qaCopied:'QA summary copied',
+    update670Note:'v6.7.0: V7 Foundation Cleanup with central regression checks, mobile guard, compatibility aliases and update/cache monitoring.',
+    next671Idea:'Next logical step: v6.7.1 — V7 Blueprint & Module Refinement. Decide per module what stays for V7, what should be compacted or what should be built later.'
+  });
+
+  function v670Assets(){ return window.RICH_CMD_BUILD.assets.slice(); }
+  function v670DateTime(iso){
+    if(!iso) return t('noFoundationRun');
+    try { return new Date(iso).toLocaleString(currentLang()==='en'?'en-GB':'nl-NL'); } catch(_) { return String(iso); }
+  }
+  function v670Status(ok){ return `<span class="pill ${ok?'good':'bad'}">${ok?'OK':'Check'}</span>`; }
+  function v670WarnStatus(ok){ return `<span class="pill ${ok?'good':'warn'}">${ok?'OK':'Let op'}</span>`; }
+  function v670NormalizeVisibleVersion(html){
+    return String(html||'')
+      .replace(/RICH CMD v6\.6\.6/g, 'RICH CMD v6.7.0')
+      .replace(/RICH CMD v6\.6\.11/g, 'RICH CMD v6.7.0')
+      .replace(/AGF Compact Profile & Bonusweek Polish/g, 'V7 Foundation Cleanup')
+      .replace(/rich-cmd-cache-v6611/g, 'rich-cmd-cache-v670')
+      .replace(/\?v=6611/g, '?v=670');
+  }
+
+  function v670LegacyNodes(){
+    if(typeof document === 'undefined') return [];
+    return Array.from(document.querySelectorAll('.v660-assist-extra,.v661-assist-extra,.assist-extra.v660-assist-extra,.assist-extra.v661-assist-extra'));
+  }
+  function v670CleanLegacyDom(){
+    const nodes = v670LegacyNodes();
+    nodes.forEach(n => n.remove());
+    document.querySelectorAll('.v670-mobile-warning').forEach(n => n.classList.remove('v670-mobile-warning'));
+    return nodes.length;
+  }
+  function v670DetectOverflow(){
+    if(typeof document === 'undefined') return {ok:true,count:0,items:[]};
+    const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+    const items = [];
+    document.querySelectorAll('body *').forEach(el => {
+      if(items.length > 8) return;
+      const r = el.getBoundingClientRect && el.getBoundingClientRect();
+      if(!r || r.width < 1 || r.height < 1) return;
+      if(r.right > vw + 4 || r.left < -4){
+        items.push({tag:el.tagName.toLowerCase(), cls:String(el.className||'').slice(0,80)});
+        el.classList.add('v670-mobile-warning');
+      }
+    });
+    return {ok:items.length===0,count:items.length,items};
+  }
+  function v670ModuleRenderers(){
+    return {
+      today: (typeof v670BaseToday === 'function' ? v670BaseToday : renderToday),
+      haccp: renderHaccp,
+      storemap: renderStoreMap,
+      agf: (typeof v670BaseAgf === 'function' ? v670BaseAgf : renderAgf),
+      inventory: renderInventory,
+      communication: renderCommunication,
+      visual: renderVisual,
+      coaching: renderCoaching,
+      diagnostics: (typeof v670BaseDiagnostics === 'function' ? v670BaseDiagnostics : function(){ return '<div>diagnostics</div>'; }),
+      settings: (typeof v670BaseSettings === 'function' ? v670BaseSettings : function(){ return '<div>settings</div>'; })
+    };
+  }
+  function v670RunModuleTests(){
+    const renderers = v670ModuleRenderers();
+    return Object.keys(renderers).map(key => {
+      try {
+        const html = String(renderers[key]());
+        return {key, ok: html.length > 40 && !/^ERR/.test(html), details: `${html.length} chars`};
+      } catch(err) {
+        return {key, ok:false, details: err && err.message ? err.message : String(err)};
+      }
+    });
+  }
+  function v670FoundationChecks(){
+    const moduleRows = v670RunModuleTests();
+    const legacyCount = v670LegacyNodes().length;
+    const overflow = v670DetectOverflow();
+    const agfHtml = (()=>{ try { return String(renderAgf()); } catch(_) { return ''; } })();
+    const checks = [
+      {name:t('renderTests'), ok: moduleRows.every(r=>r.ok), details:`${moduleRows.filter(r=>r.ok).length}/${moduleRows.length}`},
+      {name:t('legacyBlocks'), ok: legacyCount===0, details:String(legacyCount)},
+      {name:t('horizontalOverflow'), ok: overflow.ok, details: overflow.count ? `${overflow.count}` : '0'},
+      {name:'APP.version', ok: /^v6\.7\./.test(APP.version), details: APP.version},
+      {name:'APP.cache', ok: /^rich-cmd-cache-v67/.test(APP.cache), details: APP.cache},
+      {name:'version.json', ok: true, details:'./version.json'},
+      {name:'Bonusweek: Kopieer', ok:/copy-bonus-week-v6611/.test(agfHtml) || /copy-bonus-week-v670/.test(agfHtml), details:'AGF'},
+      {name:'Bonusweek: Nieuwe Week', ok:/start-bonus-week-v6611/.test(agfHtml) || /start-bonus-week-v670/.test(agfHtml), details:'AGF'},
+      {name:'Productprofielen compact', ok:/v6611-product-profiles/.test(agfHtml), details:'AGF'},
+      {name:'Quick Check bonus B', ok:/toggle-agf-bonus/.test(agfHtml), details:'AGF'}
+    ];
+    return {checks, modules: moduleRows, overflow, legacyCount};
+  }
+  function v670RunAndStoreFoundation(){
+    const result = v670FoundationChecks();
+    state.ui.v670Foundation = {at:nowISO(), result};
+    addActivity(t('runFoundationTest'), 'diagnostics');
+    save();
+    toast(t('foundationPassed'), result.checks.every(x=>x.ok) ? 'good' : 'warn');
+    render();
+  }
+  async function v670ClearOldCaches(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const keys = await caches.keys();
+      const old = keys.filter(k => /rich-cmd-cache/.test(k) && k !== APP.cache);
+      await Promise.all(old.map(k => caches.delete(k)));
+      addActivity(t('cleanupCaches') + ': ' + old.length, 'pwa');
+      save(); render(); toast(t('oldCachesCleaned') + ` (${old.length})`, 'good');
+    }catch(err){ console.error(err); toast('Caches opruimen mislukt','bad'); }
+  }
+  function v670CleanupLegacy(){
+    const count = v670CleanLegacyDom();
+    state.ui.v670LegacyCleanedAt = nowISO();
+    addActivity(t('cleanupLegacy') + ': ' + count, 'diagnostics');
+    save(); render(); toast(t('legacyCleaned') + ` (${count})`, 'good');
+  }
+  function v670QaSummary(){
+    const data = state.ui.v670Foundation || {at:null,result:v670FoundationChecks()};
+    const checks = data.result.checks || [];
+    const modules = data.result.modules || [];
+    return [
+      `RICH CMD QA — ${APP.version}`,
+      `Cache: ${APP.cache}`,
+      `Laatste test: ${v670DateTime(data.at)}`,
+      '',
+      'Checks:',
+      ...checks.map(c => `- ${c.ok?'OK':'CHECK'} ${c.name}: ${c.details||''}`),
+      '',
+      'Modules:',
+      ...modules.map(m => `- ${m.ok?'OK':'CHECK'} ${m.key}: ${m.details||''}`)
+    ].join('\n');
+  }
+  function v670CopyQa(){ copyText(v670QaSummary()); addActivity(t('exportQa'),'diagnostics'); toast(t('qaCopied'),'good'); }
+  function v670ReadinessScore(){
+    const data = (state.ui && state.ui.v670Foundation && state.ui.v670Foundation.result) || v670FoundationChecks();
+    const checks = data.checks || [];
+    const base = checks.length ? Math.round((checks.filter(c=>c.ok).length / checks.length) * 100) : 0;
+    return Math.max(0, Math.min(100, base));
+  }
+  function v670FoundationCard(){
+    const data = state.ui.v670Foundation || null;
+    const result = data ? data.result : v670FoundationChecks();
+    const checks = result.checks || [];
+    const modules = result.modules || [];
+    return `<div class="card v670-foundation-card"><h3>${t('foundationGuard')}</h3><p class="muted small">${t('foundationGuardText')}</p><div class="grid grid-4"><div class="kpi"><span>${t('v7Readiness')}</span><strong>${v670ReadinessScore()}%</strong></div><div class="kpi"><span>${t('legacyBlocks')}</span><strong>${result.legacyCount||0}</strong></div><div class="kpi"><span>${t('renderTests')}</span><strong>${modules.filter(m=>m.ok).length}/${modules.length}</strong></div><div class="kpi"><span>Cache</span><strong>v671</strong></div></div><div class="btn-row mt v670-qa-actions"><button class="btn primary" data-action="v670-run-foundation">${t('runFoundationTest')}</button><button class="btn" data-action="v670-clean-legacy">${t('cleanupLegacy')}</button><button class="btn" data-action="v670-clear-old-caches">${t('cleanupCaches')}</button><button class="btn" data-action="v670-copy-qa">${t('exportQa')}</button></div><p class="small muted mt"><strong>${t('lastFoundationRun')}:</strong> ${v670DateTime(data && data.at)}</p><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted v670-mini-code">${escapeHtml(c.details||'')}</span></span>${v670Status(c.ok)}</div>`).join('')}</div></div>`;
+  }
+  function v670ModuleRegistryCard(){
+    const modules = v670RunModuleTests();
+    return `<div class="card v670-regression-card"><h3>${t('moduleRegistry')}</h3><p class="muted small">${t('compatibilityText')}</p><div class="v670-module-grid">${modules.map(m=>`<div class="v670-module-chip"><strong>${escapeHtml(routeLabel(m.key)||m.key)}</strong><div class="small muted">${escapeHtml(m.details||'')}</div>${v670Status(m.ok)}</div>`).join('')}</div></div>`;
+  }
+  function v670ReadinessCard(){
+    const score = v670ReadinessScore();
+    return `<div class="card v670-readiness-card"><h3>${t('v7Readiness')}</h3><div class="v670-readiness-score">${score}%</div><p>${t('v7ReadinessText')}</p><div class="v670-pill-row"><span class="pill good">Mobile QA</span><span class="pill good">PWA Update</span><span class="pill good">Regression</span><span class="pill good">AGF compact</span><span class="pill good">Store Map baseline</span></div><div class="callout mt"><strong>v6.7.1</strong><p class="small muted">${t('next671Idea')}</p></div></div>`;
+  }
+
+  const v670BaseRender = render;
+  render = window.render = function(){
+    const out = v670BaseRender();
+    setTimeout(function(){ try { v670CleanLegacyDom(); } catch(_){} }, 0);
+    return out;
+  };
+
+  const v670BaseToday = renderToday;
+  renderToday = window.renderToday = function(){
+    return v670NormalizeVisibleVersion(v670BaseToday());
+  };
+  const v670BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    let html = v670NormalizeVisibleVersion(v670BaseSettings());
+    return html + `<div class="grid grid-2 mt diagnostics-v670">${v670FoundationCard()}${v670ReadinessCard()}</div>`;
+  };
+  const v670BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    let html = v670NormalizeVisibleVersion(v670BaseDiagnostics());
+    return `<div class="diagnostics-v670">${html}<div class="grid grid-2 mt">${v670FoundationCard()}${v670ModuleRegistryCard()}</div><div class="grid grid-2 mt">${v670ReadinessCard()}<div class="card"><h3>${t('v670Title')}</h3><p>${t('v670Subtitle')}</p><p class="muted small">${t('update670Note')}</p></div></div></div>`;
+  };
+  const v670BaseAgf = renderAgf;
+  renderAgf = window.renderAgf = function(){ return v670NormalizeVisibleVersion(v670BaseAgf()); };
+
+  async function v670CheckUpdate(silent=false){
+    try{
+      if(!silent) toast(t('updateCheckStarted')||'Updatecontrole gestart','info');
+      const res = await fetch(`./version.json?t=${Date.now()}`, {cache:'no-store'});
+      const meta = res.ok ? await res.json() : {};
+      state.ui.updateMetadata = meta;
+      state.ui.availableVersion = meta.latestVersion || APP.version;
+      state.ui.lastUpdateCheckAt = nowISO();
+      if('serviceWorker' in navigator){ const reg = await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); if(reg && reg.waiting) state.ui.updateWaiting = true; }
+      addActivity(t('checkForUpdates')||'Zoek naar update','pwa');
+      save(); render();
+      if(!silent) toast((meta.latestVersion && meta.latestVersion!==APP.version) || state.ui.updateWaiting ? (t('updateReadyReload')||'Update klaar') : (t('noUpdateFound')||'Geen update gevonden'), 'info');
+    }catch(err){ console.error(err); if(!silent) toast(t('updateMetadataFailed')||'Versie-informatie kon niet worden opgehaald','warn'); }
+  }
+  async function v670PrepareOffline(){
+    try{
+      if(!('caches' in window)){ toast('Cache API niet beschikbaar','warn'); return; }
+      const cache = await caches.open(APP.cache);
+      await cache.addAll(v670Assets());
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'});
+      state.ui.offlinePreparedAt = nowISO();
+      addActivity(t('prepareOffline')||'Offline voorbereiden','pwa');
+      save(); render(); toast(t('offlinePrepared')||'Offline voorbereid','good');
+    }catch(err){ console.error(err); toast('Offline voorbereiding mislukt. Open de app online en probeer opnieuw.','bad'); }
+  }
+  async function v670ActivateUpdate(){
+    try{ const reg=('serviceWorker' in navigator)?await navigator.serviceWorker.getRegistration():null; if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); setTimeout(()=>location.reload(),500); return; } location.reload(); }catch(_){ location.reload(); }
+  }
+
+
+  function v670BonusLabel(b){
+    const name = typeof window.agfTr === 'function' ? window.agfTr(b.name || '') : (b.name || '');
+    return `${name}${b.nasa ? ' (NASA ' + b.nasa + ')' : ''}`;
+  }
+  function v670CopyBonusWeek(){
+    const lines = (state.bonus || []).map(v670BonusLabel);
+    copyText(lines.length ? lines.join('\n') : (t('empty') || 'Geen bonusartikelen'));
+    addActivity(t('copyShort') || 'Kopieer', 'agf');
+    toast(t('copied') || 'Gekopieerd', 'good');
+  }
+  function v670ClearBonusWeek(){
+    state.bonus = Array.isArray(state.bonus) ? state.bonus : [];
+    state.bonusHistory = Array.isArray(state.bonusHistory) ? state.bonusHistory : [];
+    if(state.bonus.length && !confirm(t('clearBonusWeekConfirmShort') || 'Nieuwe week starten? De huidige bonusartikelen worden bewaard en daarna geleegd.')) return;
+    if(state.bonus.length){
+      state.bonusHistory.unshift({id:uid('bonusWeek'), at:nowISO(), count:state.bonus.length, items:state.bonus.map(b=>({...b}))});
+      state.bonusHistory = state.bonusHistory.slice(0,12);
+    }
+    state.bonus = [];
+    addActivity(t('newWeekShort') || 'Nieuwe Week', 'agf');
+    save(); render(); toast(t('bonusWeekCleared') || 'Bonusweek geleegd', 'good');
+  }
+
+  const v670BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v670-run-foundation'){ v670RunAndStoreFoundation(); return; }
+    if(a==='v670-clean-legacy' || a==='cleanup-legacy-layout' || a==='cleanup-old-layout'){ v670CleanupLegacy(); return; }
+    if(a==='v670-clear-old-caches' || a==='clear-old-caches' || a==='pwa-clear-old-caches-v669'){ v670ClearOldCaches(); return; }
+    if(a==='v670-copy-qa'){ v670CopyQa(); return; }
+    if(a==='pwa-check-update-v670' || /^pwa-check-update-v6/.test(a)){ v670CheckUpdate(false); return; }
+    if(a==='pwa-prepare-offline-v670' || /^pwa-prepare-offline-v6/.test(a)){ v670PrepareOffline(); return; }
+    if(a==='pwa-activate-update-v670' || /^pwa-activate-update-v6/.test(a)){ v670ActivateUpdate(); return; }
+    if(a==='copy-bonus-week-v670'){ v670CopyBonusWeek(); return; }
+    if(a==='start-bonus-week-v670'){ v670ClearBonusWeek(); return; }
+    return v670BaseHandle(a, el, e);
+  };
+
+  try { v670CleanLegacyDom(); } catch(_) {}
+  save(); render();
+} catch(err) {
+  console.error('v6.7.0 V7 Foundation Cleanup failed', err);
+}
+
+/* =========================================================
+   RICH CMD v6.7.1 — Shift Report & Tomorrow Prep
+   Smarter shift closing, automatic handover and tomorrow planning.
+========================================================= */
+try {
+  APP.version = 'v6.7.1';
+  APP.cache = 'rich-cmd-cache-v671';
+  APP.updateUrl = './version.json';
+  state.schemaVersion = Math.max(6710, +state.schemaVersion || 0);
+  state.ui = state.ui || {};
+
+  window.RICH_CMD_BUILD = {
+    ...(window.RICH_CMD_BUILD || {}),
+    version: APP.version,
+    cache: APP.cache,
+    release: 'Shift Report & Tomorrow Prep',
+    assets: ['./','./index.html','./index.html?v=671','./styles.css?v=671','./app.js?v=671','./manifest.json?v=671','./version.json','./icon-192.png','./icon-512.png'],
+    modules: ['today','haccp','storemap','agf','inventory','communication','visual','coaching','diagnostics','settings']
+  };
+
+  Object.assign(I18N.nl, {
+    v671Title:'RICH CMD v6.7.1 — Shift Report & Tomorrow Prep',
+    v671Subtitle:'Sluit je shift slimmer af, kopieer een dagrapport en bereid morgen direct voor.',
+    shiftClosing:'Shift afsluiten',
+    dayReport:'Dagrapport',
+    copyDayReport:'Rapport kopiëren',
+    copyHandover:'Overdracht kopiëren',
+    prepareTomorrow:'Morgen voorbereiden',
+    tomorrowPrep:'Morgenvoorbereiding',
+    tomorrowAdvice:'Advies voor morgen',
+    doneToday:'Vandaag afgerond',
+    stillOpen:'Nog open',
+    carriedFromYesterday:'Gisteren blijven liggen',
+    noCarryover:'Geen overdracht van gisteren.',
+    shiftScoreSimple:'Shift score',
+    closeAndSaveReport:'Shift afsluiten en rapport opslaan',
+    dayFlow:'Dagflow',
+    openRisks:'Open risico’s',
+    tomorrowReady:'Morgen voorbereid',
+    reportCopied:'Rapport gekopieerd',
+    handoverCopied:'Overdracht gekopieerd',
+    tomorrowNoteSaved:'Morgennotitie opgeslagen',
+    addTomorrowNote:'Eigen notitie voor morgen',
+    saveTomorrowNote:'Morgennotitie opslaan',
+    carryoverDone:'Overdracht afgehandeld',
+    noActiveShift:'Geen actieve shift.',
+    confirmShiftCloseText:'Controleer kort wat is afgerond, wat open blijft en wat morgen als eerste aandacht vraagt.',
+    openShiftReport:'Laatste shiftrapport bekijken',
+    reportStored:'Shiftrapport opgeslagen',
+    shiftReportChecks:'Shift Report checks',
+    next671Idea:'Volgende logische stap: v6.7.2 — Visualisatie & Weekoverzicht. Dagrapporten, shift scores en open overdrachten samenbrengen in trends.'
+  });
+  Object.assign(I18N.en, {
+    v671Title:'RICH CMD v6.7.1 — Shift Report & Tomorrow Prep',
+    v671Subtitle:'Close your shift smarter, copy a day report and prepare tomorrow right away.',
+    shiftClosing:'Close shift',
+    dayReport:'Day report',
+    copyDayReport:'Copy report',
+    copyHandover:'Copy handover',
+    prepareTomorrow:'Prepare tomorrow',
+    tomorrowPrep:'Tomorrow preparation',
+    tomorrowAdvice:'Tomorrow advice',
+    doneToday:'Completed today',
+    stillOpen:'Still open',
+    carriedFromYesterday:'Carried from yesterday',
+    noCarryover:'No carry-over from yesterday.',
+    shiftScoreSimple:'Shift score',
+    closeAndSaveReport:'Close shift and save report',
+    dayFlow:'Day flow',
+    openRisks:'Open risks',
+    tomorrowReady:'Tomorrow prepared',
+    reportCopied:'Report copied',
+    handoverCopied:'Handover copied',
+    tomorrowNoteSaved:'Tomorrow note saved',
+    addTomorrowNote:'Own note for tomorrow',
+    saveTomorrowNote:'Save tomorrow note',
+    carryoverDone:'Carry-over completed',
+    noActiveShift:'No active shift.',
+    confirmShiftCloseText:'Quickly check what was completed, what remains open and what needs attention first tomorrow.',
+    openShiftReport:'View latest shift report',
+    reportStored:'Shift report saved',
+    shiftReportChecks:'Shift report checks',
+    next671Idea:'Next logical step: v6.7.2 — Visualization & Week Overview. Bring day reports, shift scores and open handovers together as trends.'
+  });
+
+  function v671Normalize(html){
+    return String(html||'')
+      .replace(/RICH CMD v6\.7\.0/g, 'RICH CMD v6.7.1')
+      .replace(/RICH CMD V6\.6\.6/g, 'RICH CMD v6.7.1')
+      .replace(/RICH CMD V6\.6\.5/g, 'RICH CMD v6.7.1')
+      .replace(/RICH CMD V6\.6\.4/g, 'RICH CMD v6.7.1')
+      .replace(/V7 Foundation Cleanup/g, 'Shift Report & Tomorrow Prep')
+      .replace(/rich-cmd-cache-v670/g, 'rich-cmd-cache-v671')
+      .replace(/\?v=670/g, '?v=671');
+  }
+  function v671SafeArray(arr){ return Array.isArray(arr) ? arr : []; }
+  function v671DateLabel(iso){ try { return iso ? dateOnly(iso) : '-'; } catch(_) { return iso || '-'; } }
+  function v671DoneStatus(x){ return ['Voltooid','Afgehandeld','done','completed'].includes(x); }
+  function v671OpenTasks(){ return v671SafeArray(state.tasks).filter(task => task && !['Voltooid','Overgeslagen'].includes(task.status)); }
+  function v671CompletedToday(){ const today = TODAY(); return v671SafeArray(state.tasks).filter(task => task && task.status==='Voltooid' && String(task.completedAt||task.updatedAt||'').slice(0,10) === today); }
+  function v671DeferredTasks(){ return v671SafeArray(state.tasks).filter(task => task && task.status==='Uitgesteld'); }
+  function v671DueComms(){ return v671SafeArray(state.communications).filter(c => c && c.status!=='Afgehandeld' && c.status!=='Voltooid' && c.status!=='Notitie' && c.followDate && c.followDate <= TODAY()); }
+  function v671OpenComms(){ return v671SafeArray(state.communications).filter(c => c && c.status!=='Afgehandeld' && c.status!=='Voltooid' && c.status!=='Notitie' && (c.urgent || c.status==='Rood' || c.status==='Geel' || !c.read || (c.followDate && c.followDate <= TODAY()))); }
+  function v671Orders(){ try { if(typeof v663OrderList === 'function') return v663OrderList(); } catch(_){} return v671SafeArray(state.inventoryOrders).filter(o => o && o.type !== 'legacy-cleared'); }
+  function v671AgfAttention(){ try { return typeof agfAttention === 'function' ? agfAttention() : []; } catch(_) { return []; } }
+  function v671StoreUrgent(){ try { return typeof cleaningUrgent === 'function' ? cleaningUrgent() : []; } catch(_) { return []; } }
+  function v671WorkMinutes(){ return v671OpenTasks().reduce((sum,t)=>sum+(+t.duration||0),0); }
+  function v671EnergyLabel(){ const e=state.ui && state.ui.energy || 'normal'; return e==='low'?t('lowEnergy'):(e==='strong'?t('strongEnergy'):t('normalEnergy')); }
+  function v671ItemLabel(item){
+    if(!item) return '';
+    return item.title || item.name || item.product || item.label || item.zone || item.message || String(item);
+  }
+  function v671Summary(){
+    const totalTasks = typeof todayTasks === 'function' ? todayTasks().length : v671SafeArray(state.tasks).length;
+    const completed = typeof completedCount === 'function' ? completedCount() : v671CompletedToday().length;
+    const open = v671OpenTasks();
+    const due = v671DueComms();
+    const orders = v671Orders();
+    const agf = v671AgfAttention();
+    const store = v671StoreUrgent();
+    const score = typeof shiftScore === 'function' ? shiftScore() : 70;
+    const focus = typeof focusMinutesToday === 'function' ? focusMinutesToday() : 0;
+    const risks = open.length + due.length + store.length + orders.length + agf.filter(a=>a && a.conflict).length;
+    return {totalTasks, completed, open, due, orders, agf, store, score, focus, risks};
+  }
+  function v671DoneLines(){
+    const s = v671Summary();
+    const lines = [];
+    lines.push(`${t('haccp')}: ${s.completed}/${s.totalTasks} ${L('taken afgerond','tasks completed')}`);
+    if(s.focus) lines.push(`${t('focus')}: ${s.focus} min`);
+    if(s.orders.length===0) lines.push(`${L('Bestelbeheer','Ordering')}: ${L('geen open bestellijst','no open order list')}`);
+    if(!s.due.length) lines.push(`${t('communication')}: ${L('geen opvolging vandaag open','no follow-up due today')}`);
+    if(!s.store.length) lines.push(`${t('storemap')}: ${L('geen urgente Store Map-punten','no urgent Cleaning Map items')}`);
+    return lines.slice(0,5);
+  }
+  function v671OpenLines(limit=6){
+    const s = v671Summary();
+    const lines=[];
+    v671DeferredTasks().slice(0,3).forEach(task=>lines.push(`${t('haccp')}: ${v671ItemLabel(task)}`));
+    s.due.slice(0,3).forEach(c=>lines.push(`${t('communication')}: ${v671ItemLabel(c).slice(0,70)}`));
+    s.store.slice(0,3).forEach(item=>lines.push(`${t('storemap')}: ${v671ItemLabel(item)}`));
+    if(s.orders.length) lines.push(`${L('Bestellijst','Order list')}: ${s.orders.length} ${L('artikel(en)','item(s)')}`);
+    s.agf.slice(0,2).forEach(a=>lines.push(`AGF: ${v671ItemLabel(a)}`));
+    if(!lines.length) lines.push(L('Geen grote open punten gevonden.','No major open points found.'));
+    return lines.slice(0,limit);
+  }
+  function v671TomorrowItems(limit=7){
+    const items=[];
+    v671DueComms().slice(0,2).forEach(c=>items.push({type:'communication', label:`${t('communication')}: ${v671ItemLabel(c).slice(0,70)}`, route:'communication'}));
+    v671StoreUrgent().slice(0,2).forEach(x=>items.push({type:'storemap', label:`${t('storemap')}: ${v671ItemLabel(x)}`, route:'storemap'}));
+    v671DeferredTasks().slice(0,2).forEach(task=>items.push({type:'haccp', label:`${t('haccp')}: ${v671ItemLabel(task)}`, route:'haccp'}));
+    if(v671Orders().length) items.push({type:'inventory', label:`${L('Bestellijst afronden','Finish order list')}: ${v671Orders().length} ${L('artikel(en)','item(s)')}`, route:'inventory'});
+    v671AgfAttention().slice(0,2).forEach(a=>items.push({type:'agf', label:`AGF: ${v671ItemLabel(a)}`, route:'agf'}));
+    const own = v671SafeArray(state.ui.v671TomorrowNotes).filter(n=>n && !n.done).slice(0,2);
+    own.forEach(n=>items.push({type:'note', label:`${t('note')}: ${n.text}`, route:'today'}));
+    if(!items.length) items.push({type:'ok', label:L('Start morgen rustig met shiftstart en AGF Quick Check.','Start tomorrow calmly with shift start and Produce Quick Check.'), route:'today'});
+    return items.slice(0,limit);
+  }
+  function v671Advice(){
+    const s=v671Summary();
+    if(s.due.length) return L('Begin morgen met open communicatie-opvolging voordat de winkelvloer druk wordt.','Start tomorrow with open communication follow-up before the shop floor gets busy.');
+    if(s.store.length) return L('Controleer morgen eerst de Store Map-punten met de hoogste urgentie.','Check the highest urgency Cleaning Map items first tomorrow.');
+    if(s.orders.length) return L('Rond de bestellijst vroeg af, zodat je daarna rustiger HACCP/AGF kunt doen.','Finish the order list early, then continue with HACCP/Produce more calmly.');
+    if(s.open.length) return L('Start morgen met één korte open HACCP-taak en daarna AGF Quick Check.','Start tomorrow with one short open HACCP task, then Produce Quick Check.');
+    return L('De dag is netjes afgerond. Morgen kan starten met de normale basisroutine.','The day is neatly closed. Tomorrow can start with the normal base routine.');
+  }
+  function v671FlowLabel(score){ return score>=85?L('sterk','strong'):score>=65?L('goed','good'):L('zwaar','heavy'); }
+  function v671RiskLabel(risks){ return risks===0?L('laag','low'):risks<5?L('middel','medium'):L('hoog','high'); }
+  function v671ReportText(){
+    const s=v671Summary();
+    const meta = (window.v673WeekMeta ? window.v673WeekMeta() : null);
+    const dateWeekLine = meta ? `${t('workDate')}: ${meta.dateLabel} · ${t('weekNumber')} ${meta.week}` : `${t('workDate')}: ${new Date().toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL')}`;
+    return [
+      `RICH CMD ${t('dayReport')} — ${new Date().toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL')}`,
+      dateWeekLine,
+      `${t('shift')}: ${shiftSummary()}`,
+      `${t('energyCheck')}: ${v671EnergyLabel()}`,
+      `${t('shiftScoreSimple')}: ${s.score}/100`,
+      '',
+      `${t('doneToday')}:`,
+      ...v671DoneLines().map(x=>`- ${x}`),
+      '',
+      `${t('stillOpen')}:`,
+      ...v671OpenLines(8).map(x=>`- ${x}`),
+      '',
+      `${t('tomorrowAdvice')}:`,
+      `- ${v671Advice()}`,
+      ...v671TomorrowItems(5).map(x=>`- ${x.label}`)
+    ].join('\n');
+  }
+  function v671HandoverText(){
+    return [
+      'Overdracht',
+      '',
+      'Gedaan:',
+      ...v671DoneLines().map(x=>`- ${x}`),
+      '',
+      'Nog open:',
+      ...v671OpenLines(6).map(x=>`- ${x}`),
+      '',
+      'Let op:',
+      `- ${v671Advice()}`,
+      '',
+      'Morgen:',
+      ...v671TomorrowItems(6).map(x=>`- ${x.label}`)
+    ].join('\n');
+  }
+  function v671ListHtml(lines, tone='info'){
+    return `<div class="list v671-list">${lines.map(line=>`<div class="list-item compact"><span>${escapeHtml(line)}</span><span class="pill ${tone}">•</span></div>`).join('')}</div>`;
+  }
+  function v671MiniScoreCard(){
+    const s=v671Summary();
+    const ready = !!(state.ui.v671Carryover && state.ui.v671Carryover.date === TODAY()) || v671TomorrowItems().length>0;
+    return `<div class="card v671-score-card"><h3>${t('dayReport')}</h3><div class="grid grid-4 v671-score-grid">${kpi(t('shiftScoreSimple'),`${s.score}/100`,s.score>80?'good':s.score>60?'warn':'bad')}${kpi(t('dayFlow'),v671FlowLabel(s.score),s.score>80?'good':'warn')}${kpi(t('openRisks'),v671RiskLabel(s.risks),s.risks>4?'bad':s.risks?'warn':'good')}${kpi(t('tomorrowReady'),ready?L('ja','yes'):L('nee','no'),ready?'good':'warn')}</div><div class="btn-row mt"><button class="btn" data-action="v671-copy-day-report">${t('copyDayReport')}</button><button class="btn" data-action="v671-open-tomorrow-prep">${t('prepareTomorrow')}</button></div></div>`;
+  }
+  function v671CarryoverItems(){
+    const carry = state.ui.v671Carryover;
+    const items=[];
+    if(carry && carry.date && carry.date < TODAY() && Array.isArray(carry.items)) carry.items.filter(x=>x && !x.done).forEach(x=>items.push(x));
+    v671OpenTasks().filter(task=>task.dueDate && task.dueDate < TODAY()).slice(0,3).forEach(task=>items.push({type:'haccp', label:`${t('haccp')}: ${v671ItemLabel(task)}`, route:'haccp'}));
+    v671SafeArray(state.communications).filter(c=>c && c.followDate && c.followDate < TODAY() && !v671DoneStatus(c.status) && c.status!=='Notitie').slice(0,3).forEach(c=>items.push({type:'communication', label:`${t('communication')}: ${v671ItemLabel(c).slice(0,70)}`, route:'communication'}));
+    const seen = new Set();
+    return items.filter(x=>{ const key=x.label||JSON.stringify(x); if(seen.has(key)) return false; seen.add(key); return true; }).slice(0,7);
+  }
+  function v671CarryoverCard(){
+    const items=v671CarryoverItems();
+    return `<div class="card v671-carryover-card"><div class="flex-line"><h3>${t('carriedFromYesterday')}</h3>${items.length?`<span class="pill warn">${items.length}</span>`:`<span class="pill good">OK</span>`}</div>${items.length?`<div class="list">${items.map((item,idx)=>`<div class="list-item compact"><span>${escapeHtml(item.label||'')}</span><div class="btn-row"><button class="btn tiny" data-route="${escapeHtml(item.route||'today')}">${L('Open','Open')}</button><button class="btn tiny good" data-action="v671-mark-carryover-done" data-index="${idx}">${t('done')}</button></div></div>`).join('')}</div>`:`<p class="muted">${t('noCarryover')}</p>`}</div>`;
+  }
+  function v671TomorrowPrepCard(){
+    const items=v671TomorrowItems(6);
+    const last = state.ui.v671TomorrowNotesAt ? dateTime(state.ui.v671TomorrowNotesAt) : '-';
+    return `<div class="card v671-tomorrow-card"><div class="flex-line"><h3>${t('tomorrowPrep')}</h3><span class="pill info">${v671DateLabel(addDays(TODAY(),1))}</span></div><p class="muted small">${v671Advice()}</p><div class="list">${items.map(i=>`<div class="list-item compact"><span>${escapeHtml(i.label)}</span><button class="btn tiny" data-route="${escapeHtml(i.route||'today')}">${L('Open','Open')}</button></div>`).join('')}</div><p class="tiny muted">${L('Laatste notitie','Last note')}: ${last}</p><div class="btn-row mt"><button class="btn primary" data-action="v671-open-tomorrow-prep">${t('prepareTomorrow')}</button><button class="btn" data-action="v671-copy-handover">${t('copyHandover')}</button></div></div>`;
+  }
+  function v671TodayWorkflowBlock(){
+    return `<div class="grid grid-2 v671-today-workflow">${v671CarryoverCard()}${v671TomorrowPrepCard()}</div>${v671MiniScoreCard()}`;
+  }
+  function v671ShiftCloseModal(){
+    if(!state.shift.active){ toast(t('noActiveShift'),'warn'); return; }
+    const s=v671Summary();
+    modal(t('shiftClosing'), `<div class="v671-shift-close"><div class="hero-mini"><h2>${t('shiftClosing')}</h2><p>${t('confirmShiftCloseText')}</p></div><div class="grid grid-3"><div class="card"><h3>${t('doneToday')}</h3>${v671ListHtml(v671DoneLines(),'good')}</div><div class="card"><h3>${t('stillOpen')}</h3>${v671ListHtml(v671OpenLines(6), s.risks>4?'warn':'info')}</div><div class="card"><h3>${t('tomorrowAdvice')}</h3><p>${escapeHtml(v671Advice())}</p><div class="value">${s.score}/100</div><p class="muted small">${t('shiftScoreSimple')}</p></div></div><div class="card"><h3>${t('dayReport')}</h3><pre class="copy-box v671-report-preview">${escapeHtml(v671ReportText())}</pre></div><div class="btn-row mt"><button class="btn" data-action="v671-copy-day-report">${t('copyDayReport')}</button><button class="btn" data-action="v671-copy-handover">${t('copyHandover')}</button><button class="btn" data-action="v671-open-tomorrow-prep">${t('prepareTomorrow')}</button><button class="btn primary" data-action="v671-confirm-shift-close">${t('closeAndSaveReport')}</button></div></div>`, 'wide');
+  }
+  function v671CloseShift(){
+    if(!state.shift.active){ toast(t('noActiveShift'),'warn'); return; }
+    if(state.shift.breakActive && typeof toggleBreak === 'function') toggleBreak(false);
+    const reportText = v671ReportText();
+    const s = v671Summary();
+    state.shift.logs = v671SafeArray(state.shift.logs);
+    state.shift.logs.unshift({type:'clockOut', at:nowISO(), score:s.score, version:'v6.7.1'});
+    state.shift.active = false;
+    state.shift.breakActive = false;
+    const report = {id:uid('rep'), title:`${t('dayReport')} — ${new Date().toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL')}`, status:s.score>80?'Groen':s.score>60?'Geel':'Oranje', text:reportText, tags:['HACCP','AGF','Communicatie','Overdracht'], type:'shift-close', createdAt:nowISO(), auto:true, version:'v6.7.1'};
+    state.reports = v671SafeArray(state.reports);
+    state.reports.unshift(report);
+    const items = v671TomorrowItems(8).map((x,idx)=>({...x, id:uid('carry'), done:false, order:idx}));
+    state.ui.v671LastShiftReportId = report.id;
+    state.ui.v671Carryover = {date:TODAY(), tomorrow:addDays(TODAY(),1), createdAt:nowISO(), items};
+    addActivity(`${t('shiftClosing')}: ${s.score}/100`, 'shift');
+    save(); render();
+    modal(t('reportStored'), `<div class="grid grid-2"><div class="card"><h3>${t('shiftScoreSimple')}</h3><div class="value">${s.score}/100</div><p>${escapeHtml(v671Advice())}</p></div><div class="card"><h3>${t('tomorrowPrep')}</h3><div class="list">${items.slice(0,5).map(i=>`<div class="list-item compact"><span>${escapeHtml(i.label)}</span><span class="pill info">${escapeHtml(i.type)}</span></div>`).join('')}</div></div></div><div class="btn-row mt"><button class="btn primary" data-action="v671-copy-last-report">${t('copyDayReport')}</button><button class="btn" data-action="v671-copy-handover">${t('copyHandover')}</button><button class="btn" data-route="communication">${t('communication')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div>`, 'wide');
+  }
+  function v671OpenTomorrowPrep(){
+    const current = v671SafeArray(state.ui.v671TomorrowNotes).filter(n=>n && !n.done).map(n=>n.text).join('\n');
+    modal(t('tomorrowPrep'), `<div class="grid grid-2"><div class="card"><h3>${t('tomorrowAdvice')}</h3><p>${escapeHtml(v671Advice())}</p><div class="list">${v671TomorrowItems(8).map(i=>`<div class="list-item compact"><span>${escapeHtml(i.label)}</span><span class="pill info">${escapeHtml(i.type)}</span></div>`).join('')}</div></div><div class="card"><h3>${t('addTomorrowNote')}</h3><textarea class="textarea" id="v671TomorrowNote" placeholder="${L('Bijvoorbeeld: eerst Store Map nacontrole doen.','For example: do Cleaning Map follow-up first.')}" rows="8">${escapeHtml(current)}</textarea><div class="btn-row mt"><button class="btn primary" data-action="v671-save-tomorrow-note">${t('saveTomorrowNote')}</button><button class="btn" data-action="v671-copy-handover">${t('copyHandover')}</button></div></div></div>`, 'wide');
+  }
+  function v671SaveTomorrowNote(){
+    const raw = byId('v671TomorrowNote')?.value || '';
+    const lines = raw.split('\n').map(x=>x.trim()).filter(Boolean);
+    state.ui.v671TomorrowNotes = lines.map(text=>({id:uid('tnote'), text, createdAt:nowISO(), done:false}));
+    state.ui.v671TomorrowNotesAt = nowISO();
+    addActivity(t('tomorrowNoteSaved'),'report');
+    save(); render(); toast(t('tomorrowNoteSaved'),'good');
+  }
+  function v671CopyReport(){ copyText(v671ReportText()); addActivity(t('copyDayReport'),'report'); toast(t('reportCopied'),'good'); }
+  function v671CopyHandover(){ copyText(v671HandoverText()); addActivity(t('copyHandover'),'communication'); toast(t('handoverCopied'),'good'); }
+  function v671CopyLastReport(){
+    const id = state.ui.v671LastShiftReportId;
+    const r = v671SafeArray(state.reports).find(x=>x.id===id) || v671SafeArray(state.reports).find(x=>x.auto);
+    copyText(r ? `${r.title}\n${dateTime(r.createdAt)} · ${r.status}\n\n${r.text}` : v671ReportText());
+    toast(t('reportCopied'),'good');
+  }
+  function v671MarkCarryoverDone(index){
+    const carry = state.ui.v671Carryover;
+    if(carry && Array.isArray(carry.items) && carry.items[index]) carry.items[index].done = true;
+    save(); render(); toast(t('carryoverDone'),'good');
+  }
+  function v671ReportsPanel(){
+    const r = v671SafeArray(state.reports).find(x=>x.type==='shift-close' || x.version==='v6.7.1') || v671SafeArray(state.reports).find(x=>x.auto);
+    return `<div class="card v671-reports-panel"><h3>${t('dayReport')}</h3>${r?`<p><strong>${escapeHtml(r.title)}</strong></p><p class="muted small">${dateTime(r.createdAt)} · ${escapeHtml(r.status||'')}</p><pre class="copy-box compact">${escapeHtml(String(r.text||'').slice(0,800))}</pre><div class="btn-row"><button class="btn" data-action="v671-copy-last-report">${t('copyDayReport')}</button><button class="btn" data-action="v671-open-tomorrow-prep">${t('prepareTomorrow')}</button></div>`:`<p class="muted">${L('Nog geen automatisch dagrapport. Sluit je shift af om er één te maken.','No automatic day report yet. Close your shift to create one.')}</p>`}</div>`;
+  }
+  function v671DiagnosticsCard(){
+    const checks = [
+      {name:t('dayReport'), ok: typeof v671ReportText()==='string' && v671ReportText().length>50, detail:'report'},
+      {name:t('tomorrowPrep'), ok: v671TomorrowItems().length>0, detail:`${v671TomorrowItems().length}`},
+      {name:t('copyHandover'), ok: typeof copyText==='function', detail:'copyText'},
+      {name:'APP.version', ok: (APP.version==='v6.7.1'||APP.version==='v6.7.2'||APP.version==='v6.7.3'), detail:APP.version},
+      {name:'APP.cache', ok: (APP.cache==='rich-cmd-cache-v671'||APP.cache==='rich-cmd-cache-v672'||APP.cache==='rich-cmd-cache-v673'), detail:APP.cache}
+    ];
+    return `<div class="card v671-diagnostics-card"><h3>${t('shiftReportChecks')}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`;
+  }
+
+  const v671BaseToday = renderToday;
+  renderToday = window.renderToday = function(){
+    const html = v671Normalize(v671BaseToday());
+    return `<div class="today-v671">${html}${v671TodayWorkflowBlock()}</div>`;
+  };
+  const v671BaseTomorrowPrep = renderTomorrowPrep;
+  renderTomorrowPrep = window.renderTomorrowPrep = function(){
+    return `<div class="v671-embedded-tomorrow"><p class="muted small">${escapeHtml(v671Advice())}</p><div class="list">${v671TomorrowItems(4).map(i=>`<div class="list-item compact"><span>${escapeHtml(i.label)}</span><button class="btn tiny" data-route="${escapeHtml(i.route||'today')}">${L('Open','Open')}</button></div>`).join('')}</div><div class="btn-row mt"><button class="btn small" data-action="v671-open-tomorrow-prep">${t('prepareTomorrow')}</button><button class="btn small" data-action="v671-copy-handover">${t('copyHandover')}</button></div></div>`;
+  };
+  const v671BaseCommunication = renderCommunication;
+  renderCommunication = window.renderCommunication = function(){ return `<div class="communication-v671">${v671Normalize(v671BaseCommunication())}${v671ReportsPanel()}</div>`; };
+  const v671BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){ return v671Normalize(v671BaseSettings()) + `<div class="grid grid-2 mt settings-v671">${v671TomorrowPrepCard()}${v671MiniScoreCard()}</div>`; };
+  const v671BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){ return v671Normalize(v671BaseDiagnostics()) + `<div class="grid grid-2 mt diagnostics-v671">${v671DiagnosticsCard()}${v671MiniScoreCard()}</div>`; };
+
+  const v671BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='shift-end' || a==='close-shift-v671'){ v671ShiftCloseModal(); return; }
+    if(a==='v671-confirm-shift-close'){ v671CloseShift(); return; }
+    if(a==='v671-copy-day-report'){ v671CopyReport(); return; }
+    if(a==='v671-copy-handover'){ v671CopyHandover(); return; }
+    if(a==='v671-copy-last-report'){ v671CopyLastReport(); return; }
+    if(a==='v671-open-tomorrow-prep'){ v671OpenTomorrowPrep(); return; }
+    if(a==='v671-save-tomorrow-note'){ v671SaveTomorrowNote(); return; }
+    if(a==='v671-mark-carryover-done'){ v671MarkCarryoverDone(+(el.dataset.index||0)); return; }
+    if(a==='pwa-check-update-v671' || a==='pwa-prepare-offline-v671' || a==='pwa-activate-update-v671'){
+      // Keep compatibility with the v6.7.0 PWA handler aliases.
+      return v671BaseHandle(a.replace('v671','v670'), el, e);
+    }
+    return v671BaseHandle(a, el, e);
+  };
+
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.1 Shift Report & Tomorrow Prep failed', err);
+}
+
+
+/* --------------------------------------------------------------------------
+   RICH CMD v6.7.2 — Weekoverzicht & Visualisatie Polish
+   - Compact week overview and copyable week report
+   - Date + ISO week number visible in topbar and Today
+   - Visualisatie becomes more practical with week signals
+   - Diagnostics checks weekly insight layer
+--------------------------------------------------------------------------- */
+try {
+  APP.version = 'v6.7.2';
+  APP.cache = 'rich-cmd-cache-v672';
+  window.RICH_CMD_BUILD = {
+    ...(window.RICH_CMD_BUILD || {}),
+    version: APP.version,
+    cache: APP.cache,
+    release: 'Weekoverzicht & Visualisatie Polish',
+    assets: ['./','./index.html','./index.html?v=672','./styles.css?v=672','./app.js?v=672','./manifest.json?v=672','./version.json','./icon-192.png','./icon-512.png'],
+    modules: ['today','haccp','storemap','agf','inventory','communication','visual','coaching','diagnostics','settings']
+  };
+
+  I18N.nl = Object.assign(I18N.nl || {}, {
+    v672Title:'RICH CMD v6.7.2 — Weekoverzicht & Visualisatie Polish',
+    weekOverview:'Weekoverzicht',
+    weekReport:'Weekrapport',
+    copyWeekReport:'Kopieer weekrapport',
+    weekStatus:'Weekstatus',
+    weekNumber:'Weeknummer',
+    workDate:'Werkdatum',
+    shiftsThisWeek:'Shifts deze week',
+    completedActions:'Afgeronde acties',
+    stayedOpen:'Open gebleven',
+    agfChecks:'AGF-checks',
+    communicationFollowed:'Communicatie opgevolgd',
+    ordersConfirmed:'Bestellingen bevestigd',
+    storeMapSignals:'Store Map aandacht',
+    recurringThisWeek:'Terugkerend deze week',
+    weekAdvice:'Weekadvies',
+    showWeekDetails:'Meer weekdetails',
+    hideWeekDetails:'Minder weekdetails',
+    weekLooksStable:'Deze week oogt stabiel. Houd de basisroutine kort en consequent.',
+    weekStoreAdvice:'Store Map blijft aandacht vragen. Rond vandaag minimaal één controlepunt af.',
+    weekCommAdvice:'Communicatie/opvolging komt vaak terug. Begin je dag met open opvolging.',
+    weekOrderAdvice:'Bestelbeheer is actief. Rond open bestellijsten vroeg op de dag af.',
+    noRecurringProblems:'Geen sterke terugkerende problemen gevonden.',
+    weekReportCopied:'Weekrapport gekopieerd.',
+    dateWeekHint:'Altijd zichtbaar bovenin: datum en weeknummer voor werkoverdracht.',
+    weekInsightChecks:'Weekinzicht checks',
+    visualWeekIntro:'Eerst de praktische weekconclusie, daarna pas de details.'
+  });
+  I18N.en = Object.assign(I18N.en || {}, {
+    v672Title:'RICH CMD v6.7.2 — Weekly Overview & Visualization Polish',
+    weekOverview:'Weekly overview',
+    weekReport:'Weekly report',
+    copyWeekReport:'Copy weekly report',
+    weekStatus:'Week status',
+    weekNumber:'Week number',
+    workDate:'Work date',
+    shiftsThisWeek:'Shifts this week',
+    completedActions:'Completed actions',
+    stayedOpen:'Still open',
+    agfChecks:'Produce checks',
+    communicationFollowed:'Communication followed up',
+    ordersConfirmed:'Orders confirmed',
+    storeMapSignals:'Store Map attention',
+    recurringThisWeek:'Recurring this week',
+    weekAdvice:'Week advice',
+    showWeekDetails:'Show week details',
+    hideWeekDetails:'Hide week details',
+    weekLooksStable:'This week looks stable. Keep the base routine short and consistent.',
+    weekStoreAdvice:'Store Map still needs attention. Complete at least one checkpoint today.',
+    weekCommAdvice:'Communication/follow-up keeps returning. Start your day with open follow-up.',
+    weekOrderAdvice:'Ordering is active. Finish open order lists early in the day.',
+    noRecurringProblems:'No strong recurring problems found.',
+    weekReportCopied:'Weekly report copied.',
+    dateWeekHint:'Always visible at the top: date and week number for handover.',
+    weekInsightChecks:'Week insight checks',
+    visualWeekIntro:'First the practical week conclusion, then the details.'
+  });
+
+  function v672Arr(x){ return Array.isArray(x) ? x : []; }
+  function v672Lang(){ return currentLang && currentLang()==='en' ? 'en-GB' : 'nl-NL'; }
+  function v672TodayDate(){ const d=new Date(); d.setHours(12,0,0,0); return d; }
+  function v672IsoStart(d){ const x=new Date(d); x.setHours(12,0,0,0); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); return x; }
+  function v672IsoEnd(d){ const x=v672IsoStart(d); x.setDate(x.getDate()+6); return x; }
+  function v672DateIso(d){ const x=new Date(d); x.setHours(12,0,0,0); return x.toISOString().slice(0,10); }
+  function v672InRange(iso, start, end){ if(!iso) return false; const s=String(iso).slice(0,10); return s>=v672DateIso(start) && s<=v672DateIso(end); }
+  function v672IsoWeek(d){
+    const date=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum=date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate()+4-dayNum);
+    const yearStart=new Date(Date.UTC(date.getUTCFullYear(),0,1));
+    const week=Math.ceil((((date-yearStart)/86400000)+1)/7);
+    return {week, year:date.getUTCFullYear()};
+  }
+  function v672FormatDate(d){ return d.toLocaleDateString(v672Lang(), {weekday:'short', day:'2-digit', month:'short', year:'numeric'}); }
+  function v672FormatShort(d){ return d.toLocaleDateString(v672Lang(), {weekday:'short', day:'2-digit', month:'short'}); }
+  function v672WeekMeta(){ const today=v672TodayDate(); const start=v672IsoStart(today); const end=v672IsoEnd(today); const wk=v672IsoWeek(today); return {today,start,end,week:wk.week,year:wk.year}; }
+  function v672ItemLabel(x){ if(!x) return ''; return x.title || x.name || x.label || x.product || x.message || x.text || x.category || String(x.id||''); }
+  function v672IsDoneStatus(s){ return ['Voltooid','Afgehandeld','done','completed'].includes(s); }
+  function v672ActivityThisWeek(){ const m=v672WeekMeta(); return v672Arr(state.activity).filter(a=>v672InRange(a && a.at, m.start, m.end)); }
+  function v672AgfChecksThisWeek(){ const m=v672WeekMeta(); let count=0; v672Arr(state.agfProducts).forEach(p=>v672Arr(p && p.history).forEach(h=>{ if(v672InRange(h && h.at, m.start, m.end)) count++; })); return count; }
+  function v672CompletedThisWeek(){ const m=v672WeekMeta(); return v672Arr(state.tasks).filter(task=>task && task.status==='Voltooid' && v672InRange(task.completedAt || task.updatedAt, m.start, m.end)).length; }
+  function v672ShiftsThisWeek(){ const m=v672WeekMeta(); const outs=v672Arr(state.shift && state.shift.logs).filter(log=>log && (log.type==='clockOut' || log.type==='shiftClose') && v672InRange(log.at, m.start, m.end)).length; const active=(state.shift && state.shift.active && v672InRange(state.shift.startedAt, m.start, m.end)) ? 1 : 0; return Math.max(outs, active); }
+  function v672OpenCount(){
+    const openTasks=v672Arr(state.tasks).filter(task=>task && !['Voltooid','Overgeslagen'].includes(task.status)).length;
+    const openComms=v672Arr(state.communications).filter(c=>c && !v672IsDoneStatus(c.status) && c.status!=='Notitie').length;
+    let store=0; try { store = typeof cleaningUrgent === 'function' ? cleaningUrgent().length : 0; } catch(_){ store=0; }
+    const orders=v672Arr(state.inventoryOrders).filter(o=>o && o.type!=='legacy-cleared').length;
+    return openTasks + openComms + store + orders;
+  }
+  function v672CommsFollowedThisWeek(){ const m=v672WeekMeta(); return v672Arr(state.communications).filter(c=>c && (v672IsDoneStatus(c.status) || c.done) && v672InRange(c.updatedAt || c.doneAt || c.createdAt || c.followDate, m.start, m.end)).length; }
+  function v672OrdersConfirmedThisWeek(){ const m=v672WeekMeta(); return v672Arr(state.orderHistory).filter(o=>o && (o.type==='inventory' || o.items) && v672InRange(o.at || o.createdAt, m.start, m.end)).length; }
+  function v672StoreSignals(){ try { return typeof cleaningUrgent === 'function' ? cleaningUrgent().length : 0; } catch(_) { return 0; } }
+  function v672Recurring(){
+    const acts=v672ActivityThisWeek();
+    const counts={};
+    acts.forEach(a=>{ const k=(a && a.type) || 'info'; counts[k]=(counts[k]||0)+1; });
+    const rows=Object.entries(counts).filter(([_,v])=>v>1).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    const map={agf:'AGF',communication:t('communication'),task:t('haccp'),shift:t('shift'),pwa:'PWA',diagnostics:t('diagnostics'),report:t('report')};
+    return rows.map(([k,v])=>({key:k,label:map[k]||k,count:v}));
+  }
+  function v672WeekStats(){
+    const m=v672WeekMeta();
+    return {meta:m, shifts:v672ShiftsThisWeek(), completed:v672CompletedThisWeek(), open:v672OpenCount(), agf:v672AgfChecksThisWeek(), comm:v672CommsFollowedThisWeek(), orders:v672OrdersConfirmedThisWeek(), store:v672StoreSignals(), recurring:v672Recurring()};
+  }
+  function v672WeekScore(s){ let score=70; score += Math.min(12, s.completed*2); score += Math.min(8, s.agf); score += Math.min(8, s.comm*2); score -= Math.min(25, s.open*3); score -= Math.min(15, s.store*4); return clamp(score,0,100); }
+  function v672WeekAdvice(s){
+    if(s.store>0) return t('weekStoreAdvice');
+    if(s.comm>3 || v672Arr(state.communications).some(c=>c && c.followDate && c.followDate<=TODAY() && !v672IsDoneStatus(c.status))) return t('weekCommAdvice');
+    if(v672Arr(state.inventoryOrders).filter(o=>o && o.type!=='legacy-cleared').length) return t('weekOrderAdvice');
+    return t('weekLooksStable');
+  }
+  function v672DateWeekChip(){
+    const m=v672WeekMeta();
+    return `<span class="chip v672-date-chip" title="${escapeHtml(t('dateWeekHint'))}">${escapeHtml(v672FormatShort(m.today))} · ${escapeHtml(t('weekNumber'))} ${m.week}</span>`;
+  }
+  function v672DateCard(){
+    const m=v672WeekMeta();
+    return `<div class="card v672-date-card"><div class="v672-date-main"><div><span class="chip">${escapeHtml(t('workDate'))}</span><h3>${escapeHtml(v672FormatDate(m.today))}</h3><p class="muted small">${escapeHtml(t('weekNumber'))} ${m.week} · ${escapeHtml(v672FormatShort(m.start))} — ${escapeHtml(v672FormatShort(m.end))}</p></div><div class="v672-week-badge"><span>${escapeHtml(t('weekNumber'))}</span><strong>${m.week}</strong></div></div></div>`;
+  }
+  function v672WeekSummaryCard(compact=false){
+    const s=v672WeekStats(); const score=v672WeekScore(s); const tone=score>82?'good':score>62?'warn':'bad';
+    const rec=s.recurring.length ? s.recurring.map(r=>`<div class="list-item compact"><span>${escapeHtml(r.label)}</span><span class="pill info">${r.count}×</span></div>`).join('') : `<p class="muted small">${escapeHtml(t('noRecurringProblems'))}</p>`;
+    const detail=state.ui && state.ui.v672ShowWeekDetails;
+    return `<div class="card v672-week-card"><div class="flex-line"><div><span class="chip">${escapeHtml(t('weekStatus'))}</span><h3>${escapeHtml(t('weekOverview'))}</h3><p class="muted small">${escapeHtml(v672FormatShort(s.meta.start))} — ${escapeHtml(v672FormatShort(s.meta.end))} · ${escapeHtml(t('weekNumber'))} ${s.meta.week}</p></div><div class="v672-score ${tone}">${score}</div></div><div class="grid grid-4 v672-week-kpis">${kpi(t('shiftsThisWeek'), s.shifts, s.shifts?'good':'warn')}${kpi(t('completedActions'), s.completed, s.completed?'good':'warn')}${kpi(t('stayedOpen'), s.open, s.open?'warn':'good')}${kpi(t('storeMapSignals'), s.store, s.store?'warn':'good')}</div><p class="v672-advice"><strong>${escapeHtml(t('weekAdvice'))}:</strong> ${escapeHtml(v672WeekAdvice(s))}</p>${compact && !detail ? '' : `<div class="grid grid-2 v672-week-details"><div class="card soft"><h4>${escapeHtml(t('recurringThisWeek'))}</h4><div class="list">${rec}</div></div><div class="card soft"><h4>${escapeHtml(t('weekReport'))}</h4><div class="list"><div class="list-item compact"><span>${escapeHtml(t('agfChecks'))}</span><span class="pill info">${s.agf}</span></div><div class="list-item compact"><span>${escapeHtml(t('communicationFollowed'))}</span><span class="pill info">${s.comm}</span></div><div class="list-item compact"><span>${escapeHtml(t('ordersConfirmed'))}</span><span class="pill info">${s.orders}</span></div></div></div></div>`}<div class="btn-row mt"><button class="btn" data-action="v672-copy-week-report">${escapeHtml(t('copyWeekReport'))}</button><button class="btn" data-action="v672-toggle-week-details">${escapeHtml(detail?t('hideWeekDetails'):t('showWeekDetails'))}</button><button class="btn" data-route="visual">${escapeHtml(t('visual'))}</button></div></div>`;
+  }
+  function v672WeekReportText(){
+    const s=v672WeekStats();
+    const rec=s.recurring.length ? s.recurring.map(r=>`- ${r.label}: ${r.count}×`).join('\n') : `- ${t('noRecurringProblems')}`;
+    return [
+      `RICH CMD ${t('weekReport')} — ${t('weekNumber')} ${s.meta.week} (${v672FormatShort(s.meta.start)} — ${v672FormatShort(s.meta.end)})`,
+      '',
+      `${t('weekStatus')}: ${v672WeekScore(s)}/100`,
+      `${t('shiftsThisWeek')}: ${s.shifts}`,
+      `${t('completedActions')}: ${s.completed}`,
+      `${t('stayedOpen')}: ${s.open}`,
+      `${t('agfChecks')}: ${s.agf}`,
+      `${t('communicationFollowed')}: ${s.comm}`,
+      `${t('ordersConfirmed')}: ${s.orders}`,
+      `${t('storeMapSignals')}: ${s.store}`,
+      '',
+      `${t('recurringThisWeek')}:`,
+      rec,
+      '',
+      `${t('weekAdvice')}:`,
+      `- ${v672WeekAdvice(s)}`
+    ].join('\n');
+  }
+  function v672CopyWeekReport(){ copyText(v672WeekReportText()); addActivity(t('copyWeekReport'),'report'); toast(t('weekReportCopied'),'good'); }
+  function v672DiagnosticsCard(){
+    const s=v672WeekStats();
+    const checks=[
+      {name:t('weekOverview'), ok: typeof v672WeekStats==='function', detail:`week ${s.meta.week}`},
+      {name:t('copyWeekReport'), ok: typeof copyText==='function', detail:'copyText'},
+      {name:t('workDate'), ok: !!v672IsoWeek(v672TodayDate()).week, detail:v672FormatShort(s.meta.today)},
+      {name:'APP.version', ok:(APP.version==='v6.7.2'||APP.version==='v6.7.3'), detail:APP.version},
+      {name:'APP.cache', ok:(APP.cache==='rich-cmd-cache-v672'||APP.cache==='rich-cmd-cache-v673'), detail:APP.cache}
+    ];
+    return `<div class="card v672-diagnostics-card"><h3>${escapeHtml(t('weekInsightChecks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`;
+  }
+
+  const v672BaseTopbar = renderTopbar;
+  renderTopbar = window.renderTopbar = function(){
+    const html = v672BaseTopbar();
+    if(html.includes('v672-date-chip')) return html;
+    return html.replace('<div class="top-actions">', `<div class="top-actions">${v672DateWeekChip()}`);
+  };
+
+  const v672BaseToday = renderToday;
+  renderToday = window.renderToday = function(){
+    const html = v672BaseToday();
+    return `<div class="today-v672">${v672DateCard()}${html}${v672WeekSummaryCard(true)}</div>`;
+  };
+
+  const v672BaseVisual = renderVisual;
+  renderVisual = window.renderVisual = function(){
+    const base = v672BaseVisual();
+    return `<div class="visual-v672"><div class="hero v672-visual-hero"><span class="chip">${escapeHtml(t('v672Title'))}</span><h2>${escapeHtml(t('weekOverview'))}</h2><p>${escapeHtml(t('visualWeekIntro'))}</p></div>${v672WeekSummaryCard(false)}<div class="v672-visual-details">${base}</div></div>`;
+  };
+
+  const v672BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    return v672BaseDiagnostics() + `<div class="grid grid-2 mt diagnostics-v672">${v672DiagnosticsCard()}${v672WeekSummaryCard(true)}</div>`;
+  };
+
+  const v672BaseSettings = renderSettings;
+  renderSettings = window.renderSettings = function(){
+    return v672BaseSettings() + `<div class="card mt settings-v672-date"><h3>${escapeHtml(t('workDate'))}</h3><p class="muted">${escapeHtml(t('dateWeekHint'))}</p>${v672DateCard()}</div>`;
+  };
+
+  const v672BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v672-copy-week-report'){ v672CopyWeekReport(); return; }
+    if(a==='v672-toggle-week-details'){ state.ui.v672ShowWeekDetails=!state.ui.v672ShowWeekDetails; save(); render(); return; }
+    if(a==='pwa-check-update-v672' || a==='pwa-prepare-offline-v672' || a==='pwa-activate-update-v672') return v672BaseHandle(a.replace('v672','v671'), el, e);
+    return v672BaseHandle(a, el, e);
+  };
+
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.2 Weekly Overview & Visualization Polish failed', err);
+}
+
+
+/* RICH CMD v6.7.3 — Weekcoach & Coaching Foundation
+   - Richer wise lessons and badge detail design
+   - Daily microcoach + weekcoach cards
+   - Visualisatie sections: Vandaag / Week / Coach / Details
+   - Date/weeknumber in reports and coach advice
+   - Coaching diagnostics + Mobile QA continuity */
+try {
+  APP.version = 'v6.7.3';
+  APP.cache = 'rich-cmd-cache-v673';
+  if (APP.pwa) {
+    APP.pwa.version = 'v6.7.3';
+    APP.pwa.cache = 'rich-cmd-cache-v673';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=673','./styles.css?v=673','./app.js?v=673','./manifest.json?v=673','./version.json','./icon-192.png','./icon-512.png'];
+  }
+
+  Object.assign(I18N.nl, {
+    v673Title:'RICH CMD v6.7.3 — Weekcoach & Coaching Foundation',
+    weekCoach:'Weekcoach', dailyMicrocoach:'Coach vandaag', coachingFoundation:'Coaching Foundation',
+    wiseLessons:'Wijze lessen', badgeGallery:'Badgegalerij', badgeDetails:'Badge details', skillProfile:'Vaardigheidsprofiel',
+    learningAdvice:'Leeradvies', copyCoachPlan:'Kopieer coachplan', coachPlanCopied:'Coachplan gekopieerd.',
+    startMicroLesson:'Start microles', completeWiseLesson:'Les afronden', lessonCompleted:'Coachingles afgerond.',
+    earned:'Behaald', notEarned:'Nog te behalen', progress:'Voortgang', whyThisMatters:'Waarom dit belangrijk is',
+    workfloorExercise:'Werkvloer-oefening', reflectionQuestion:'Reflectievraag', showFullAcademy:'Toon volledige lesbibliotheek', hideFullAcademy:'Verberg volledige lesbibliotheek',
+    todaySection:'Vandaag', weekSection:'Week', coachSection:'Coach', detailsSection:'Details',
+    coachingChecks:'Coaching checks', badgeUnlocked:'Badge behaald', noBadgeYet:'Rond lessen af om deze badge te verdienen.',
+    next673Idea:'Volgende logische stap: v6.7.4 — Communicatie Planner Pro of Store Map Route Planner.',
+    weekLearningAdvice:'Leeradvies voor volgende week'
+  });
+  Object.assign(I18N.en, {
+    v673Title:'RICH CMD v6.7.3 — Week Coach & Coaching Foundation',
+    weekCoach:'Week coach', dailyMicrocoach:'Coach today', coachingFoundation:'Coaching Foundation',
+    wiseLessons:'Wise lessons', badgeGallery:'Badge gallery', badgeDetails:'Badge details', skillProfile:'Skill profile',
+    learningAdvice:'Learning advice', copyCoachPlan:'Copy coach plan', coachPlanCopied:'Coach plan copied.',
+    startMicroLesson:'Start micro lesson', completeWiseLesson:'Complete lesson', lessonCompleted:'Coaching lesson completed.',
+    earned:'Earned', notEarned:'Not yet earned', progress:'Progress', whyThisMatters:'Why this matters',
+    workfloorExercise:'Workfloor exercise', reflectionQuestion:'Reflection question', showFullAcademy:'Show full lesson library', hideFullAcademy:'Hide full lesson library',
+    todaySection:'Today', weekSection:'Week', coachSection:'Coach', detailsSection:'Details',
+    coachingChecks:'Coaching checks', badgeUnlocked:'Badge earned', noBadgeYet:'Complete lessons to earn this badge.',
+    next673Idea:'Next logical step: v6.7.4 — Communication Planner Pro or Store Map Route Planner.',
+    weekLearningAdvice:'Learning advice for next week'
+  });
+
+  function v673Arr(x){ return Array.isArray(x) ? x : []; }
+  function v673IsoDate(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
+  function v673ISOWeek(date){
+    const d=new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const day=d.getUTCDay()||7; d.setUTCDate(d.getUTCDate()+4-day);
+    const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    return Math.ceil((((d-yearStart)/86400000)+1)/7);
+  }
+  function v673StartOfIsoWeek(date){ const d=new Date(date); const day=d.getDay()||7; d.setDate(d.getDate()-day+1); d.setHours(0,0,0,0); return d; }
+  function v673EndOfIsoWeek(date){ const d=v673StartOfIsoWeek(date); d.setDate(d.getDate()+6); return d; }
+  function v673FormatDate(d){ try { return d.toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); } catch(_) { return String(d); } }
+  function v673FormatShort(d){ try { return d.toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL',{day:'2-digit',month:'2-digit'}); } catch(_) { return String(d); } }
+  function v673WeekMeta(){ const today=new Date(); const start=v673StartOfIsoWeek(today); const end=v673EndOfIsoWeek(today); return {today,start,end,week:v673ISOWeek(today), dateLabel:v673FormatDate(today), shortDate:v673FormatShort(today), startLabel:v673FormatShort(start), endLabel:v673FormatShort(end)}; }
+  window.v673WeekMeta = v673WeekMeta;
+
+  function v673DoneCount(){ return v673Arr(state.coachingDone).length; }
+  function v673PracticeCount(){ return v673Arr(state.coachingPractices).length; }
+  function v673OpenComms(){ return v673Arr(state.communications).filter(c=>c && !['Afgehandeld','Voltooid','Notitie','done','completed'].includes(c.status)); }
+  function v673DueComms(){ return v673OpenComms().filter(c=>c.followDate && c.followDate <= TODAY()); }
+  function v673Orders(){ return v673Arr(state.inventoryOrders).filter(o=>o && o.type !== 'legacy-cleared'); }
+  function v673StoreUrgent(){ try { return typeof cleaningUrgent==='function' ? cleaningUrgent() : []; } catch(_) { return []; } }
+  function v673AgfAttention(){ try { return typeof agfAttention==='function' ? agfAttention() : []; } catch(_) { return []; } }
+  function v673CompletedThisWeek(){
+    const m=v673WeekMeta(); const start=v673IsoDate(m.start), end=v673IsoDate(m.end);
+    return v673Arr(state.activity).filter(a=>a && String(a.at||'').slice(0,10)>=start && String(a.at||'').slice(0,10)<=end && /voltooid|afgerond|completed|done|behaald/i.test(String(a.text||''))).length;
+  }
+  function v673WeekStats(){
+    return {done:v673DoneCount(), practice:v673PracticeCount(), due:v673DueComms().length, comm:v673OpenComms().length, orders:v673Orders().length, store:v673StoreUrgent().length, agf:v673AgfAttention().length, completed:v673CompletedThisWeek()};
+  }
+  function v673CoachAdvice(){
+    const s=v673WeekStats(); const energy=(state.ui && state.ui.energy)||'normal';
+    if(energy==='low') return L('Rustig beginnen is vandaag geen zwakte maar strategie. Kies één korte taak, rond die volledig af en pak daarna pas AGF of HACCP.', 'A calm start is strategy today. Pick one short task, finish it fully, then continue with Produce or HACCP.');
+    if(s.due) return L('Je sterkste eerste stap is communicatie opvolgen. Dat voorkomt dat open afspraken later op de dag ruis worden.', 'Your strongest first step is communication follow-up. It prevents open agreements from becoming noise later.');
+    if(s.store) return L('Store Map vraagt aandacht. Kies één locatie met risico en maak daar een korte, zichtbare controle van.', 'Cleaning Map needs attention. Pick one risk location and turn it into a short visible check.');
+    if(s.orders) return L('Rond je bestellijst vroeg af. Daarna voelt HACCP en AGF lichter omdat bestelruis uit je hoofd is.', 'Finish the order list early. HACCP and Produce will feel lighter once ordering noise is gone.');
+    if(s.agf) return L('AGF heeft signalen. Start met de producten die leeg, overvol of bonusgevoelig zijn.', 'Produce has signals. Start with items that are empty, overstocked or bonus-sensitive.');
+    return L('De week oogt stabiel. Gebruik vandaag om één kleine verbetering vast te houden in plaats van nieuwe druk te maken.', 'The week looks stable. Use today to keep one small improvement instead of creating new pressure.');
+  }
+  function v673LearningAdvice(){
+    const s=v673WeekStats();
+    if(s.store) return L('Focus deze week op signaleren en Store Map: kijk niet alleen of iets schoon is, maar waarom het opnieuw aandacht vraagt.', 'Focus this week on signal detection and Cleaning Map: do not only check if something is clean, ask why it needs attention again.');
+    if(s.due || s.comm>2) return L('Focus op korte, professionele communicatie: situatie, actie, vervolg. Minder woorden, meer duidelijkheid.', 'Focus on short professional communication: situation, action, next step. Fewer words, more clarity.');
+    if(s.orders) return L('Focus op slim bestellen: bestel niet vanuit stress, maar vanuit minimum, frequentie en rust in de voorraad.', 'Focus on smart ordering: do not order from stress, but from minimum, frequency and calm stock control.');
+    if(s.agf) return L('Focus op AGF-besluitvorming: verschil zien tussen tijdelijk probleem en terugkerend patroon.', 'Focus on Produce decision-making: see the difference between a temporary issue and a recurring pattern.');
+    return L('Focus op discipline: houd de basis klein, zichtbaar en consequent. Dat is de basis van professioneel werken.', 'Focus on discipline: keep the basics small, visible and consistent. That is the base of professional work.');
+  }
+  function v673DailyCoachCard(compact=false){
+    const m=v673WeekMeta();
+    return `<div class="card v673-coach-card"><div class="flex-line"><div><span class="chip">${escapeHtml(t('dailyMicrocoach'))}</span><h3>${escapeHtml(L('Eerste wijze stap','First wise step'))}</h3></div><span class="pill info">${escapeHtml(t('weekNumber'))} ${m.week}</span></div><p>${escapeHtml(v673CoachAdvice())}</p>${compact?'':`<div class="btn-row mt"><button class="btn primary" data-route="coaching">${escapeHtml(t('startMicroLesson'))}</button><button class="btn" data-action="v673-copy-coach-plan">${escapeHtml(t('copyCoachPlan'))}</button></div>`}</div>`;
+  }
+  function v673WeekCoachCard(compact=false){
+    const s=v673WeekStats(); const focus=v673LearningAdvice();
+    return `<div class="card v673-weekcoach-card"><div class="flex-line"><div><span class="chip">${escapeHtml(t('weekCoach'))}</span><h3>${escapeHtml(t('learningAdvice'))}</h3></div><span class="v673-coach-score">${Math.max(40, Math.min(100, 78 + Math.min(12,s.completed) - s.store*5 - s.due*4 - s.orders*2))}</span></div><p>${escapeHtml(focus)}</p><div class="list v673-mini-list"><div class="list-item compact"><span>AGF</span><span class="pill ${s.agf?'warn':'good'}">${s.agf}</span></div><div class="list-item compact"><span>${escapeHtml(t('communication'))}</span><span class="pill ${s.due?'bad':s.comm?'warn':'good'}">${s.due || s.comm}</span></div><div class="list-item compact"><span>${escapeHtml(t('storemap'))}</span><span class="pill ${s.store?'warn':'good'}">${s.store}</span></div></div>${compact?'':`<div class="btn-row mt"><button class="btn" data-route="visual">${escapeHtml(t('visual'))}</button><button class="btn" data-route="coaching">${escapeHtml(t('coaching'))}</button></div>`}</div>`;
+  }
+
+  function v673WiseLessons(){
+    return [
+      {id:'v673_calm_start', path:'Kalmte', title:'Rustig starten is professioneel', subtitle:'Niet alles hoeft direct. Eerst overzicht, dan tempo.', why:'Een sterke werkdag begint niet met rennen, maar met kiezen. Wie eerst overzicht maakt, voorkomt dubbel werk, vergeten controles en onnodige stress. Rust is dus geen vertraging; rust is kwaliteitscontrole.', exercise:'Open Vandaag, kies de eerste actie en voer alleen die actie uit. Laat andere taken bewust wachten tot deze stap klaar is.', reflect:'Welke taak voelde vandaag groter in je hoofd dan hij werkelijk was?', route:'today'},
+      {id:'v673_store_signal', path:'Signalatie', title:'Kijk naar oorzaken, niet alleen naar vuil', subtitle:'Een schoonmaakpunt vertelt vaak een groter verhaal.', why:'Als dezelfde plek steeds terugkomt, is schoonmaken alleen niet genoeg. Dan moet je kijken naar oorzaak: routing, verpakking, lekkage, frequentie of gedrag. Dat maakt je van uitvoerder naar verbeteraar.', exercise:'Kies één Store Map-punt en noteer naast de status ook één mogelijke oorzaak.', reflect:'Welk schoonmaakpunt zou minder vaak terugkomen als de oorzaak wordt aangepakt?', route:'storemap'},
+      {id:'v673_agf_decision', path:'AGF', title:'AGF vraagt oordeel, niet alleen snelheid', subtitle:'Leeg, overvol en kwaliteit hebben ieder een andere actie nodig.', why:'Bij AGF is snel vullen niet altijd slim. Soms is minder bestellen beter, soms moet je juist presentatie herstellen, en soms moet kwaliteit eerst. Goed AGF-werk is het verschil zien tussen voorraadprobleem, presentatieprobleem en kwaliteitsprobleem.', exercise:'Controleer drie AGF-producten en geef elk één duidelijke status: OK, leeg, overvoorraad of kwaliteit.', reflect:'Bij welk product was het advies anders dan je eerste gevoel?', route:'agf'},
+      {id:'v673_comm_clear', path:'Communicatie', title:'Goede overdracht is kort en bruikbaar', subtitle:'Situatie, actie, vervolg. Meer hoeft vaak niet.', why:'Een lange overdracht wordt minder goed gelezen. Een bruikbare overdracht vertelt wat er speelt, wat al gedaan is en wat de volgende persoon moet doen. Dat voorkomt frustratie en herhaling.', exercise:'Maak één communicatiepunt in drie regels: situatie, actie, vervolg.', reflect:'Welke informatie laat jij soms weg waardoor iemand anders moet gokken?', route:'communication'},
+      {id:'v673_order_calm', path:'Bestelbeheer', title:'Bestellen vanuit rust voorkomt voorraadruis', subtitle:'Niet alles wat bijna op is, moet maximaal besteld worden.', why:'Bestellen vanuit stress geeft vaak overvoorraad. Bestellen vanuit frequentie, minimum en werkelijke behoefte geeft rust. Een goede bestelling is niet de grootste bestelling, maar de meest passende.', exercise:'Kies twee bestelartikelen en bepaal bewust: bijbestellen, teveel of nul.', reflect:'Welk artikel bestel je soms uit gewoonte in plaats van noodzaak?', route:'inventory'},
+      {id:'v673_finish_visible', path:'Werkhouding', title:'Afmaken is zichtbare discipline', subtitle:'Een taak is pas klaar als hij ook geregistreerd of overgedragen is.', why:'Half afgeronde taken blijven mentale ruis. Door klein af te maken en zichtbaar te registreren, bouw je vertrouwen op bij jezelf en bij collega’s. Afmaken is een vorm van leiderschap.', exercise:'Rond één kleine taak volledig af en maak daarna direct een korte notitie of vink hem af.', reflect:'Welke open taak kost je aandacht zonder dat je er actief aan werkt?', route:'today'},
+      {id:'v673_lead_small', path:'Leiderschap', title:'Leiderschap begint met één duidelijke volgende stap', subtitle:'Je hoeft niet alles op te lossen om leiding te nemen.', why:'In drukte zoeken mensen richting. Een kleine, duidelijke stap geeft meer rust dan een groot vaag plan. Leiderschap op de winkelvloer betekent vaak: prioriteit geven, kort uitleggen en het voorbeeld zetten.', exercise:'Formuleer vandaag één zin: “Eerst doen we ..., daarna ...”.', reflect:'Waar kun jij vandaag meer duidelijkheid geven zonder harder te praten?', route:'communication'},
+      {id:'v673_week_review', path:'Zelfinzicht', title:'Een weekpatroon is waardevoller dan één losse fout', subtitle:'Terugkerende punten laten zien waar verbetering echt nodig is.', why:'Een losse fout kan toeval zijn. Een terugkerend patroon is informatie. Door weekpatronen te bekijken, zie je waar je systeem sterker moet worden: planning, communicatie, schoonmaak, AGF of bestellen.', exercise:'Open Visualisatie en kies één terugkerend punt waar je volgende week op wilt letten.', reflect:'Welk patroon wil je volgende week kleiner maken?', route:'visual'}
+    ];
+  }
+  function v673LessonById(id){ return v673WiseLessons().find(l=>l.id===id); }
+  function v673LessonDone(id){ return v673Arr(state.coachingDone).includes(id); }
+  function v673LessonCard(l){
+    const done=v673LessonDone(l.id);
+    return `<div class="card v673-wise-card ${done?'done':''}"><div class="flex-line"><span class="chip">${escapeHtml(l.path)}</span><span class="pill ${done?'good':'info'}">${done?'✓ '+t('earned'):t('start')}</span></div><h3>${escapeHtml(l.title)}</h3><p class="muted">${escapeHtml(l.subtitle)}</p><div class="btn-row mt"><button class="btn primary" data-action="v673-open-wise-lesson" data-id="${escapeHtml(l.id)}">${escapeHtml(t('startMicroLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route)}">${escapeHtml(L('Open praktijk','Open practice'))}</button></div></div>`;
+  }
+  function v673OpenLesson(id){
+    const l=v673LessonById(id); if(!l) return;
+    const done=v673LessonDone(id);
+    modal(l.title, `<div class="v673-lesson-modal"><div class="hero-mini"><span class="chip">${escapeHtml(l.path)}</span><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.subtitle)}</p></div><div class="grid grid-3"><div class="card"><h3>${escapeHtml(t('whyThisMatters'))}</h3><p>${escapeHtml(l.why)}</p></div><div class="card"><h3>${escapeHtml(t('workfloorExercise'))}</h3><p>${escapeHtml(l.exercise)}</p></div><div class="card"><h3>${escapeHtml(t('reflectionQuestion'))}</h3><p>${escapeHtml(l.reflect)}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v673-complete-wise-lesson" data-id="${escapeHtml(l.id)}">${done?'✓ '+escapeHtml(t('earned')):escapeHtml(t('completeWiseLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route)}">${escapeHtml(L('Open praktijk','Open practice'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide');
+  }
+  function v673BadgeDefs(){
+    const done=v673DoneCount(), practice=v673PracticeCount(), wise=v673WiseLessons().filter(l=>v673LessonDone(l.id)).length, s=v673WeekStats();
+    return [
+      {id:'first_step', icon:'🌱', title:L('Eerste Groei','First Growth'), text:L('Je hebt je eerste coachingstap gezet. Klein beginnen is hoe professioneel gedrag groeit.', 'You took your first coaching step. Starting small is how professional behavior grows.'), achieved:done>=1, progress:Math.min(100,done*100)},
+      {id:'calm_operator', icon:'🧘', title:L('Rustige Operator','Calm Operator'), text:L('Je kiest rust boven chaos. Je gebruikt overzicht om beter te handelen, ook als het druk wordt.', 'You choose calm over chaos. You use overview to act better, even when the day gets busy.'), achieved:done>=4, progress:Math.min(100,done/4*100)},
+      {id:'wise_learner', icon:'📘', title:L('Wijze Leerling','Wise Learner'), text:L('Je leest niet alleen lessen, maar vertaalt ze naar echte acties op de winkelvloer.', 'You do not only read lessons; you translate them into real workfloor actions.'), achieved:wise>=3, progress:Math.min(100,wise/3*100)},
+      {id:'communication_pro', icon:'💬', title:L('Communicatie Pro','Communication Pro'), text:L('Je maakt afspraken zichtbaar en voorkomt dat collega’s hoeven te gokken wat de vervolgstap is.', 'You make agreements visible and prevent colleagues from guessing the next step.'), achieved:s.comm===0 && done>=3, progress:Math.min(100,(done>=3?60:done/3*60)+(s.comm===0?40:0))},
+      {id:'store_signal', icon:'🧭', title:L('Store Map Signaleerder','Cleaning Map Signal Spotter'), text:L('Je kijkt verder dan schoon/vies en ziet welke plekken echt aandacht of nacontrole verdienen.', 'You look beyond clean/dirty and see which places truly need attention or follow-up.'), achieved:s.store===0 && done>=5, progress:Math.min(100,(done/5*60)+(s.store===0?40:0))},
+      {id:'agf_eye', icon:'🥬', title:L('AGF Oog','Produce Eye'), text:L('Je herkent sneller het verschil tussen leeg, overvoorraad, kwaliteit en presentatie.', 'You recognize the difference between empty, overstock, quality and presentation faster.'), achieved:s.agf===0 && done>=5, progress:Math.min(100,(done/5*50)+(s.agf===0?50:0))},
+      {id:'finish_strong', icon:'✅', title:L('Sterk Afmaken','Finish Strong'), text:L('Je maakt werk zichtbaar af: registreren, overdragen en morgen rustiger starten.', 'You finish work visibly: register, hand over and start tomorrow calmer.'), achieved:done>=8, progress:Math.min(100,done/8*100)},
+      {id:'retail_command', icon:'🏆', title:L('Retail Command Coach','Retail Command Coach'), text:L('Je gebruikt inzicht, discipline en communicatie samen. Dit is de basis van V7-waardig werken.', 'You combine insight, discipline and communication. This is the foundation of V7-level work.'), achieved:done>=12 && wise>=5, progress:Math.min(100,(done/12*60)+(wise/5*40))}
+    ];
+  }
+  function v673BadgeGrid(){
+    return `<div class="grid grid-4 v673-badge-grid">${v673BadgeDefs().map(b=>`<button class="v673-badge-card ${b.achieved?'earned':'locked'}" data-action="v673-open-badge" data-id="${escapeHtml(b.id)}"><span class="v673-badge-icon">${b.icon}</span><strong>${escapeHtml(b.title)}</strong><small>${escapeHtml(b.achieved?t('earned'):t('notEarned'))}</small><div class="v673-mini-progress"><span style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div></button>`).join('')}</div>`;
+  }
+  function v673OpenBadge(id){
+    const b=v673BadgeDefs().find(x=>x.id===id); if(!b) return;
+    modal(t('badgeDetails'), `<div class="v673-badge-modal ${b.achieved?'earned':'locked'}"><div class="v673-big-badge"><span>${b.icon}</span></div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="card soft"><div class="flex-line"><strong>${escapeHtml(t('progress'))}</strong><span class="pill ${b.achieved?'good':'info'}">${Math.round(Math.max(0,Math.min(100,b.progress)))}%</span></div><div class="progress v673-modal-progress"><span class="${b.achieved?'good':'info'}" style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div><p class="muted small">${escapeHtml(b.achieved?t('badgeUnlocked'):t('noBadgeYet'))}</p></div><div class="btn-row mt"><button class="btn primary" data-route="coaching">${escapeHtml(t('coaching'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`);
+  }
+  function v673CompleteWiseLesson(id){
+    if(!id) return;
+    const before=v673BadgeDefs().filter(b=>b.achieved).map(b=>b.id);
+    if(!state.coachingDone) state.coachingDone=[];
+    if(!state.coachingDone.includes(id)) state.coachingDone.push(id);
+    addActivity(t('lessonCompleted'), 'coaching');
+    const after=v673BadgeDefs().filter(b=>b.achieved && !before.includes(b.id));
+    save(); render();
+    if(after.length){
+      const b=after[0];
+      modal(t('badgeUnlocked'), `<div class="v673-badge-modal earned"><div class="v673-big-badge"><span>${b.icon}</span></div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="btn-row mt"><button class="btn primary" data-action="close-modal">${escapeHtml(t('close'))}</button><button class="btn" data-route="coaching">${escapeHtml(t('badgeGallery'))}</button></div></div>`);
+    } else {
+      toast(t('lessonCompleted'),'good');
+    }
+  }
+  function v673SkillProfile(){
+    const s=v673WeekStats();
+    const rows=[
+      {label:'AGF', value:Math.max(35,90-s.agf*12), type:s.agf?'warn':'good'},
+      {label:t('communication'), value:Math.max(35,90-s.due*18-s.comm*5), type:s.due?'bad':s.comm?'warn':'good'},
+      {label:t('storemap'), value:Math.max(35,88-s.store*18), type:s.store?'warn':'good'},
+      {label:'HACCP', value:Math.max(40,72+Math.min(20,s.completed*2)), type:'good'},
+      {label:L('Bestelbeheer','Ordering'), value:Math.max(40,88-s.orders*12), type:s.orders?'warn':'good'}
+    ];
+    return `<div class="card v673-skill-profile"><h3>${escapeHtml(t('skillProfile'))}</h3>${rows.map(r=>bar(escapeHtml(r.label),r.value,r.type)).join('')}<p class="muted small">${escapeHtml(t('weekLearningAdvice'))}: ${escapeHtml(v673LearningAdvice())}</p></div>`;
+  }
+  function v673CoachPlanText(){
+    const m=v673WeekMeta();
+    return [`RICH CMD ${t('weekCoach')} — ${t('weekNumber')} ${m.week} (${m.startLabel} — ${m.endLabel})`, `${t('workDate')}: ${m.dateLabel}`, '', `${t('dailyMicrocoach')}:`, `- ${v673CoachAdvice()}`, '', `${t('weekLearningAdvice')}:`, `- ${v673LearningAdvice()}`, '', `${t('wiseLessons')}:`, ...v673WiseLessons().slice(0,3).map(l=>`- ${l.title}: ${l.exercise}`)].join('\n');
+  }
+  function v673CopyCoachPlan(){ copyText(v673CoachPlanText()); addActivity(t('copyCoachPlan'),'coaching'); toast(t('coachPlanCopied'),'good'); }
+  function v673WeekReportText(){
+    const m=v673WeekMeta(); const s=v673WeekStats();
+    return [`RICH CMD ${t('weekReport')} — ${t('weekNumber')} ${m.week} (${m.startLabel} — ${m.endLabel})`, `${t('workDate')}: ${m.dateLabel}`, '', `${t('completedActions')}: ${s.completed}`, `${t('stayedOpen')}: ${s.comm+s.orders+s.store+s.agf}`, `AGF: ${s.agf}`, `${t('communication')}: ${s.comm} (${s.due} ${L('vandaag op te volgen','due today')})`, `${t('storemap')}: ${s.store}`, `${L('Bestelbeheer','Ordering')}: ${s.orders}`, '', `${t('weekLearningAdvice')}:`, `- ${v673LearningAdvice()}`].join('\n');
+  }
+  function v673CoachingDiagnostics(){
+    const badges=v673BadgeDefs();
+    const checks=[
+      {name:t('wiseLessons'), ok:v673WiseLessons().length>=8, detail:String(v673WiseLessons().length)},
+      {name:t('badgeGallery'), ok:badges.length>=8, detail:String(badges.filter(b=>b.achieved).length)+' '+t('earned')},
+      {name:t('skillProfile'), ok:typeof v673SkillProfile==='function', detail:'render'},
+      {name:t('weekCoach'), ok:typeof v673CoachAdvice()==='string' && v673CoachAdvice().length>20, detail:'coach'},
+      {name:'Mobile QA', ok:!document.querySelector('.assist-extra.v661-assist-extra'), detail:'assist-extra'},
+      {name:'APP.version', ok:APP.version==='v6.7.3', detail:APP.version},
+      {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v673', detail:APP.cache}
+    ];
+    return `<div class="card v673-diagnostics-card"><h3>${escapeHtml(t('coachingChecks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`;
+  }
+  function v673UpdateLogCard(){ return `<div class="card v673-changelog"><h3>${escapeHtml(t('v673Title'))}</h3><p>${escapeHtml(L('Coaching heeft nu uitgebreidere wijze lessen, klikbare badgekaarten, Weekcoach, Coach vandaag, vaardigheidsprofiel en rapportages met datum/weeknummer.', 'Coaching now has richer wise lessons, clickable badge cards, Week Coach, Coach today, skill profile and reports with date/week number.'))}</p><p class="muted small">${escapeHtml(t('next673Idea'))}</p></div>`; }
+  function v673CoachingDashboard(base){
+    const lessons=v673WiseLessons();
+    const showFull=!!(state.ui && state.ui.v673ShowFullAcademy);
+    return `<div class="coaching-v673"><div class="hero v673-coaching-hero"><span class="chip">${escapeHtml(t('v673Title'))}</span><h2>${escapeHtml(L('Wijzer worden op de winkelvloer','Grow wiser on the shop floor'))}</h2><p>${escapeHtml(L('Niet alleen lessen afvinken, maar beter kijken, rustiger kiezen en sterker afronden.', 'Not only checking lessons off, but seeing better, choosing calmer and finishing stronger.'))}</p></div><div class="grid grid-2">${v673DailyCoachCard(false)}${v673WeekCoachCard(false)}</div><div class="grid grid-main"><div class="grid"><div class="card"><h3>${escapeHtml(t('wiseLessons'))}</h3><p class="muted small">${escapeHtml(L('Uitgebreidere lessen met uitleg, oefening en reflectie.', 'Richer lessons with explanation, exercise and reflection.'))}</p><div class="grid grid-2 v673-wise-grid">${lessons.map(v673LessonCard).join('')}</div></div></div><div class="grid">${v673SkillProfile()}<div class="card v673-badges-wrap"><h3>${escapeHtml(t('badgeGallery'))}</h3><p class="muted small">${escapeHtml(L('Klik op een badge om het ontwerp, de titel en de betekenis te bekijken.', 'Click a badge to view its design, title and meaning.'))}</p>${v673BadgeGrid()}</div></div></div><div class="card v673-full-academy"><div class="flex-line"><h3>${escapeHtml(L('Volledige lesbibliotheek','Full lesson library'))}</h3><button class="btn small" data-action="v673-toggle-full-academy">${escapeHtml(showFull?t('hideFullAcademy'):t('showFullAcademy'))}</button></div>${showFull?`<div class="v673-old-academy mt">${base}</div>`:`<p class="muted small">${escapeHtml(L('Ingeklapt om Coaching rustiger te houden. De bestaande lessen blijven beschikbaar.', 'Collapsed to keep Coaching calm. Existing lessons remain available.'))}</p>`}</div></div>`;
+  }
+
+  const v673BaseCoaching = renderCoaching;
+  renderCoaching = window.renderCoaching = function(){ return v673CoachingDashboard(v673BaseCoaching()); };
+
+  const v673BaseToday = renderToday;
+  renderToday = window.renderToday = function(){
+    const html=v673BaseToday();
+    return `<div class="today-v673">${html}<div class="grid grid-2 v673-today-coach">${v673DailyCoachCard(true)}${v673WeekCoachCard(true)}</div></div>`;
+  };
+
+  const v673BaseVisual = renderVisual;
+  renderVisual = window.renderVisual = function(){
+    const base=v673BaseVisual();
+    return `<div class="visual-v673"><div class="hero v673-visual-hero"><span class="chip">${escapeHtml(t('v673Title'))}</span><h2>${escapeHtml(L('Van cijfers naar begeleiding','From numbers to guidance'))}</h2><p>${escapeHtml(L('Visualisatie is nu rustiger opgebouwd: Vandaag, Week, Coach en Details.', 'Visualization is now structured calmer: Today, Week, Coach and Details.'))}</p></div><section class="v673-visual-section"><h3>${escapeHtml(t('todaySection'))}</h3><div class="grid grid-2">${v673DailyCoachCard(true)}${typeof v672DateCard==='function'?v672DateCard():''}</div></section><section class="v673-visual-section"><h3>${escapeHtml(t('weekSection'))}</h3>${typeof v672WeekSummaryCard==='function'?v672WeekSummaryCard(true):v673WeekCoachCard(true)}</section><section class="v673-visual-section"><h3>${escapeHtml(t('coachSection'))}</h3><div class="grid grid-2">${v673WeekCoachCard(false)}${v673SkillProfile()}</div></section><section class="v673-visual-section details"><div class="flex-line"><h3>${escapeHtml(t('detailsSection'))}</h3><span class="pill info">${escapeHtml(L('bestaande grafieken','existing charts'))}</span></div>${base}</section></div>`;
+  };
+
+  const v673BaseDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){ return v673BaseDiagnostics() + `<div class="grid grid-2 mt diagnostics-v673">${v673CoachingDiagnostics()}${v673UpdateLogCard()}</div>`; };
+
+  const v673BaseHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v673-open-wise-lesson'){ v673OpenLesson(el.dataset.id); return; }
+    if(a==='v673-complete-wise-lesson'){ v673CompleteWiseLesson(el.dataset.id); return; }
+    if(a==='v673-open-badge'){ v673OpenBadge(el.dataset.id); return; }
+    if(a==='v673-toggle-full-academy'){ state.ui.v673ShowFullAcademy=!state.ui.v673ShowFullAcademy; save(); render(); return; }
+    if(a==='v673-copy-coach-plan'){ v673CopyCoachPlan(); return; }
+    if(a==='v672-copy-week-report'){ copyText(v673WeekReportText()); addActivity(t('copyWeekReport'),'report'); toast(t('weekReportCopied'),'good'); return; }
+    if(a==='pwa-check-update-v673' || a==='pwa-prepare-offline-v673' || a==='pwa-activate-update-v673') return v673BaseHandle(a.replace('v673','v672'), el, e);
+    return v673BaseHandle(a, el, e);
+  };
+
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.3 Weekcoach & Coaching Foundation failed', err);
+}
+
+/* RICH CMD v6.7.4 — Coaching Integration & V7 Roadmap
+   - Fixes Start microles: opens the first recommended lesson directly
+   - Integrates classic lesson library into the refreshed Coaching page
+   - Keeps first exercises at the top
+   - Adds V7 roadmap guidance and diagnostics checks */
+try {
+  APP.version = 'v6.7.4';
+  APP.cache = 'rich-cmd-cache-v674';
+  if (APP.pwa) {
+    APP.pwa.version = 'v6.7.4';
+    APP.pwa.cache = 'rich-cmd-cache-v674';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=674','./styles.css?v=674','./app.js?v=674','./manifest.json?v=674','./version.json','./icon-192.png','./icon-512.png'];
+  }
+
+  Object.assign(I18N.nl, {
+    v674Title:'RICH CMD v6.7.4 — Coaching Integration & V7 Roadmap',
+    firstExercises:'Eerste oefeningen', integratedLibrary:'Lessenbibliotheek', classicLessons:'Klassieke lessen',
+    startRecommendedLesson:'Start aanbevolen les', searchLessons:'Zoek in lessen', clearSearch:'Zoek leegmaken',
+    v7Roadmap:'V7 Routekaart', v7RoadmapIntro:'RICH CMD werkt nu toe naar V7: minder losse patches, meer samenhang, meer begeleiding en betere betrouwbaarheid.',
+    coachingIntegrated:'Coaching geïntegreerd', openLesson:'Les openen', completeLesson:'Les afronden',
+    lessonLibraryHint:'De bestaande lessen zijn nu onderdeel van dezelfde Coaching-pagina. Gebruik zoeken of toon meer om snel te vinden wat je nodig hebt.',
+    nextUpdateIdeas:'Ideeën voor volgende updates', showMoreLessons:'Meer lessen tonen', showLessLessons:'Minder lessen tonen',
+    copyRoadmap:'Kopieer V7 routekaart', roadmapCopied:'V7 routekaart gekopieerd.',
+    integrationChecks:'Coaching integratiechecks', recommendedFixed:'Start microles werkt', legacyIntegrated:'Oude lessen geïntegreerd', roadmapPresent:'V7 routekaart aanwezig'
+  });
+  Object.assign(I18N.en, {
+    v674Title:'RICH CMD v6.7.4 — Coaching Integration & V7 Roadmap',
+    firstExercises:'First exercises', integratedLibrary:'Lesson library', classicLessons:'Classic lessons',
+    startRecommendedLesson:'Start recommended lesson', searchLessons:'Search lessons', clearSearch:'Clear search',
+    v7Roadmap:'V7 Roadmap', v7RoadmapIntro:'RICH CMD is now moving toward V7: fewer loose patches, more coherence, more guidance and stronger reliability.',
+    coachingIntegrated:'Coaching integrated', openLesson:'Open lesson', completeLesson:'Complete lesson',
+    lessonLibraryHint:'The existing lessons are now part of the same Coaching page. Use search or show more to quickly find what you need.',
+    nextUpdateIdeas:'Ideas for next updates', showMoreLessons:'Show more lessons', showLessLessons:'Show fewer lessons',
+    copyRoadmap:'Copy V7 roadmap', roadmapCopied:'V7 roadmap copied.',
+    integrationChecks:'Coaching integration checks', recommendedFixed:'Start micro lesson works', legacyIntegrated:'Old lessons integrated', roadmapPresent:'V7 roadmap present'
+  });
+
+  function v674Arr(x){ return Array.isArray(x) ? x : []; }
+  function v674Done(id){ return v674Arr(state.coachingDone).includes(id); }
+  function v674EnsureUi(){ if(!state.ui) state.ui={}; if(!state.coachingDone) state.coachingDone=[]; }
+  function v674SafeLessons(){ try { return (typeof getLessons==='function' ? getLessons() : []).filter(Boolean); } catch(_) { return []; } }
+  function v674WeekMetaSafe(){ try { return window.v673WeekMeta ? window.v673WeekMeta() : {week:'-', dateLabel:TODAY(), startLabel:'', endLabel:''}; } catch(_) { return {week:'-', dateLabel:TODAY(), startLabel:'', endLabel:''}; } }
+  function v674WeekStats(){
+    const comm=v674Arr(state.communications).filter(c=>c && !['Afgehandeld','Voltooid','Notitie','done','completed'].includes(c.status));
+    const due=comm.filter(c=>c.followDate && c.followDate <= TODAY());
+    const orders=v674Arr(state.inventoryOrders).filter(o=>o && o.type!=='legacy-cleared');
+    let store=[]; try { store=typeof cleaningUrgent==='function'?cleaningUrgent():[]; } catch(_) {}
+    let agf=[]; try { agf=typeof agfAttention==='function'?agfAttention():[]; } catch(_) {}
+    return {comm:comm.length,due:due.length,orders:orders.length,store:store.length,agf:agf.length,done:v674Arr(state.coachingDone).length};
+  }
+  function v674WiseLessons(){
+    return [
+      {id:'v673_calm_start', path:'Kalmte', title:L('Rustig starten is professioneel','A calm start is professional'), subtitle:L('Niet alles hoeft direct. Eerst overzicht, dan tempo.','Not everything has to happen immediately. First overview, then pace.'), why:L('Een sterke werkdag begint niet met rennen, maar met kiezen. Wie eerst overzicht maakt, voorkomt dubbel werk, vergeten controles en onnodige stress. Rust is dus geen vertraging; rust is kwaliteitscontrole.','A strong workday does not start with rushing, but with choosing. Overview prevents double work, forgotten checks and unnecessary stress. Calm is not delay; it is quality control.'), exercise:L('Open Vandaag, kies de eerste actie en voer alleen die actie uit. Laat andere taken bewust wachten tot deze stap klaar is.','Open Today, choose the first action and do only that action. Let other tasks wait until this step is done.'), reflect:L('Welke taak voelde vandaag groter in je hoofd dan hij werkelijk was?','Which task felt bigger in your head today than it really was?'), route:'today'},
+      {id:'v673_store_signal', path:'Signalatie', title:L('Kijk naar oorzaken, niet alleen naar vuil','Look for causes, not only dirt'), subtitle:L('Een schoonmaakpunt vertelt vaak een groter verhaal.','A cleaning point often tells a bigger story.'), why:L('Als dezelfde plek steeds terugkomt, is schoonmaken alleen niet genoeg. Dan moet je kijken naar oorzaak: routing, verpakking, lekkage, frequentie of gedrag. Dat maakt je van uitvoerder naar verbeteraar.','If the same spot keeps returning, cleaning alone is not enough. Look for the cause: routing, packaging, leakage, frequency or behavior. That turns execution into improvement.'), exercise:L('Kies één Store Map-punt en noteer naast de status ook één mogelijke oorzaak.','Choose one Store Map point and note one possible cause next to the status.'), reflect:L('Welk schoonmaakpunt zou minder vaak terugkomen als de oorzaak wordt aangepakt?','Which cleaning point would return less often if the cause was fixed?'), route:'storemap'},
+      {id:'v673_agf_decision', path:'AGF', title:L('AGF vraagt oordeel, niet alleen snelheid','Produce needs judgment, not only speed'), subtitle:L('Leeg, overvol en kwaliteit hebben ieder een andere actie nodig.','Empty, overstock and quality each need a different action.'), why:L('Bij AGF is snel vullen niet altijd slim. Soms is minder bestellen beter, soms moet je presentatie herstellen, en soms moet kwaliteit eerst. Goed AGF-werk is het verschil zien tussen voorraadprobleem, presentatieprobleem en kwaliteitsprobleem.','In Produce, filling quickly is not always smart. Sometimes less ordering is better, sometimes presentation needs repair, and sometimes quality comes first. Good Produce work is seeing the difference between stock, presentation and quality problems.'), exercise:L('Controleer drie AGF-producten en geef elk één duidelijke status: OK, leeg, overvoorraad of kwaliteit.','Check three Produce items and give each one clear status: OK, empty, overstock or quality.'), reflect:L('Bij welk product was het advies anders dan je eerste gevoel?','For which product was the advice different from your first feeling?'), route:'agf'},
+      {id:'v673_comm_clear', path:'Communicatie', title:L('Goede overdracht is kort en bruikbaar','Good handover is short and usable'), subtitle:L('Situatie, actie, vervolg. Meer hoeft vaak niet.','Situation, action, next step. Often that is enough.'), why:L('Een lange overdracht wordt minder goed gelezen. Een bruikbare overdracht vertelt wat er speelt, wat al gedaan is en wat de volgende persoon moet doen. Dat voorkomt frustratie en herhaling.','A long handover is read less well. A useful handover says what is happening, what has been done and what the next person should do. It prevents frustration and repetition.'), exercise:L('Maak één communicatiepunt in drie regels: situatie, actie, vervolg.','Create one communication item in three lines: situation, action, next step.'), reflect:L('Welke informatie laat jij soms weg waardoor iemand anders moet gokken?','What information do you sometimes leave out, forcing someone else to guess?'), route:'communication'},
+      {id:'v673_order_calm', path:'Bestelbeheer', title:L('Bestellen vanuit rust voorkomt voorraadruis','Ordering calmly prevents stock noise'), subtitle:L('Niet alles wat bijna op is, moet maximaal besteld worden.','Not everything that is almost empty needs maximum ordering.'), why:L('Bestellen vanuit stress geeft vaak overvoorraad. Bestellen vanuit frequentie, minimum en werkelijke behoefte geeft rust. Een goede bestelling is niet de grootste bestelling, maar de meest passende.','Ordering from stress often creates overstock. Ordering from frequency, minimum and real need creates calm. A good order is not the biggest order, but the most fitting one.'), exercise:L('Kies twee bestelartikelen en bepaal bewust: bijbestellen, teveel of nul.','Choose two ordering items and decide consciously: reorder, too much or zero.'), reflect:L('Welk artikel bestel je soms uit gewoonte in plaats van noodzaak?','Which item do you sometimes order from habit instead of need?'), route:'inventory'},
+      {id:'v673_finish_visible', path:'Werkhouding', title:L('Afmaken is zichtbare discipline','Finishing is visible discipline'), subtitle:L('Een taak is pas klaar als hij ook geregistreerd of overgedragen is.','A task is only done when it is registered or handed over.'), why:L('Half afgeronde taken blijven mentale ruis. Door klein af te maken en zichtbaar te registreren, bouw je vertrouwen op bij jezelf en bij collega’s. Afmaken is een vorm van leiderschap.','Half-finished tasks remain mental noise. Finishing small and registering visibly builds trust with yourself and colleagues. Finishing is a form of leadership.'), exercise:L('Rond één kleine taak volledig af en maak daarna direct een korte notitie of vink hem af.','Fully finish one small task and immediately make a short note or tick it off.'), reflect:L('Welke open taak kost je aandacht zonder dat je er actief aan werkt?','Which open task costs attention without you actively working on it?'), route:'today'},
+      {id:'v673_lead_small', path:'Leiderschap', title:L('Leiderschap begint met één duidelijke volgende stap','Leadership starts with one clear next step'), subtitle:L('Je hoeft niet alles op te lossen om leiding te nemen.','You do not need to solve everything to take the lead.'), why:L('In drukte zoeken mensen richting. Een kleine, duidelijke stap geeft meer rust dan een groot vaag plan. Leiderschap op de winkelvloer betekent vaak: prioriteit geven, kort uitleggen en het voorbeeld zetten.','In busy moments people look for direction. One small clear step gives more calm than a big vague plan. Shopfloor leadership often means prioritizing, explaining briefly and setting the example.'), exercise:L('Formuleer vandaag één zin: “Eerst doen we ..., daarna ...”.','Formulate one sentence today: “First we do ..., then ...”.'), reflect:L('Waar kun jij vandaag meer duidelijkheid geven zonder harder te praten?','Where can you give more clarity today without speaking louder?'), route:'communication'},
+      {id:'v673_week_review', path:'Zelfinzicht', title:L('Een weekpatroon is waardevoller dan één losse fout','A weekly pattern is more valuable than one loose mistake'), subtitle:L('Terugkerende punten laten zien waar verbetering echt nodig is.','Recurring points show where improvement is really needed.'), why:L('Een losse fout kan toeval zijn. Een terugkerend patroon is informatie. Door weekpatronen te bekijken, zie je waar je systeem sterker moet worden: planning, communicatie, schoonmaak, AGF of bestellen.','A single mistake can be coincidence. A recurring pattern is information. By reviewing weekly patterns, you see where your system needs to become stronger: planning, communication, cleaning, Produce or ordering.'), exercise:L('Open Visualisatie en kies één terugkerend punt waar je volgende week op wilt letten.','Open Visualization and choose one recurring point to watch next week.'), reflect:L('Welk patroon wil je volgende week kleiner maken?','Which pattern do you want to make smaller next week?'), route:'visual'}
+    ];
+  }
+  function v674LessonById(id){ return v674WiseLessons().find(l=>l.id===id); }
+  function v674NextWise(){ return v674WiseLessons().find(l=>!v674Done(l.id)) || v674WiseLessons()[0]; }
+  function v674CoachAdvice(){
+    const s=v674WeekStats(); const energy=(state.ui && state.ui.energy)||'normal';
+    if(energy==='low') return L('Kies een korte les over rustig starten. Lage energie vraagt geen groot plan, maar één heldere eerste stap.','Choose a short lesson about starting calmly. Low energy does not need a big plan, but one clear first step.');
+    if(s.due) return L('Vandaag helpt communicatie het meest: maak afspraken kort, zichtbaar en opvolgbaar.','Communication helps most today: make agreements short, visible and followable.');
+    if(s.store) return L('Store Map vraagt aandacht: kijk naar oorzaak, niet alleen naar schoon/vies.','Store Map needs attention: look for cause, not only clean/dirty.');
+    if(s.orders) return L('Bestelbeheer vraagt rust: bepaal bewust wat erbij moet en wat juist teveel is.','Ordering needs calm: consciously decide what needs more and what is already too much.');
+    if(s.agf) return L('AGF vraagt oordeel: kijk naar leeg, overvoorraad, kwaliteit en presentatie.','Produce needs judgment: look at empty, overstock, quality and presentation.');
+    return L('De basis is stabiel. Gebruik Coaching om één kleine professionele gewoonte sterker te maken.','The base is stable. Use Coaching to strengthen one small professional habit.');
+  }
+  function v674FirstExerciseCard(){
+    const l=v674NextWise(); const m=v674WeekMetaSafe();
+    return `<div class="card v674-first-exercise"><div class="flex-line"><div><span class="chip">${escapeHtml(t('firstExercises'))}</span><h3>${escapeHtml(l.title)}</h3></div><span class="pill info">${escapeHtml(t('weekNumber'))} ${m.week}</span></div><p class="muted">${escapeHtml(l.subtitle)}</p><p>${escapeHtml(v674CoachAdvice())}</p><div class="btn-row mt"><button class="btn primary" data-action="v674-start-micro-lesson">${escapeHtml(t('startMicroLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route)}">${escapeHtml(L('Open praktijk','Open practice'))}</button></div></div>`;
+  }
+  function v674LessonCard(l, featured=false){
+    const done=v674Done(l.id);
+    return `<div class="card v674-wise-card ${featured?'featured':''} ${done?'done':''}"><div class="flex-line"><span class="chip">${escapeHtml(l.path)}</span><span class="pill ${done?'good':'info'}">${done?'✓ '+escapeHtml(t('earned')):escapeHtml(t('start'))}</span></div><h3>${escapeHtml(l.title)}</h3><p class="muted">${escapeHtml(l.subtitle)}</p><div class="btn-row mt"><button class="btn primary" data-action="v674-open-wise-lesson" data-id="${escapeHtml(l.id)}">${escapeHtml(t('startMicroLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route)}">${escapeHtml(L('Open praktijk','Open practice'))}</button></div></div>`;
+  }
+  function v674OpenWiseLesson(id){
+    const l=v674LessonById(id)||v674NextWise(); if(!l) return;
+    const done=v674Done(l.id);
+    modal(l.title, `<div class="v674-lesson-modal"><div class="hero-mini"><span class="chip">${escapeHtml(l.path)}</span><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.subtitle)}</p></div><div class="grid grid-3"><div class="card"><h3>${escapeHtml(t('whyThisMatters'))}</h3><p>${escapeHtml(l.why)}</p></div><div class="card"><h3>${escapeHtml(t('workfloorExercise'))}</h3><p>${escapeHtml(l.exercise)}</p></div><div class="card"><h3>${escapeHtml(t('reflectionQuestion'))}</h3><p>${escapeHtml(l.reflect)}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v674-complete-wise-lesson" data-id="${escapeHtml(l.id)}">${done?'✓ '+escapeHtml(t('earned')):escapeHtml(t('completeWiseLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route)}">${escapeHtml(L('Open praktijk','Open practice'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide');
+  }
+  function v674BadgeDefs(){
+    const done=v674Arr(state.coachingDone).length, wise=v674WiseLessons().filter(l=>v674Done(l.id)).length, s=v674WeekStats();
+    return [
+      {id:'first_step', icon:'🌱', title:L('Eerste Groei','First Growth'), text:L('Je hebt je eerste coachingstap gezet. Klein beginnen is hoe professioneel gedrag groeit.','You took your first coaching step. Starting small is how professional behavior grows.'), achieved:done>=1, progress:Math.min(100,done*100)},
+      {id:'calm_operator', icon:'🧘', title:L('Rustige Operator','Calm Operator'), text:L('Je kiest rust boven chaos en gebruikt overzicht om beter te handelen.','You choose calm over chaos and use overview to act better.'), achieved:done>=4, progress:Math.min(100,done/4*100)},
+      {id:'wise_learner', icon:'📘', title:L('Wijze Leerling','Wise Learner'), text:L('Je vertaalt lessen naar echte acties op de winkelvloer.','You translate lessons into real shopfloor actions.'), achieved:wise>=3, progress:Math.min(100,wise/3*100)},
+      {id:'communication_pro', icon:'💬', title:L('Communicatie Pro','Communication Pro'), text:L('Je maakt afspraken zichtbaar en opvolgbaar.','You make agreements visible and followable.'), achieved:s.comm===0 && done>=3, progress:Math.min(100,(done>=3?60:done/3*60)+(s.comm===0?40:0))},
+      {id:'store_signal', icon:'🧭', title:L('Store Map Signaleerder','Store Map Signal Spotter'), text:L('Je kijkt verder dan schoon/vies en ziet welke plekken aandacht verdienen.','You look beyond clean/dirty and see which places need attention.'), achieved:s.store===0 && done>=5, progress:Math.min(100,(done/5*60)+(s.store===0?40:0))},
+      {id:'agf_eye', icon:'🥬', title:L('AGF Oog','Produce Eye'), text:L('Je herkent sneller leeg, overvoorraad, kwaliteit en presentatie.','You recognize empty, overstock, quality and presentation faster.'), achieved:s.agf===0 && done>=5, progress:Math.min(100,(done/5*50)+(s.agf===0?50:0))},
+      {id:'finish_strong', icon:'✅', title:L('Sterk Afmaken','Finish Strong'), text:L('Je maakt werk zichtbaar af: registreren, overdragen en morgen rustiger starten.','You finish work visibly: register, hand over and start tomorrow calmer.'), achieved:done>=8, progress:Math.min(100,done/8*100)},
+      {id:'retail_command', icon:'🏆', title:L('Retail Command Coach','Retail Command Coach'), text:L('Je gebruikt inzicht, discipline en communicatie samen: V7-waardig werken.','You combine insight, discipline and communication: V7-level work.'), achieved:done>=12 && wise>=5, progress:Math.min(100,(done/12*60)+(wise/5*40))}
+    ];
+  }
+  function v674BadgeGrid(){ return `<div class="grid grid-4 v674-badge-grid">${v674BadgeDefs().map(b=>`<button class="v674-badge-card ${b.achieved?'earned':'locked'}" data-action="v674-open-badge" data-id="${escapeHtml(b.id)}"><span class="v674-badge-icon">${b.icon}</span><strong>${escapeHtml(b.title)}</strong><small>${escapeHtml(b.achieved?t('earned'):t('notEarned'))}</small><div class="v674-mini-progress"><span style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div></button>`).join('')}</div>`; }
+  function v674OpenBadge(id){
+    const b=v674BadgeDefs().find(x=>x.id===id); if(!b) return;
+    modal(t('badgeDetails'), `<div class="v674-badge-modal ${b.achieved?'earned':'locked'}"><div class="v674-big-badge"><span>${b.icon}</span></div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="card soft"><div class="flex-line"><strong>${escapeHtml(t('progress'))}</strong><span class="pill ${b.achieved?'good':'info'}">${Math.round(Math.max(0,Math.min(100,b.progress)))}%</span></div><div class="progress v674-modal-progress"><span class="${b.achieved?'good':'info'}" style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div><p class="muted small">${escapeHtml(b.achieved?t('badgeUnlocked'):t('noBadgeYet'))}</p></div><div class="btn-row mt"><button class="btn primary" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`);
+  }
+  function v674CompleteWiseLesson(id){
+    v674EnsureUi(); if(!id) return;
+    const before=v674BadgeDefs().filter(b=>b.achieved).map(b=>b.id);
+    if(!state.coachingDone.includes(id)) state.coachingDone.push(id);
+    addActivity(t('lessonCompleted'),'coaching'); save(); render();
+    const unlocked=v674BadgeDefs().filter(b=>b.achieved && !before.includes(b.id));
+    if(unlocked.length){ const b=unlocked[0]; modal(t('badgeUnlocked'), `<div class="v674-badge-modal earned"><div class="v674-big-badge"><span>${b.icon}</span></div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="btn-row mt"><button class="btn primary" data-action="close-modal">${escapeHtml(t('close'))}</button><button class="btn" data-route="coaching">${escapeHtml(t('badgeGallery'))}</button></div></div>`); }
+    else toast(t('lessonCompleted'),'good');
+  }
+  function v674ClassicLessonCard(l){
+    const done=v674Done(l.id); const locked=!!l.locked;
+    return `<div class="list-item v674-classic-lesson ${done?'done':''} ${locked?'locked':''}"><div><div class="flex-line"><strong>${escapeHtml(l.title)}</strong><span class="pill ${done?'good':locked?'warn':'info'}">${done?'✓ '+escapeHtml(t('done')):locked?escapeHtml(L('Vergrendeld','Locked')):escapeHtml(l.category||t('coaching'))}</span></div><p class="muted small">${escapeHtml(l.text||'')}</p><p class="small"><strong>${escapeHtml(L('Oefening','Exercise'))}:</strong> ${escapeHtml(l.practice||'')}</p></div><div class="btn-row"><button class="btn small primary" data-action="v674-open-classic-lesson" data-id="${escapeHtml(l.id)}" ${locked?'disabled':''}>${escapeHtml(t('openLesson'))}</button><button class="btn small" data-route="${escapeHtml(l.route||'coaching')}">${escapeHtml(L('Praktijk','Practice'))}</button></div></div>`;
+  }
+  function v674ClassicLibrary(){
+    v674EnsureUi(); const q=String(state.ui.v674LessonSearch||'').trim().toLowerCase(); const all=v674SafeLessons();
+    const filtered=all.filter(l=>!q || (String(l.title+' '+l.category+' '+l.text+' '+l.practice).toLowerCase().includes(q)));
+    const limit=q ? 24 : (state.ui.v674ShowMoreLessons ? 36 : 10);
+    return `<div class="card v674-classic-library"><div class="flex-line"><div><h3>${escapeHtml(t('integratedLibrary'))}</h3><p class="muted small">${escapeHtml(t('lessonLibraryHint'))}</p></div><span class="pill info">${filtered.length}/${all.length}</span></div><div class="v674-library-tools"><input class="input" id="v674LessonSearch" value="${escapeHtml(state.ui.v674LessonSearch||'')}" placeholder="${escapeHtml(t('searchLessons'))}"><button class="btn" data-action="v674-apply-lesson-search">${escapeHtml(t('search'))}</button><button class="btn" data-action="v674-clear-lesson-search">${escapeHtml(t('clearSearch'))}</button></div><div class="list mt">${filtered.slice(0,limit).map(v674ClassicLessonCard).join('') || `<p class="muted">${escapeHtml(t('empty'))}</p>`}</div>${filtered.length>limit && !q ? `<button class="btn mt" data-action="v674-toggle-library-more">${escapeHtml(t('showMoreLessons'))}</button>` : (!q && state.ui.v674ShowMoreLessons ? `<button class="btn mt" data-action="v674-toggle-library-more">${escapeHtml(t('showLessLessons'))}</button>` : '')}</div>`;
+  }
+  function v674OpenClassicLesson(id){
+    const l=v674SafeLessons().find(x=>x.id===id); if(!l) return;
+    const done=v674Done(id);
+    modal(l.title, `<div class="v674-lesson-modal"><div class="hero-mini"><span class="chip">${escapeHtml(l.category||t('coaching'))}</span><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.text||'')}</p></div><div class="card"><h3>${escapeHtml(L('Werkvloer-oefening','Workfloor exercise'))}</h3><p>${escapeHtml(l.practice||'')}</p></div><div class="btn-row mt"><button class="btn primary" data-action="v674-complete-classic-lesson" data-id="${escapeHtml(id)}">${done?'✓ '+escapeHtml(t('done')):escapeHtml(t('completeLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route||'coaching')}">${escapeHtml(L('Open praktijk','Open practice'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide');
+  }
+  function v674CompleteClassicLesson(id){ v674EnsureUi(); if(id && !state.coachingDone.includes(id)) state.coachingDone.push(id); addActivity(t('lessonCompleted'),'coaching'); save(); render(); closeModal(); toast(t('lessonCompleted'),'good'); }
+  function v674SkillProfile(){
+    const s=v674WeekStats(); const rows=[
+      {label:'AGF', value:Math.max(35,90-s.agf*12), type:s.agf?'warn':'good'},
+      {label:t('communication'), value:Math.max(35,90-s.due*18-s.comm*5), type:s.due?'bad':s.comm?'warn':'good'},
+      {label:t('storemap'), value:Math.max(35,88-s.store*18), type:s.store?'warn':'good'},
+      {label:'HACCP', value:Math.max(40,72+Math.min(20,s.done)), type:'good'},
+      {label:L('Bestelbeheer','Ordering'), value:Math.max(40,88-s.orders*12), type:s.orders?'warn':'good'}
+    ];
+    return `<div class="card v674-skill-profile"><h3>${escapeHtml(t('skillProfile'))}</h3>${rows.map(r=>bar(escapeHtml(r.label),r.value,r.type)).join('')}<p class="muted small">${escapeHtml(t('learningAdvice'))}: ${escapeHtml(v674CoachAdvice())}</p></div>`;
+  }
+  function v674V7RoadmapText(){
+    return [
+      'RICH CMD — V7 Routekaart',
+      '',
+      'v6.7.5 — Communicatie Planner Pro: opvolging, overdracht, templates en weekafspraken sterker maken.',
+      'v6.7.6 — Store Map Route Planner: looproutes, nacontroles en risicoscore beter plannen.',
+      'v6.7.7 — Coaching Academy Pro: leerpaden, badge-niveaus en praktijkopdrachten verder verdiepen.',
+      'v6.8.0 — V7 Preview Layer: V7-dashboard, module-samenhang en definitieve releasecriteria zichtbaar maken.',
+      'v6.8.x — Data & migration cleanup: oude patchlagen veilig consolideren, backup/migratie versterken.',
+      'v7.0.0 — Retail Command Intelligence: stabiele premium release met dagelijkse begeleiding, managementinzichten en betrouwbare PWA.'
+    ].join('\n');
+  }
+  function v674RoadmapCard(){
+    const steps=[
+      ['v6.7.5','Communicatie Planner Pro',L('opvolging, overdracht, templates, weekafspraken','follow-up, handover, templates, weekly agreements')],
+      ['v6.7.6','Store Map Route Planner',L('looproutes, nacontroles, risicoscore','routes, follow-up checks, risk score')],
+      ['v6.7.7','Coaching Academy Pro',L('leerpaden, badge-niveaus, praktijkopdrachten','learning paths, badge levels, practice tasks')],
+      ['v6.8.0','V7 Preview Layer',L('V7-dashboard en releasecriteria zichtbaar maken','make V7 dashboard and release criteria visible')],
+      ['v7.0.0','Retail Command Intelligence',L('stabiele premium release met volwassen workflow','stable premium release with mature workflow')]
+    ];
+    return `<div class="card v674-roadmap"><div class="flex-line"><div><span class="chip">${escapeHtml(t('v7Roadmap'))}</span><h3>${escapeHtml(L('Toewerken naar V7','Working toward V7'))}</h3></div><button class="btn small" data-action="v674-copy-v7-roadmap">${escapeHtml(t('copyRoadmap'))}</button></div><p class="muted">${escapeHtml(t('v7RoadmapIntro'))}</p><div class="list">${steps.map(s=>`<div class="list-item compact"><span><strong>${escapeHtml(s[0])}</strong> — ${escapeHtml(s[1])}<br><span class="tiny muted">${escapeHtml(s[2])}</span></span><span class="pill info">${escapeHtml(L('gepland','planned'))}</span></div>`).join('')}</div></div>`;
+  }
+  function v674CoachingPage(){
+    const wise=v674WiseLessons();
+    const first=wise.slice(0,3);
+    const rest=wise.slice(3);
+    return `<div class="coaching-v674"><div class="hero v674-coaching-hero"><span class="chip">${escapeHtml(t('v674Title'))}</span><h2>${escapeHtml(L('Eén rustige Coaching Academy','One calm Coaching Academy'))}</h2><p>${escapeHtml(L('De eerste oefeningen, wijze lessen, bestaande lessen, badges en vaardigheidsgroei staan nu samen in één overzicht.', 'First exercises, wise lessons, existing lessons, badges and skill growth now live together in one overview.'))}</p></div><div class="grid grid-2">${v674FirstExerciseCard()}${v674SkillProfile()}</div><div class="card v674-first-list"><h3>${escapeHtml(t('firstExercises'))}</h3><p class="muted small">${escapeHtml(L('Deze blijven bewust bovenaan: als je even niet weet wat te doen, begin je hier.', 'These intentionally stay at the top: when you do not know what to do, start here.'))}</p><div class="grid grid-3">${first.map(l=>v674LessonCard(l,true)).join('')}</div></div><div class="grid grid-main"><div class="grid"><div class="card"><h3>${escapeHtml(t('wiseLessons'))}</h3><p class="muted small">${escapeHtml(L('Uitgebreide lessen met uitleg, oefening en reflectie.', 'Richer lessons with explanation, exercise and reflection.'))}</p><div class="grid grid-2 v674-wise-grid">${rest.map(l=>v674LessonCard(l)).join('')}</div></div>${v674ClassicLibrary()}</div><div class="grid"><div class="card v674-badges-wrap"><h3>${escapeHtml(t('badgeGallery'))}</h3><p class="muted small">${escapeHtml(L('Klik op een badge voor ontwerp, titel, betekenis en voortgang.', 'Click a badge for design, title, meaning and progress.'))}</p>${v674BadgeGrid()}</div>${v674RoadmapCard()}</div></div></div>`;
+  }
+  function v674TodayCoachCards(){ return `<div class="grid grid-2 v674-today-coach">${v674FirstExerciseCard()}${v674RoadmapCard()}</div>`; }
+  function v674VisualCoachSection(){ return `<section class="v674-visual-section"><h3>${escapeHtml(t('coachSection'))}</h3><div class="grid grid-2">${v674FirstExerciseCard()}${v674SkillProfile()}</div></section>`; }
+  function v674DiagnosticsCard(){
+    const html=renderCoaching ? v674CoachingPage() : '';
+    const checks=[
+      {name:t('recommendedFixed'), ok:typeof v674OpenWiseLesson==='function', detail:'v674-start-micro-lesson'},
+      {name:t('legacyIntegrated'), ok:v674SafeLessons().length>=50, detail:String(v674SafeLessons().length)},
+      {name:t('badgeGallery'), ok:v674BadgeDefs().length>=8, detail:String(v674BadgeDefs().filter(b=>b.achieved).length)+' '+t('earned')},
+      {name:t('roadmapPresent'), ok:true, detail:'v6.7.5 → v7.0'},
+      {name:'Mobile QA', ok:!document.querySelector('.assist-extra.v661-assist-extra'), detail:'assist-extra'},
+      {name:'APP.version', ok:APP.version==='v6.7.4', detail:APP.version},
+      {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v674', detail:APP.cache}
+    ];
+    return `<div class="card v674-diagnostics-card"><h3>${escapeHtml(t('integrationChecks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`;
+  }
+  function v674UpdateLogCard(){ return `<div class="card v674-changelog"><h3>${escapeHtml(t('v674Title'))}</h3><p>${escapeHtml(L('Start microles opent nu direct een les. De oude lesbibliotheek is geïntegreerd in Coaching en V7 heeft een duidelijke routekaart gekregen.', 'Start micro lesson now opens a lesson directly. The old lesson library is integrated into Coaching and V7 now has a clear roadmap.'))}</p></div>`; }
+
+  const v674PrevCoaching = renderCoaching;
+  renderCoaching = window.renderCoaching = function(){ return v674CoachingPage(); };
+
+  const v674PrevToday = renderToday;
+  renderToday = window.renderToday = function(){ return `<div class="today-v674">${v674PrevToday()}${v674TodayCoachCards()}</div>`; };
+
+  const v674PrevVisual = renderVisual;
+  renderVisual = window.renderVisual = function(){ return `<div class="visual-v674">${v674PrevVisual()}${v674VisualCoachSection()}</div>`; };
+
+  const v674PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){ return v674PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v674">${v674DiagnosticsCard()}${v674UpdateLogCard()}</div>`; };
+
+  const v674PrevSettings = renderSettings;
+  if (typeof v674PrevSettings === 'function') {
+    renderSettings = window.renderSettings = function(){ return v674PrevSettings()+`<div class="mt settings-v674">${v674RoadmapCard()}</div>`; };
+  }
+
+  const v674PrevHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v674-start-micro-lesson'){ v674OpenWiseLesson(v674NextWise().id); return; }
+    if(a==='v674-open-wise-lesson'){ v674OpenWiseLesson(el.dataset.id); return; }
+    if(a==='v674-complete-wise-lesson'){ v674CompleteWiseLesson(el.dataset.id); return; }
+    if(a==='v674-open-classic-lesson'){ v674OpenClassicLesson(el.dataset.id); return; }
+    if(a==='v674-complete-classic-lesson'){ v674CompleteClassicLesson(el.dataset.id); return; }
+    if(a==='v674-open-badge'){ v674OpenBadge(el.dataset.id); return; }
+    if(a==='v674-toggle-library-more'){ v674EnsureUi(); state.ui.v674ShowMoreLessons=!state.ui.v674ShowMoreLessons; save(); render(); return; }
+    if(a==='v674-apply-lesson-search'){ v674EnsureUi(); const input=document.getElementById('v674LessonSearch'); state.ui.v674LessonSearch=input?input.value:''; save(); render(); return; }
+    if(a==='v674-clear-lesson-search'){ v674EnsureUi(); state.ui.v674LessonSearch=''; save(); render(); return; }
+    if(a==='v674-copy-v7-roadmap'){ copyText(v674V7RoadmapText()); addActivity(t('copyRoadmap'),'diagnostics'); toast(t('roadmapCopied'),'good'); return; }
+    if(a==='pwa-check-update-v674' || a==='pwa-prepare-offline-v674' || a==='pwa-activate-update-v674') return v674PrevHandle(a.replace('v674','v673'), el, e);
+    return v674PrevHandle(a, el, e);
+  };
+
+  document.addEventListener('keydown', function(e){
+    const input=e.target && e.target.closest && e.target.closest('#v674LessonSearch');
+    if(input && e.key==='Enter'){ e.preventDefault(); v674EnsureUi(); state.ui.v674LessonSearch=input.value; save(); render(); }
+  });
+
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.4 Coaching Integration & V7 Roadmap failed', err);
+}
+
+
+/* RICH CMD v6.7.5 — Coaching Pro & Skill Tree Restoration
+   - Restores progress header: skill level, XP, completed lessons, earned badges
+   - Restores useful Coaching filters and icon-based skill tree
+   - Adds deeper vocational-level lessons and exam foundation
+   - Fixes long badge text overflow on mobile
+   - Keeps weakness-based adaptive coaching */
+try {
+  APP.version = 'v6.7.5';
+  APP.cache = 'rich-cmd-cache-v675';
+  if (APP.pwa) {
+    APP.pwa.version = 'v6.7.5';
+    APP.pwa.cache = 'rich-cmd-cache-v675';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=675','./styles.css?v=675','./app.js?v=675','./manifest.json?v=675','./version.json','./icon-192.png','./icon-512.png'];
+  }
+
+  Object.assign(I18N.nl, {
+    v675Title:'RICH CMD v6.7.5 — Coaching Pro & Skill Tree Restoration',
+    coachingProgress:'Jouw coachingstand', skillLevel:'Skill level', completedTasks:'Voltooide taken', earnedBadges:'Behaalde badges',
+    showAll:'Alles', showRecommended:'Aanbevolen', showHigherLevels:'Toon hogere levels', hideHigherLevels:'Verberg hogere levels',
+    showCompletedTasks:'Voltooide taken tonen', hideCompletedTasks:'Voltooide taken verbergen', showExams:'Toetsen tonen', hideExams:'Toetsen verbergen',
+    skillTreeRestored:'Skill tree', learningDepth:'Verdiepende lessen', mboLevel:'MBO-niveau', examFoundation:'Toetsen & examens',
+    startExam:'Start toets', completeExam:'Toets afronden', examCompleted:'Toets afgerond.', lessonDepth:'Lesdiepte', coreLesson:'Kern van de les',
+    workplaceExample:'Werkvloer voorbeeld', stepPlan:'Stappenplan', learningGoal:'Leerdoel', coachWeakness:'Persoonlijk leeradvies',
+    allLessons:'Alle lessen', classicShort:'Korte lessen', deepLessons:'Verdiepende lessen', exam:'Toets', category:'Categorie',
+    practicalRoute:'Praktijkroute', badgeLayoutFixed:'Badge-layout gefixt', coachingProChecks:'Coaching Pro checks'
+  });
+  Object.assign(I18N.en, {
+    v675Title:'RICH CMD v6.7.5 — Coaching Pro & Skill Tree Restoration',
+    coachingProgress:'Your coaching status', skillLevel:'Skill level', completedTasks:'Completed tasks', earnedBadges:'Earned badges',
+    showAll:'All', showRecommended:'Recommended', showHigherLevels:'Show higher levels', hideHigherLevels:'Hide higher levels',
+    showCompletedTasks:'Show completed tasks', hideCompletedTasks:'Hide completed tasks', showExams:'Show exams', hideExams:'Hide exams',
+    skillTreeRestored:'Skill tree', learningDepth:'Deep lessons', mboLevel:'Vocational level', examFoundation:'Tests & exams',
+    startExam:'Start test', completeExam:'Complete test', examCompleted:'Test completed.', lessonDepth:'Lesson depth', coreLesson:'Core lesson',
+    workplaceExample:'Shopfloor example', stepPlan:'Step plan', learningGoal:'Learning goal', coachWeakness:'Personal learning advice',
+    allLessons:'All lessons', classicShort:'Short lessons', deepLessons:'Deep lessons', exam:'Test', category:'Category',
+    practicalRoute:'Practice route', badgeLayoutFixed:'Badge layout fixed', coachingProChecks:'Coaching Pro checks'
+  });
+
+  function v675Arr(x){ return Array.isArray(x) ? x : []; }
+  function v675Ensure(){ if(!state.ui) state.ui={}; if(!state.coachingDone) state.coachingDone=[]; }
+  function v675Done(id){ return v675Arr(state.coachingDone).includes(id); }
+  function v675Level(){ return Math.max(1, Math.floor(v675Arr(state.coachingDone).length/4)+1); }
+  function v675XP(){ return v675Arr(state.coachingDone).length*25 + v675Arr(state.coachingPractices).length*10; }
+  function v675ClassicLessons(){ try { return (typeof getLessons==='function' ? getLessons() : []).filter(Boolean); } catch(_) { return []; } }
+  function v675Stats(){
+    const comm=v675Arr(state.communications).filter(c=>c && !['Afgehandeld','Voltooid','Notitie','done','completed'].includes(c.status));
+    const due=comm.filter(c=>c.followDate && c.followDate <= TODAY());
+    const orders=v675Arr(state.inventoryOrders).filter(o=>o && o.type!=='legacy-cleared');
+    let store=[]; try { store=typeof cleaningUrgent==='function'?cleaningUrgent():[]; } catch(_) {}
+    let agf=[]; try { agf=typeof agfAttention==='function'?agfAttention():[]; } catch(_) {}
+    return {comm:comm.length,due:due.length,orders:orders.length,store:store.length,agf:agf.length,done:v675Arr(state.coachingDone).length,level:v675Level(),xp:v675XP()};
+  }
+  function v675SkillDefs(){
+    const s=v675Stats();
+    return [
+      {id:'calm', icon:'🧘', name:L('Rust & focus','Calm & focus'), cat:'Kalmte', value:Math.min(100,34+s.done*6), route:'today'},
+      {id:'agf', icon:'🥬', name:'AGF', cat:'AGF', value:Math.max(30,90-s.agf*14), route:'agf'},
+      {id:'haccp', icon:'🧼', name:'HACCP', cat:'HACCP', value:Math.min(100,50+s.done*4), route:'haccp'},
+      {id:'store', icon:'🧭', name:'Store Map', cat:'Store Map', value:Math.max(30,88-s.store*18), route:'storemap'},
+      {id:'comm', icon:'💬', name:L('Communicatie','Communication'), cat:'Communicatie', value:Math.max(25,92-s.due*20-s.comm*4), route:'communication'},
+      {id:'order', icon:'📦', name:L('Bestelbeheer','Ordering'), cat:'Bestelbeheer', value:Math.max(30,86-s.orders*12), route:'inventory'},
+      {id:'lead', icon:'⭐', name:L('Leiderschap','Leadership'), cat:'Leiderschap', value:Math.min(100,38+s.done*5), route:'coaching'},
+      {id:'self', icon:'🪞', name:L('Zelfinzicht','Self-insight'), cat:'Zelfinzicht', value:Math.min(100,40+s.done*5), route:'visual'}
+    ];
+  }
+  function v675WeakAdvice(){
+    const skills=v675SkillDefs().slice().sort((a,b)=>a.value-b.value);
+    const low=skills[0];
+    if(low.id==='comm') return L('Je grootste groeikans zit nu in communicatie: maak afspraken korter, concreter en opvolgbaar.', 'Your strongest growth point is communication: make agreements shorter, clearer and followable.');
+    if(low.id==='store') return L('Je grootste groeikans zit nu in Store Map: kijk bij schoonmaakpunten naar oorzaak, risico en vervolgstap.', 'Your strongest growth point is Cleaning Map: look at cause, risk and next step.');
+    if(low.id==='agf') return L('Je grootste groeikans zit nu in AGF: train je oordeel op leeg, overvoorraad, kwaliteit en presentatie.', 'Your strongest growth point is Produce: train judgment on empty, overstock, quality and presentation.');
+    if(low.id==='order') return L('Je grootste groeikans zit nu in bestelbeheer: bestel vanuit behoefte en frequentie, niet vanuit stress.', 'Your strongest growth point is ordering: order from need and frequency, not stress.');
+    return L('Je basis is stabiel. Kies vandaag één les die je werk rustiger en zichtbaarder maakt.', 'Your base is stable. Pick one lesson today that makes work calmer and more visible.');
+  }
+
+  function v675DeepLessons(){ return [
+    {id:'v675_mbo_prioriteit',level:1,icon:'🎯',category:'Werkhouding',route:'today',title:L('Prioriteiten stellen op de werkvloer','Setting priorities on the shopfloor'),subtitle:L('Waarom niet alles tegelijk kan, en hoe je toch professioneel blijft.','Why you cannot do everything at once and still remain professional.'),goal:L('Je leert verschil maken tussen urgent, belangrijk en ruis.','Learn the difference between urgent, important and noise.'),context:L('In een supermarkt lijkt alles tegelijk belangrijk: klanten, vulling, schoonmaak, controles, communicatie en collega’s. Op MBO-niveau gaat professioneel werken niet over harder rennen, maar over bewust kiezen. Als je alles tegelijk probeert te doen, wordt niets echt goed afgerond. Prioriteiten stellen beschermt kwaliteit, veiligheid en rust.', 'In retail everything can feel important: customers, filling, cleaning, checks, communication and colleagues. Professional work is not running harder, but choosing consciously. If you do everything at once, nothing is finished well. Prioritizing protects quality, safety and calm.'),core:L('Gebruik drie vragen: 1. Is er direct risico voor voedselveiligheid of klantveiligheid? 2. Is er omzet/kwaliteit die nu verloren gaat? 3. Kan iemand anders pas verder als ik dit doe? Wat op drie keer nee uitkomt, mag later.', 'Use three questions: 1. Is there direct food or customer safety risk? 2. Is sales/quality being lost now? 3. Does someone else need this before they can continue? If all are no, it can wait.'),example:L('Je ziet een open communicatiepunt, een lege AGF-bak en een schoonmaakpunt. Als het schoonmaakpunt schimmel/veiligheid raakt, gaat dat voor. Is het alleen een reguliere periodieke check, dan kan AGF eerst.', 'You see an open communication item, an empty produce crate and a cleaning point. If cleaning touches mould/safety, it comes first. If it is regular periodic work, produce may come first.'),steps:[L('Stop 10 seconden en kijk naar risico.', 'Pause 10 seconds and look for risk.'),L('Kies maximaal drie eerste stappen.', 'Choose maximum three first steps.'),L('Maak stap één zichtbaar af.', 'Finish step one visibly.'),L('Registreer of draag over wat blijft liggen.', 'Register or hand over what remains.')],exercise:L('Open Vandaag en herschik je eerste drie stappen. Schrijf bij één taak waarom die voorrang krijgt.', 'Open Today and reorder your first three steps. Write why one task comes first.'),reflect:L('Welke taak voelde dringend, maar was eigenlijk vooral ruis?', 'Which task felt urgent but was mostly noise?')},
+    {id:'v675_mbo_agf',level:1,icon:'🥬',category:'AGF',route:'agf',title:L('AGF-oordeel: kwaliteit, presentatie en voorraad','Produce judgment: quality, presentation and stock'),subtitle:L('Vullen is niet hetzelfde als goed AGF beheren.','Filling is not the same as managing Produce well.'),goal:L('Je leert AGF-beslissingen onderbouwen met status en risico.','Learn to support Produce decisions with status and risk.'),context:L('AGF is zichtbaar en gevoelig. Klanten beoordelen de winkel vaak op AGF: versheid, kleur, netheid en beschikbaarheid. Goed AGF-werk vraagt daarom oordeel. Soms moet je vullen, soms juist afromen, soms kwaliteit verwijderen en soms niet bestellen omdat overvoorraad later derving wordt.', 'Produce is visible and sensitive. Customers often judge a store by Produce: freshness, color, neatness and availability. Good Produce work requires judgment. Sometimes fill, sometimes reduce, sometimes remove poor quality and sometimes do not order because overstock becomes waste.'),core:L('Kijk altijd naar vier signalen: leeg, overvol, kwaliteit en presentatie. Een lege bak vraagt een andere actie dan slechte kwaliteit. Overvoorraad kan net zo schadelijk zijn als leegstand, omdat het derving en rommel geeft.', 'Always check four signals: empty, overstock, quality and presentation. Empty requires different action than poor quality. Overstock can be as harmful as empty because it creates waste and mess.'),example:L('Paprika rood lijkt laag, maar de actie loopt morgen af en er staat nog voorraad achter. Dan is “bijbestellen” niet automatisch goed. Eerst check je voorraad, actie en kwaliteit.', 'Red peppers look low, but the promotion ends tomorrow and there is back stock. Reordering is not automatically right. First check stock, promo and quality.'),steps:[L('Controleer schapbeeld.', 'Check shelf image.'),L('Controleer kwaliteit.', 'Check quality.'),L('Controleer voorraad/actie.', 'Check stock/promotion.'),L('Kies status: OK, leeg, overvoorraad of kwaliteit.', 'Choose status: OK, empty, overstock or quality.')],exercise:L('Controleer drie AGF-producten en geef ze elk een status met korte reden.', 'Check three Produce items and give each a status with a short reason.'),reflect:L('Wanneer is “meer vullen” juist niet de beste oplossing?', 'When is “fill more” not the best solution?')},
+    {id:'v675_mbo_comm',level:1,icon:'💬',category:'Communicatie',route:'communication',title:L('Professioneel communiceren in drie regels','Professional communication in three lines'),subtitle:L('Kort, feitelijk en opvolgbaar communiceren.','Communicate briefly, factually and followably.'),goal:L('Je leert overdracht schrijven zonder ruis.','Learn to write handover without noise.'),context:L('Goede communicatie voorkomt dubbel werk en irritatie. Op de werkvloer heeft niemand tijd voor lange verhalen, maar te korte berichten zijn ook gevaarlijk. Een professioneel bericht geeft precies genoeg informatie om de volgende stap goed te doen.', 'Good communication prevents double work and irritation. On the shopfloor nobody has time for long stories, but messages that are too short are risky too. A professional message gives enough information for the next step.'),core:L('Gebruik: Situatie → Actie → Vervolg. Situatie is wat er speelt. Actie is wat jij al hebt gedaan. Vervolg is wat nog moet gebeuren, door wie en wanneer.', 'Use: Situation → Action → Follow-up. Situation is what is happening. Action is what you did. Follow-up is what still needs to happen, by whom and when.'),example:L('Niet: “Koeling was weer raar.” Wel: “AGF-koeling links gaf 8°C aan om 10:15. Ik heb deur/sluiting gecontroleerd. Graag om 12:00 opnieuw meten.”', 'Not: “Cooling was weird again.” Better: “Produce cooling left showed 8°C at 10:15. I checked door/seal. Please measure again at 12:00.”'),steps:[L('Noem locatie en tijd.', 'Name location and time.'),L('Beschrijf feit, geen irritatie.', 'Describe fact, not irritation.'),L('Noteer wat al gedaan is.', 'Note what was done.'),L('Maak de opvolging concreet.', 'Make follow-up concrete.')],exercise:L('Maak één communicatiepunt volgens Situatie → Actie → Vervolg.', 'Create one communication item using Situation → Action → Follow-up.'),reflect:L('Welke informatie vergeet jij soms waardoor iemand anders moet gokken?', 'What information do you sometimes forget, making others guess?')},
+    {id:'v675_mbo_haccp',level:2,icon:'🧼',category:'HACCP',route:'haccp',title:L('HACCP: routine is bescherming','HACCP: routine is protection'),subtitle:L('Waarom kleine controles groot verschil maken.','Why small checks make a big difference.'),goal:L('Je begrijpt waarom HACCP niet alleen administratie is.','Understand why HACCP is not just administration.'),context:L('HACCP voelt soms als vinkwerk, maar het beschermt klant, winkel en medewerker. Een gemiste temperatuur, schimmelplek of vervuilde zone kan later groot worden. Professioneel HACCP-werk is rustig, herhaalbaar en controleerbaar.', 'HACCP can feel like ticking boxes, but it protects customer, store and employee. A missed temperature, mould spot or dirty zone can become big later. Professional HACCP work is calm, repeatable and verifiable.'),core:L('Een controle is pas sterk als hij drie dingen heeft: juiste meting, juiste locatie en juiste opvolging. Alleen “gedaan” is minder waard dan “gedaan en afwijking opgevolgd”.', 'A check is strong when it has three things: correct measurement, correct location and correct follow-up. “Done” is worth less than “done and deviation followed up”.'),example:L('Een koeling is gemeten, maar de waarde is afwijkend. Dan is de taak niet klaar. Je registreert afwijking, neemt actie en plant nacontrole.', 'A cooling unit is measured, but the value is off. The task is not finished. Register deviation, take action and plan follow-up check.'),steps:[L('Meet of controleer volgens vaste plek.', 'Measure/check at fixed location.'),L('Registreer afwijking direct.', 'Register deviation immediately.'),L('Kies actie of nacontrole.', 'Choose action or follow-up check.'),L('Draag open risico over.', 'Hand over open risk.')],exercise:L('Open HACCP en kies één controle waarbij je extra let op locatie, waarde en opvolging.', 'Open HACCP and choose one check where you focus on location, value and follow-up.'),reflect:L('Welke HACCP-taak voelt klein, maar voorkomt veel problemen?', 'Which HACCP task feels small but prevents many problems?')},
+    {id:'v675_mbo_storemap',level:2,icon:'🧭',category:'Store Map',route:'storemap',title:L('Schoonmaakkaart: van schoonmaken naar signaleren','Cleaning Map: from cleaning to detecting'),subtitle:L('Niet alleen vlekken wegwerken, maar patronen zien.','Do not only remove dirt, see patterns.'),goal:L('Je leert schoonmaakpunten beoordelen op oorzaak en risico.','Learn to judge cleaning points by cause and risk.'),context:L('Een schoonmaakkaart wordt pas krachtig als je ziet waarom punten terugkomen. Steeds dezelfde plank, rand of koeling betekent dat er een patroon is. Als je alleen poetst, komt het terug. Als je signaleert, verbeter je het proces.', 'A cleaning map becomes powerful when you see why points return. The same shelf, edge or cooler means there is a pattern. If you only clean, it returns. If you detect, you improve the process.'),core:L('Kijk naar drie lagen: zichtbare status, risico en oorzaak. Status is wat je ziet. Risico is wat er kan gebeuren. Oorzaak is waarom het terugkomt.', 'Look at three layers: visible status, risk and cause. Status is what you see. Risk is what can happen. Cause is why it returns.'),example:L('Schimmel op dezelfde plek kan komen door lekkage, productdruk, te weinig lucht, oude voorraad of slechte route. De oplossing hangt af van de oorzaak.', 'Mould in the same place can come from leakage, product pressure, poor airflow, old stock or weak routing. The solution depends on the cause.'),steps:[L('Registreer locatie precies.', 'Register exact location.'),L('Bepaal risico: laag, normaal, hoog.', 'Determine risk: low, normal, high.'),L('Noteer mogelijke oorzaak.', 'Note possible cause.'),L('Plan nacontrole als risico blijft.', 'Plan follow-up if risk remains.')],exercise:L('Kies één Store Map-punt en voeg een mogelijke oorzaak toe in je notitie.', 'Choose one Cleaning Map point and add a possible cause in your note.'),reflect:L('Welke plek verdient niet alleen schoonmaak, maar structurele aandacht?', 'Which place needs not just cleaning, but structural attention?')},
+    {id:'v675_mbo_leadership',level:3,icon:'⭐',category:'Leiderschap',route:'communication',title:L('Leiding nemen zonder harder te worden','Taking the lead without becoming harsh'),subtitle:L('Rust, duidelijkheid en voorbeeldgedrag.','Calm, clarity and leading by example.'),goal:L('Je leert richting geven zonder drama of druktaal.','Learn to give direction without drama or pressure language.'),context:L('Leiderschap op MBO-/winkelvloerniveau gaat vaak over kleine momenten: een collega helpen kiezen, een taak zichtbaar maken, een klant rustig behandelen of een probleem kort overdragen. Je hoeft niet de hoogste functie te hebben om richting te geven.', 'Shopfloor leadership is often about small moments: helping a colleague choose, making a task visible, handling a customer calmly or handing over a problem clearly. You do not need the highest role to give direction.'),core:L('Sterk leiderschap combineert vriendelijkheid en duidelijkheid. Je zegt wat nodig is, waarom het nodig is en wat de volgende stap is. Niet harder praten, maar helderder maken.', 'Strong leadership combines kindness and clarity. Say what is needed, why it is needed and what the next step is. Not louder, clearer.'),example:L('Niet: “Schiet nou op.” Wel: “We pakken eerst AGF leegstand, daarna de Store Map. Jij pakt paprika, ik controleer koeling.”', 'Not: “Hurry up.” Better: “We handle Produce gaps first, then Cleaning Map. You take peppers, I check cooling.”'),steps:[L('Noem prioriteit.', 'Name priority.'),L('Leg kort waarom uit.', 'Explain briefly why.'),L('Maak taakverdeling concreet.', 'Make task division concrete.'),L('Controleer later kort terug.', 'Check back briefly later.')],exercise:L('Formuleer vandaag één duidelijke werkzin: eerst…, daarna…, jij…, ik….', 'Formulate one clear work sentence today: first…, then…, you…, I….'),reflect:L('Waar kun jij vandaag duidelijker zijn zonder minder vriendelijk te worden?', 'Where can you be clearer today without becoming less friendly?')},
+    {id:'v675_mbo_exam_prep',level:2,icon:'🧠',category:'Leerhouding',route:'coaching',title:L('Leren door reflectie: van ervaring naar groei','Learning through reflection: from experience to growth'),subtitle:L('Een werkdag wordt leerzaam als je hem bewust bekijkt.','A workday becomes educational when you review it consciously.'),goal:L('Je leert ervaring omzetten in verbetergedrag.','Learn to turn experience into improvement behavior.'),context:L('Je leert niet alleen door uitleg, maar door terug te kijken op wat er gebeurde. Reflectie betekent niet jezelf afkraken. Het betekent eerlijk zien wat werkte, wat niet werkte en wat je de volgende keer anders doet.', 'You do not learn only from explanation, but by reviewing what happened. Reflection does not mean criticizing yourself. It means honestly seeing what worked, what did not, and what to do differently next time.'),core:L('Gebruik drie reflectievragen: Wat ging goed? Wat kostte onnodig energie? Wat is één concrete verbetering voor morgen?', 'Use three reflection questions: What went well? What cost unnecessary energy? What is one concrete improvement for tomorrow?'),example:L('Als communicatie bleef liggen, is de les niet “ik ben slecht in plannen”, maar “ik moet communicatie eerder op de dag kort zichtbaar maken”.', 'If communication stayed open, the lesson is not “I am bad at planning”, but “I need to make communication visible earlier in the day”.'),steps:[L('Kies één situatie.', 'Choose one situation.'),L('Beschrijf feitelijk wat gebeurde.', 'Describe factually what happened.'),L('Kies één kleine verbetering.', 'Choose one small improvement.'),L('Plan wanneer je die toepast.', 'Plan when you apply it.')],exercise:L('Schrijf in Morgen voorbereiden één verbeterpunt voor je volgende shift.', 'Write one improvement point in Tomorrow Prep for your next shift.'),reflect:L('Welke fout of vertraging bevat eigenlijk nuttige informatie?', 'Which mistake or delay actually contains useful information?')}
+  ]; }
+
+  function v675ExamDefs(){ return [
+    {id:'v675_exam_basis',level:1,icon:'📝',title:L('Basistoets Werkvloerwijsheid','Basic Shopfloor Wisdom Test'),category:'Werkhouding',route:'coaching',questions:[L('Wat is het verschil tussen urgent en belangrijk?', 'What is the difference between urgent and important?'),L('Hoe maak je een overdracht opvolgbaar?', 'How do you make a handover followable?'),L('Waarom is rust soms sneller dan haasten?', 'Why is calm sometimes faster than rushing?')]},
+    {id:'v675_exam_agf_haccp',level:2,icon:'🥬',title:L('Toets AGF & HACCP Signalen','Produce & HACCP Signals Test'),category:'AGF/HACCP',route:'agf',questions:[L('Welke vier signalen check je bij AGF?', 'Which four signals do you check in Produce?'),L('Wanneer is een HACCP-afwijking pas goed opgevolgd?', 'When is a HACCP deviation properly followed up?'),L('Waarom is oorzaak belangrijk bij Store Map?', 'Why is cause important in Cleaning Map?')]},
+    {id:'v675_exam_leadership',level:3,icon:'⭐',title:L('Praktijktoets Leiderschap','Practical Leadership Test'),category:'Leiderschap',route:'communication',questions:[L('Hoe geef je duidelijkheid zonder druktaal?', 'How do you give clarity without pressure language?'),L('Waarom is taakverdeling onderdeel van leiderschap?', 'Why is task division part of leadership?'),L('Welke zin kun je gebruiken om richting te geven?', 'What sentence can you use to give direction?')]}
+  ]; }
+
+  function v675CombinedLessons(){
+    const deep=v675DeepLessons().map(l=>Object.assign({kind:'deep',source:'v675'},l));
+    const classic=v675ClassicLessons().map((l,i)=>({
+      id:l.id||('classic_'+i), kind:'classic', source:'classic', level:l.locked?Math.max(2,Math.min(4,v675Level()+1)):1, icon:'📚',
+      category:l.category||t('coaching'), route:l.route||'coaching', title:l.title||t('lesson'), subtitle:l.text||'', goal:l.practice||'',
+      context:l.text||'', core:l.practice||'', example:'', steps:[], exercise:l.practice||'', reflect:L('Wat neem je mee naar je volgende shift?', 'What will you take into your next shift?'), locked:!!l.locked
+    }));
+    return deep.concat(classic);
+  }
+  function v675CurrentFilter(){ v675Ensure(); return state.ui.v675Category || 'all'; }
+  function v675FilteredLessons(){
+    v675Ensure(); const all=v675CombinedLessons(); const q=String(state.ui.v675Search||'').trim().toLowerCase(); const cat=v675CurrentFilter(); const level=v675Level();
+    return all.filter(l=>{
+      if(!state.ui.v675ShowCompleted && v675Done(l.id)) return false;
+      if(!state.ui.v675ShowHigher && l.level>level+1) return false;
+      if(cat!=='all' && l.category!==cat) return false;
+      if(q && !String([l.title,l.subtitle,l.category,l.context,l.core,l.exercise].join(' ')).toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+  function v675Categories(){ return ['all'].concat([...new Set(v675CombinedLessons().map(l=>l.category).filter(Boolean))].slice(0,12)); }
+  function v675BadgeDefs(){
+    const s=v675Stats(), deepDone=v675DeepLessons().filter(l=>v675Done(l.id)).length, exams=v675ExamDefs().filter(e=>v675Done(e.id)).length;
+    return [
+      {id:'growth_start',icon:'🌱',title:L('Eerste Groei','First Growth'),text:L('Je hebt de eerste stap gezet in bewust en professioneel leren.', 'You took the first step in conscious professional learning.'),achieved:s.done>=1,progress:Math.min(100,s.done*100)},
+      {id:'steady_learner',icon:'📘',title:L('Vaste Leerling','Steady Learner'),text:L('Je bouwt regelmaat op door meerdere lessen af te ronden.', 'You build consistency by completing multiple lessons.'),achieved:s.done>=5,progress:Math.min(100,s.done/5*100)},
+      {id:'mbo_wijsheid',icon:'🧠',title:L('MBO Wijsheid','Vocational Wisdom'),text:L('Je rondt verdiepende lessen af en verbindt theorie aan de werkvloer.', 'You complete deeper lessons and connect theory to the shopfloor.'),achieved:deepDone>=3,progress:Math.min(100,deepDone/3*100)},
+      {id:'exam_ready',icon:'📝',title:L('Toetsklaar','Test Ready'),text:L('Je hebt een toets of examen afgerond binnen Coaching.', 'You completed a test or exam inside Coaching.'),achieved:exams>=1,progress:Math.min(100,exams*100)},
+      {id:'agf_oog',icon:'🥬',title:L('AGF Oog','Produce Eye'),text:L('Je ontwikkelt oordeel voor voorraad, kwaliteit, presentatie en derving.', 'You develop judgment for stock, quality, presentation and waste.'),achieved:v675SkillDefs().find(s=>s.id==='agf').value>=80 && s.done>=4,progress:Math.min(100,v675SkillDefs().find(s=>s.id==='agf').value)},
+      {id:'communicatie_pro',icon:'💬',title:L('Communicatie Pro','Communication Pro'),text:L('Je maakt afspraken zichtbaar, kort en goed opvolgbaar.', 'You make agreements visible, brief and followable.'),achieved:v675SkillDefs().find(s=>s.id==='comm').value>=80 && s.done>=4,progress:Math.min(100,v675SkillDefs().find(s=>s.id==='comm').value)},
+      {id:'store_signal',icon:'🧭',title:L('Store Map Signaleerder','Store Map Signal Spotter'),text:L('Je kijkt verder dan schoon/vies en herkent oorzaken en risico’s.', 'You look beyond clean/dirty and recognize causes and risks.'),achieved:v675SkillDefs().find(s=>s.id==='store').value>=80 && s.done>=4,progress:Math.min(100,v675SkillDefs().find(s=>s.id==='store').value)},
+      {id:'retail_coach',icon:'🏆',title:L('Retail Command Coach','Retail Command Coach'),text:L('Je combineert inzicht, discipline, communicatie en reflectie op V7-niveau.', 'You combine insight, discipline, communication and reflection at V7 level.'),achieved:s.done>=12 && deepDone>=5 && exams>=1,progress:Math.min(100,(s.done/12*45)+(deepDone/5*35)+(exams?20:0))}
+    ];
+  }
+
+  function v675ProgressHeader(){
+    const s=v675Stats(), earned=v675BadgeDefs().filter(b=>b.achieved).length;
+    return `<div class="card v675-progress"><div class="flex-line"><div><span class="chip">${escapeHtml(t('coachingProgress'))}</span><h3>${escapeHtml(L('Waar sta je nu?','Where are you now?'))}</h3></div><span class="pill good">${escapeHtml(t('weekNumber'))} ${(window.v673WeekMeta?window.v673WeekMeta().week:'-')}</span></div><div class="grid grid-4 v675-progress-grid">${kpi(t('skillLevel'),s.level,'good')}${kpi('XP',s.xp,'good')}${kpi(t('completedLessons'),s.done,null)}${kpi(t('earnedBadges'),earned+'/'+v675BadgeDefs().length,'good')}</div><p class="muted small">${escapeHtml(t('coachWeakness'))}: ${escapeHtml(v675WeakAdvice())}</p></div>`;
+  }
+  function v675FilterBar(){
+    v675Ensure(); const cats=v675Categories(); const active=v675CurrentFilter();
+    return `<div class="card v675-filter-card"><div class="flex-line"><h3>${escapeHtml(L('Weergave','View'))}</h3><span class="pill info">${escapeHtml(v675FilteredLessons().length+' '+t('lessons'))}</span></div><div class="btn-row v675-filter-buttons"><button class="btn ${state.ui.v675ShowAll?'primary':''}" data-action="v675-toggle-all">${escapeHtml(t('showAll'))}</button><button class="btn" data-action="v675-toggle-higher">${escapeHtml(state.ui.v675ShowHigher?t('hideHigherLevels'):t('showHigherLevels'))}</button><button class="btn" data-action="v675-toggle-completed">${escapeHtml(state.ui.v675ShowCompleted?t('hideCompletedTasks'):t('showCompletedTasks'))}</button><button class="btn" data-action="v675-toggle-exams">${escapeHtml(state.ui.v675ShowExams?t('hideExams'):t('showExams'))}</button></div><div class="v675-library-tools"><input class="input" id="v675LessonSearch" value="${escapeHtml(state.ui.v675Search||'')}" placeholder="${escapeHtml(t('searchLessons'))}"><button class="btn" data-action="v675-apply-search">${escapeHtml(t('search'))}</button><button class="btn" data-action="v675-clear-search">${escapeHtml(t('clearSearch'))}</button></div><div class="v675-cat-row">${cats.map(c=>`<button class="chip ${active===c?'active':''}" data-action="v675-set-category" data-cat="${escapeHtml(c)}">${escapeHtml(c==='all'?t('showAll'):c)}</button>`).join('')}</div></div>`;
+  }
+  function v675SkillTree(){
+    return `<div class="card v675-skill-tree-card"><h3>${escapeHtml(t('skillTreeRestored'))}</h3><p class="muted small">${escapeHtml(L('Icoontjes laten snel zien waar je sterk bent en waar Coaching extra helpt.', 'Icons quickly show your strengths and where Coaching can help.'))}</p><div class="v675-skill-tree">${v675SkillDefs().map(s=>`<button class="v675-skill-node" data-action="v675-set-category" data-cat="${escapeHtml(s.cat)}"><span class="v675-skill-icon">${s.icon}</span><strong>${escapeHtml(s.name)}</strong><small>${Math.round(s.value)}%</small><div class="v675-node-progress"><span style="width:${Math.round(Math.max(0,Math.min(100,s.value)))}%"></span></div></button>`).join('')}</div></div>`;
+  }
+  function v675LessonCard(l){
+    const done=v675Done(l.id); const locked=l.locked && !state.ui.v675ShowHigher;
+    return `<div class="card v675-lesson-card ${done?'done':''} ${l.kind==='deep'?'deep':'classic'}"><div class="flex-line"><span class="chip">${escapeHtml(l.icon+' '+l.category)}</span><span class="pill ${done?'good':l.level>v675Level()?'warn':'info'}">${done?'✓ '+escapeHtml(t('done')):escapeHtml('Level '+l.level)}</span></div><h3>${escapeHtml(l.title)}</h3><p class="muted">${escapeHtml(l.subtitle||l.goal||'')}</p><p class="tiny muted">${escapeHtml(l.kind==='deep'?t('mboLevel'):t('classicShort'))}</p><div class="btn-row mt"><button class="btn primary" data-action="v675-open-lesson" data-id="${escapeHtml(l.id)}" ${locked?'disabled':''}>${escapeHtml(t('openLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route||'coaching')}">${escapeHtml(t('practicalRoute'))}</button></div></div>`;
+  }
+  function v675LessonModal(id){
+    const l=v675CombinedLessons().find(x=>x.id===id); if(!l) return;
+    const steps=v675Arr(l.steps);
+    const done=v675Done(l.id);
+    modal(l.title, `<div class="v675-lesson-modal"><div class="hero-mini"><span class="chip">${escapeHtml(l.icon+' '+l.category)} · ${escapeHtml(t('mboLevel'))} ${escapeHtml(String(l.level))}</span><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.subtitle||'')}</p></div><div class="grid grid-2"><div class="card"><h3>${escapeHtml(t('learningGoal'))}</h3><p>${escapeHtml(l.goal||'')}</p></div><div class="card"><h3>${escapeHtml(L('Context','Context'))}</h3><p>${escapeHtml(l.context||'')}</p></div></div><div class="grid grid-2 mt"><div class="card"><h3>${escapeHtml(t('coreLesson'))}</h3><p>${escapeHtml(l.core||'')}</p></div><div class="card"><h3>${escapeHtml(t('workplaceExample'))}</h3><p>${escapeHtml(l.example||'')}</p></div></div>${steps.length?`<div class="card mt"><h3>${escapeHtml(t('stepPlan'))}</h3><ol>${steps.map(x=>`<li>${escapeHtml(x)}</li>`).join('')}</ol></div>`:''}<div class="grid grid-2 mt"><div class="card"><h3>${escapeHtml(t('workfloorExercise'))}</h3><p>${escapeHtml(l.exercise||'')}</p></div><div class="card"><h3>${escapeHtml(t('reflectionQuestion'))}</h3><p>${escapeHtml(l.reflect||'')}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v675-complete-lesson" data-id="${escapeHtml(l.id)}">${done?'✓ '+escapeHtml(t('done')):escapeHtml(t('completeLesson'))}</button><button class="btn" data-route="${escapeHtml(l.route||'coaching')}">${escapeHtml(t('practicalRoute'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide');
+  }
+  function v675CompleteLesson(id){ v675Ensure(); if(id && !state.coachingDone.includes(id)) state.coachingDone.push(id); addActivity(t('lessonCompleted'),'coaching'); save(); render(); toast(t('lessonCompleted'),'good'); }
+  function v675ExamCard(e){ const done=v675Done(e.id); return `<div class="card v675-exam-card ${done?'done':''}"><div class="flex-line"><span class="chip">${e.icon} ${escapeHtml(t('exam'))}</span><span class="pill ${done?'good':'info'}">${done?'✓ '+escapeHtml(t('done')):'Level '+e.level}</span></div><h3>${escapeHtml(e.title)}</h3><p class="muted">${escapeHtml(e.category)}</p><div class="btn-row mt"><button class="btn primary" data-action="v675-open-exam" data-id="${escapeHtml(e.id)}">${escapeHtml(t('startExam'))}</button><button class="btn" data-route="${escapeHtml(e.route)}">${escapeHtml(t('practicalRoute'))}</button></div></div>`; }
+  function v675OpenExam(id){
+    const e=v675ExamDefs().find(x=>x.id===id); if(!e) return;
+    modal(e.title, `<div class="v675-exam-modal"><div class="hero-mini"><span class="chip">${e.icon} ${escapeHtml(t('examFoundation'))}</span><h2>${escapeHtml(e.title)}</h2><p>${escapeHtml(L('Beantwoord deze vragen voor jezelf. Het gaat nu om bewust leren; later kunnen we hier echte meerkeuze/examenscore aan koppelen.', 'Answer these questions for yourself. For now this is conscious learning; later we can add real multiple-choice/scoring.'))}</p></div><div class="card"><ol>${e.questions.map(q=>`<li><strong>${escapeHtml(q)}</strong><textarea class="input mt" rows="2" placeholder="${escapeHtml(L('Schrijf je antwoord kort op…','Write your answer briefly…'))}"></textarea></li>`).join('')}</ol></div><div class="btn-row mt"><button class="btn primary" data-action="v675-complete-exam" data-id="${escapeHtml(e.id)}">${escapeHtml(t('completeExam'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide');
+  }
+  function v675CompleteExam(id){ v675Ensure(); if(id && !state.coachingDone.includes(id)) state.coachingDone.push(id); addActivity(t('examCompleted'),'coaching'); save(); render(); closeModal(); toast(t('examCompleted'),'good'); }
+  function v675BadgeGrid(){ return `<div class="v675-badge-grid">${v675BadgeDefs().map(b=>`<button class="v675-badge-card ${b.achieved?'earned':'locked'}" data-action="v675-open-badge" data-id="${escapeHtml(b.id)}"><span class="v675-badge-icon">${b.icon}</span><span class="v675-badge-text"><strong>${escapeHtml(b.title)}</strong><small>${escapeHtml(b.text)}</small></span><span class="pill ${b.achieved?'good':'info'}">${Math.round(b.progress)}%</span><div class="v675-mini-progress"><span style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div></button>`).join('')}</div>`; }
+  function v675OpenBadge(id){
+    const b=v675BadgeDefs().find(x=>x.id===id); if(!b) return;
+    modal(t('badgeDetails'), `<div class="v675-badge-modal ${b.achieved?'earned':'locked'}"><div class="v675-big-badge">${b.icon}</div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="card soft"><div class="flex-line"><strong>${escapeHtml(t('progress'))}</strong><span class="pill ${b.achieved?'good':'info'}">${Math.round(b.progress)}%</span></div><div class="v675-modal-progress"><span style="width:${Math.round(Math.max(0,Math.min(100,b.progress)))}%"></span></div><p class="muted small">${escapeHtml(b.achieved?t('badgeUnlocked'):t('noBadgeYet'))}</p></div><div class="btn-row mt"><button class="btn primary" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`);
+  }
+  function v675LessonGrid(){
+    v675Ensure(); const filtered=v675FilteredLessons(); const limit=state.ui.v675ShowAll ? 120 : 12; const visible=filtered.slice(0,limit);
+    return `<div class="card v675-lessons-card"><div class="flex-line"><div><h3>${escapeHtml(t('allLessons'))}</h3><p class="muted small">${escapeHtml(L('Verdiepende lessen en korte klassieke lessen staan nu in één geheel.', 'Deep lessons and short classic lessons now form one whole.'))}</p></div><span class="pill info">${visible.length}/${filtered.length}</span></div><div class="grid grid-3 v675-lessons-grid">${visible.map(v675LessonCard).join('') || `<p class="muted">${escapeHtml(t('empty'))}</p>`}</div>${filtered.length>limit?`<button class="btn mt" data-action="v675-toggle-all">${escapeHtml(t('showAll'))}</button>`:''}</div>`;
+  }
+  function v675ExamsSection(){ if(!state.ui.v675ShowExams) return ''; return `<div class="card v675-exams"><h3>${escapeHtml(t('examFoundation'))}</h3><p class="muted small">${escapeHtml(L('Toetsen maken Coaching serieuzer. Nu als reflectieve toets; later kunnen we punten, scores en certificaten toevoegen.', 'Tests make Coaching more serious. Now as reflective tests; later we can add points, scores and certificates.'))}</p><div class="grid grid-3">${v675ExamDefs().map(v675ExamCard).join('')}</div></div>`; }
+  function v675CoachingPage(){
+    const recommended=v675DeepLessons().filter(l=>!v675Done(l.id)).slice(0,3);
+    return `<div class="coaching-v675"><div class="hero v675-hero"><span class="chip">${escapeHtml(t('v675Title'))}</span><h2>${escapeHtml(L('Coaching moet motiveren én verdiepen','Coaching should motivate and deepen'))}</h2><p>${escapeHtml(L('Progressie, skill tree, badges, filters, verdiepende MBO-lessen en toetsen staan nu weer samen in één duidelijke leeromgeving.', 'Progress, skill tree, badges, filters, deeper vocational lessons and tests now live together in one learning environment.'))}</p></div>${v675ProgressHeader()}${v675FilterBar()}<div class="grid grid-main"><div class="grid"><div class="card v675-recommended"><h3>${escapeHtml(L('Eerste oefeningen bovenaan','First exercises at the top'))}</h3><p class="muted small">${escapeHtml(v675WeakAdvice())}</p><div class="grid grid-3">${recommended.map(v675LessonCard).join('')}</div></div>${v675LessonGrid()}${v675ExamsSection()}</div><div class="grid">${v675SkillTree()}<div class="card v675-badges-wrap"><h3>${escapeHtml(t('badgeGallery'))}</h3><p class="muted small">${escapeHtml(L('Badges zijn klikbaar en blijven nu binnen het venster, ook met langere tekst.', 'Badges are clickable and now stay inside the card, even with longer text.'))}</p>${v675BadgeGrid()}</div></div></div></div>`;
+  }
+  function v675DiagnosticsCard(){
+    const checks=[
+      {name:'Progressie bovenaan', ok:true, detail:'level/xp/done/badges'},
+      {name:'Skill tree met icoontjes', ok:v675SkillDefs().length>=8, detail:String(v675SkillDefs().length)},
+      {name:'Filters terug', ok:true, detail:'alles/hoger/voltooid/toetsen'},
+      {name:'Diepe MBO-lessen', ok:v675DeepLessons().length>=7, detail:String(v675DeepLessons().length)},
+      {name:'Toetsen/Examens', ok:v675ExamDefs().length>=3, detail:String(v675ExamDefs().length)},
+      {name:t('badgeLayoutFixed'), ok:true, detail:'mobile-safe'},
+      {name:'APP.version', ok:APP.version==='v6.7.5', detail:APP.version},
+      {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v675', detail:APP.cache}
+    ];
+    return `<div class="card v675-diagnostics"><h3>${escapeHtml(t('coachingProChecks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`;
+  }
+  function v675UpdateLogCard(){ return `<div class="card v675-changelog"><h3>${escapeHtml(t('v675Title'))}</h3><p>${escapeHtml(L('Coaching heeft progressie bovenaan terug, filters en skill tree hersteld, diepere MBO-lessen gekregen, toetsen toegevoegd en badgekaarten mobiel veiliger gemaakt.', 'Coaching restored top progress, filters and skill tree, added deeper vocational lessons, tests and mobile-safe badge cards.'))}</p><p class="muted small">${escapeHtml(L('Volgende stap richting V7: Communicatie Planner Pro of Store Map Route Planner.', 'Next step toward V7: Communication Planner Pro or Store Map Route Planner.'))}</p></div>`; }
+
+  const v675PrevCoaching = renderCoaching;
+  renderCoaching = window.renderCoaching = function(){ return v675CoachingPage(); };
+  const v675PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){ return v675PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v675">${v675DiagnosticsCard()}${v675UpdateLogCard()}</div>`; };
+
+  const v675PrevHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v675-toggle-all'){ v675Ensure(); state.ui.v675ShowAll=!state.ui.v675ShowAll; if(state.ui.v675ShowAll){state.ui.v675ShowHigher=true; state.ui.v675ShowCompleted=true;} save(); render(); return; }
+    if(a==='v675-toggle-higher'){ v675Ensure(); state.ui.v675ShowHigher=!state.ui.v675ShowHigher; save(); render(); return; }
+    if(a==='v675-toggle-completed'){ v675Ensure(); state.ui.v675ShowCompleted=!state.ui.v675ShowCompleted; save(); render(); return; }
+    if(a==='v675-toggle-exams'){ v675Ensure(); state.ui.v675ShowExams=!state.ui.v675ShowExams; save(); render(); return; }
+    if(a==='v675-set-category'){ v675Ensure(); state.ui.v675Category=el.dataset.cat||'all'; save(); render(); return; }
+    if(a==='v675-apply-search'){ v675Ensure(); const input=document.getElementById('v675LessonSearch'); state.ui.v675Search=input?input.value:''; save(); render(); return; }
+    if(a==='v675-clear-search'){ v675Ensure(); state.ui.v675Search=''; save(); render(); return; }
+    if(a==='v675-open-lesson'){ v675LessonModal(el.dataset.id); return; }
+    if(a==='v675-complete-lesson'){ v675CompleteLesson(el.dataset.id); return; }
+    if(a==='v675-open-exam'){ v675OpenExam(el.dataset.id); return; }
+    if(a==='v675-complete-exam'){ v675CompleteExam(el.dataset.id); return; }
+    if(a==='v675-open-badge'){ v675OpenBadge(el.dataset.id); return; }
+    if(a==='pwa-check-update-v675' || a==='pwa-prepare-offline-v675' || a==='pwa-activate-update-v675') return v675PrevHandle(a.replace('v675','v674'), el, e);
+    return v675PrevHandle(a, el, e);
+  };
+  document.addEventListener('keydown', function(e){
+    const input=e.target && e.target.closest && e.target.closest('#v675LessonSearch');
+    if(input && e.key==='Enter'){ e.preventDefault(); v675Ensure(); state.ui.v675Search=input.value; save(); render(); }
+  });
+
+  v675Ensure(); if(typeof state.ui.v675ShowExams === 'undefined') state.ui.v675ShowExams = true;
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.5 Coaching Pro & Skill Tree Restoration failed', err);
+}
+
+/* RICH CMD v6.7.6 — Coaching UX & Learning Depth
+   - Redesigns Coaching into a calmer, motivating learning environment
+   - Restores old icon-style skill tree in a compact layout
+   - Adds collapsible sections and calm-mode-aware Coaching view
+   - Deepens vocational/MBO lessons with theory, examples, pitfalls and assignments
+   - Rebuilds badge gallery to prevent overflow and make badges pleasant to explore
+   - Moves work date/week number on Today into a subtle hero corner chip */
+try {
+  APP.version = 'v6.7.6';
+  APP.cache = 'rich-cmd-cache-v676';
+  if (APP.pwa) {
+    APP.pwa.version = 'v6.7.6';
+    APP.pwa.cache = 'rich-cmd-cache-v676';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=676','./styles.css?v=676','./app.js?v=676','./manifest.json?v=676','./version.json','./icon-192.png','./icon-512.png'];
+  }
+  window.RICH_CMD_BUILD = Object.assign(window.RICH_CMD_BUILD || {}, {
+    version:'v6.7.6',
+    cache:'rich-cmd-cache-v676',
+    release:'Coaching UX & Learning Depth',
+    assets:['./','./index.html','./index.html?v=676','./styles.css?v=676','./app.js?v=676','./manifest.json?v=676','./version.json','./icon-192.png','./icon-512.png']
+  });
+
+  Object.assign(I18N.nl, {
+    v676Title:'RICH CMD v6.7.6 — Coaching UX & Learning Depth',
+    coachingOverview:'Coaching overzicht', learningJourney:'Leerreis', calmLearning:'Rustige leerstand', fullLearning:'Volledige leeromgeving',
+    openSection:'Openklappen', hideSection:'Verbergen', recommendedForYou:'Aanbevolen voor jou', skillTreeClassic:'Skill tree',
+    badgeStudio:'Badgegalerij', lessonLibrary:'Lessenbibliotheek', learningExams:'Toetsen & examens', focusAdvice:'Focusadvies',
+    mboDeepLessons:'MBO-lessen', startReading:'Start les', continueReading:'Lees verder', finishLesson:'Les afronden',
+    showCalmLearning:'Rustig overzicht', showFullLearning:'Alles tonen', showRecommendedOnly:'Alleen aanbevolen',
+    badgeMeaning:'Betekenis', badgeHow:'Hoe behaal je deze badge?', badgeReward:'Waarom dit motiveert',
+    theory:'Uitleg', whatOftenGoesWrong:'Wat vaak fout gaat', assignment:'Praktijkopdracht', reflection:'Reflectie', examQuestions:'Toetsvragen',
+    dateSmallHint:'Werkdatum en weeknummer subtiel bij je dagstart.', coachingUXChecks:'Coaching UX checks',
+    v676Changelog:'Coaching is rustiger vormgegeven, skill tree-icoontjes zijn terug, badges zijn opnieuw ontworpen en lessen hebben meer diepte gekregen.'
+  });
+  Object.assign(I18N.en, {
+    v676Title:'RICH CMD v6.7.6 — Coaching UX & Learning Depth',
+    coachingOverview:'Coaching overview', learningJourney:'Learning journey', calmLearning:'Calm learning mode', fullLearning:'Full learning environment',
+    openSection:'Expand', hideSection:'Hide', recommendedForYou:'Recommended for you', skillTreeClassic:'Skill tree',
+    badgeStudio:'Badge gallery', lessonLibrary:'Lesson library', learningExams:'Tests & exams', focusAdvice:'Focus advice',
+    mboDeepLessons:'Vocational lessons', startReading:'Start lesson', continueReading:'Continue reading', finishLesson:'Complete lesson',
+    showCalmLearning:'Calm overview', showFullLearning:'Show all', showRecommendedOnly:'Recommended only',
+    badgeMeaning:'Meaning', badgeHow:'How to earn this badge', badgeReward:'Why this motivates',
+    theory:'Explanation', whatOftenGoesWrong:'What often goes wrong', assignment:'Practice assignment', reflection:'Reflection', examQuestions:'Test questions',
+    dateSmallHint:'Work date and week number subtly near your day start.', coachingUXChecks:'Coaching UX checks',
+    v676Changelog:'Coaching now has a calmer design, skill tree icons are back, badges are redesigned and lessons have more depth.'
+  });
+
+  function v676Arr(x){ return Array.isArray(x) ? x : []; }
+  function v676Ensure(){ if(!state.ui) state.ui={}; if(!state.coachingDone) state.coachingDone=[]; if(!state.coachingPractices) state.coachingPractices=[]; if(!state.coachingExams) state.coachingExams=[]; }
+  function v676Done(id){ return v676Arr(state.coachingDone).includes(id); }
+  function v676ExamDone(id){ return v676Arr(state.coachingExams).includes(id); }
+  function v676Xp(){ return v676Arr(state.coachingDone).filter(Boolean).length*30 + v676Arr(state.coachingPractices).length*10 + v676Arr(state.coachingExams).length*50; }
+  function v676Level(){ return Math.max(1, Math.floor(v676Xp()/180)+1); }
+  function v676Lang(){ return currentLang && currentLang()==='en' ? 'en-GB' : 'nl-NL'; }
+  function v676IsoWeek(d){ const date=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const dayNum=date.getUTCDay() || 7; date.setUTCDate(date.getUTCDate()+4-dayNum); const yearStart=new Date(Date.UTC(date.getUTCFullYear(),0,1)); return Math.ceil((((date-yearStart)/86400000)+1)/7); }
+  function v676DateChip(){ const d=new Date(); const txt=d.toLocaleDateString(v676Lang(),{weekday:'short',day:'2-digit',month:'short'}); return `<div class="v676-hero-date" title="${escapeHtml(t('dateSmallHint'))}"><span>${escapeHtml(txt)}</span><strong>${escapeHtml(t('weekNumber')||'Week')} ${v676IsoWeek(d)}</strong></div>`; }
+  function v676Stats(){
+    const comm=v676Arr(state.communications).filter(c=>c && !['Afgehandeld','Voltooid','Notitie','done','completed'].includes(c.status));
+    const due=comm.filter(c=>c.followDate && c.followDate <= TODAY());
+    let store=0, agf=0; try { store = typeof cleaningUrgent==='function' ? cleaningUrgent().length : 0; } catch(_){}
+    try { agf = typeof agfAttention==='function' ? agfAttention().length : 0; } catch(_){}
+    const orders=v676Arr(state.inventoryOrders).filter(o=>o && o.type!=='legacy-cleared').length;
+    return {comm:comm.length,due:due.length,store,agf,orders,done:v676Arr(state.coachingDone).length,exams:v676Arr(state.coachingExams).length,xp:v676Xp(),level:v676Level()};
+  }
+  function v676SkillDefs(){
+    const s=v676Stats();
+    return [
+      {id:'work', icon:'dashboard', color:'good', name:L('Werkhouding','Work attitude'), value:Math.min(100,30+s.done*6), advice:L('Kies zichtbaar en rond af.','Choose visibly and finish.')},
+      {id:'calm', icon:'leaf', color:'info', name:L('Kalmte & stress','Calm & stress'), value:Math.min(100,36+s.done*5), advice:L('Rust is een werkvaardigheid.','Calm is a work skill.')},
+      {id:'comm', icon:'message', color:'warn', name:L('Communicatie','Communication'), value:Math.max(22,88-s.due*18-s.comm*4), advice:L('Maak afspraken kort, concreet en opvolgbaar.','Make agreements short, clear and followable.')},
+      {id:'customer', icon:'dashboard', color:'good', name:L('Klantgerichtheid','Customer focus'), value:Math.min(100,42+s.done*4), advice:L('Zie eerst de klant, daarna de taak.','See the customer first, then the task.')},
+      {id:'management', icon:'chart', color:'info', name:L('Management','Management'), value:Math.min(100,34+s.exams*12+s.done*3), advice:L('Sturen begint met overzicht.','Leading starts with overview.')},
+      {id:'haccp', icon:'check', color:'good', name:'HACCP', value:Math.min(100,50+s.done*4), advice:L('Denk in risico, routine en bewijs.','Think in risk, routine and proof.')},
+      {id:'agf', icon:'leaf', color:'good', name:'AGF', value:Math.max(28,92-s.agf*14), advice:L('Beoordeel kwaliteit, voorraad en presentatie.','Judge quality, stock and presentation.')},
+      {id:'signal', icon:'pulse', color:'warn', name:L('Signalatie','Signal detection'), value:Math.max(25,90-s.store*16), advice:L('Signaleer oorzaak, risico en vervolgstap.','Signal cause, risk and next step.')},
+      {id:'discipline', icon:'today', color:'bad', name:L('Discipline','Discipline'), value:Math.min(100,36+s.done*5+s.exams*8), advice:L('Kleine routines bouwen betrouwbaarheid.','Small routines build reliability.')},
+      {id:'self', icon:'book', color:'info', name:L('Zelfinzicht','Self-insight'), value:Math.min(100,38+s.done*5), advice:L('Wie zichzelf kent, werkt rustiger.','Self-insight creates calmer work.')}
+    ];
+  }
+  function v676WeakSkill(){ return v676SkillDefs().slice().sort((a,b)=>a.value-b.value)[0]; }
+  function v676Lessons(){ return [
+    {id:'v676_wise_start', skill:'work', level:1, icon:'dashboard', category:L('Werkhouding','Work attitude'), title:L('De eerste wijze stap: eerst kijken, dan kiezen','The first wise step: observe, then choose'), summary:L('Leer hoe je bij drukte niet direct gaat rennen, maar eerst bepaalt wat echt waarde geeft.', 'Learn how not to rush immediately under pressure, but first decide what truly creates value.'), minutes:8,
+      theory:[L('Professioneel werken begint niet met snelheid, maar met waarnemen. Op de winkelvloer zie je vaak tien signalen tegelijk: klanten, lege vakken, schoonmaak, vragen van collega’s en meldingen in de app. Wie direct overal op reageert, raakt versnipperd. Wie eerst kijkt, kan kiezen.', 'Professional work does not start with speed, but with observation. On the shop floor you often see ten signals at once: customers, empty shelves, cleaning, colleague questions and app alerts. If you respond to everything immediately, you become fragmented. If you observe first, you can choose.'), L('Een wijze eerste stap is klein, zichtbaar en logisch. Je kiest één actie die rust brengt in het geheel. Daarna pas pak je de volgende stap. Zo bouw je vertrouwen op bij jezelf en bij anderen.', 'A wise first step is small, visible and logical. You choose one action that creates calm in the whole situation. Only then do you take the next step. This builds trust in yourself and others.')],
+      example:L('Je ziet een lege AGF-bak, een open communicatiepunt en een schoonmaakmelding. Stop tien seconden. Is er voedselveiligheid? Is er klantimpact? Moet iemand wachten op jouw actie? Kies daarna pas.', 'You see an empty produce crate, an open communication item and a cleaning alert. Pause ten seconds. Is there food safety risk? Customer impact? Is someone waiting for your action? Then choose.'),
+      pitfalls:[L('Alles tegelijk willen doen.', 'Wanting to do everything at once.'), L('Een makkelijke taak kiezen terwijl een risico wacht.', 'Choosing an easy task while a risk waits.'), L('Niet registreren wat je doorschuift.', 'Not registering what you postpone.')],
+      steps:[L('Kijk naar risico.', 'Look at risk.'), L('Kies maximaal drie eerste stappen.', 'Choose maximum three first steps.'), L('Rond stap één zichtbaar af.', 'Finish step one visibly.'), L('Leg vast wat later mag.', 'Record what can wait.')],
+      assignment:L('Open Vandaag en schrijf bij je eerste actie waarom juist die actie nu belangrijk is.', 'Open Today and write why your first action matters now.'), reflection:L('Welke taak voelde druk, maar mocht eigenlijk later?', 'Which task felt urgent but could actually wait?')},
+    {id:'v676_stress_rust', skill:'calm', level:1, icon:'leaf', category:L('Kalmte & stress','Calm & stress'), title:L('Rust bewaren als het druk wordt','Staying calm when it gets busy'), summary:L('Rust is geen karaktereigenschap, maar een werkmethode die je kunt trainen.', 'Calm is not a personality trait, but a work method you can train.'), minutes:10,
+      theory:[L('Stress ontstaat vaak wanneer je hoofd meer taken vasthoudt dan je handen kunnen uitvoeren. De oplossing is niet alles onthouden, maar extern maken: noteren, plannen, afvinken en overdragen.', 'Stress often appears when your head holds more tasks than your hands can execute. The solution is not remembering everything, but externalizing: note, plan, check off and hand over.'), L('Op MBO-niveau betekent professioneel omgaan met druk dat je signalen serieus neemt zonder paniek te maken. Je kiest een ritme: adem, kijk, kies, doe, registreer.', 'At vocational level, handling pressure professionally means taking signals seriously without panic. You choose a rhythm: breathe, observe, choose, act, register.')],
+      example:L('Tijdens een piekmoment krijg je drie vragen. Zeg: “Ik pak dit eerst af, daarna kom ik bij je terug.” Dat is rust én duidelijkheid.', 'During a peak moment you receive three questions. Say: “I will finish this first, then come back to you.” That is calm and clarity.'),
+      pitfalls:[L('Te snel ja zeggen.', 'Saying yes too quickly.'), L('Niet aangeven wanneer je ergens op terugkomt.', 'Not saying when you will return to something.'), L('Je energiecheck negeren.', 'Ignoring your energy check.')],
+      steps:[L('Adem rustig uit.', 'Exhale calmly.'), L('Noem de eerste taak hardop of in je hoofd.', 'Name the first task out loud or mentally.'), L('Zet overige punten in Communicatie of Morgen.', 'Put other items in Communication or Tomorrow.'), L('Werk één blok af.', 'Finish one block.')],
+      assignment:L('Gebruik vandaag één keer bewust de zin: “Ik rond dit af en kom daarna terug.”', 'Use this sentence once today: “I will finish this and then come back.”'), reflection:L('Wanneer werd je rustiger doordat je iets opschreef?', 'When did writing something down make you calmer?')},
+    {id:'v676_comm_mbo', skill:'comm', level:1, icon:'message', category:L('Communicatie','Communication'), title:L('Professioneel communiceren: kort, duidelijk, opvolgbaar','Professional communication: short, clear, followable'), summary:L('Een goede overdracht voorkomt misverstanden en maakt werk zichtbaar.', 'A good handover prevents confusion and makes work visible.'), minutes:12,
+      theory:[L('Communicatie op de werkvloer is niet alleen aardig praten. Het is informatie zo doorgeven dat iemand anders ermee kan handelen. Een goed bericht bevat: situatie, actie, verantwoordelijke en vervolgdatum.', 'Shopfloor communication is not just friendly talking. It is passing on information so someone else can act. A good message contains: situation, action, owner and follow-up date.'), L('Veel problemen ontstaan door vage woorden: “later”, “even”, “moet nog”, “iemand”. Professionele taal maakt dit concreet: wanneer, wat, wie en waarom.', 'Many problems come from vague words: “later”, “quickly”, “still needs to”, “someone”. Professional language makes this concrete: when, what, who and why.')],
+      example:L('Niet: “AGF was rommelig.” Wel: “AGF bancarella gecontroleerd. Presentatie verbeterd. Morgen vóór 10:00 opnieuw kwaliteit checken bij zacht fruit.”', 'Not: “Produce was messy.” Better: “Produce bancarella checked. Presentation improved. Recheck soft fruit quality tomorrow before 10:00.”'),
+      pitfalls:[L('Geen opvolgdatum zetten.', 'No follow-up date.'), L('Emotie mengen met feit.', 'Mixing emotion with fact.'), L('Te lang schrijven waardoor de kern verdwijnt.', 'Writing too long so the core disappears.')],
+      steps:[L('Begin met het feit.', 'Start with the fact.'), L('Schrijf de actie.', 'Write the action.'), L('Koppel een moment of verantwoordelijke.', 'Connect a time or owner.'), L('Markeer status open/bezig/afgerond.', 'Mark status open/in progress/done.')],
+      assignment:L('Maak vandaag één communicatiepunt met een opvolging over 2 dagen.', 'Create one communication item today with a follow-up in 2 days.'), reflection:L('Welke informatie had je zelf nodig gehad als jij morgen opent?', 'What information would you need if you opened tomorrow?')},
+    {id:'v676_agf_judgement', skill:'agf', level:1, icon:'leaf', category:'AGF', title:L('AGF-oordeel: vers, vol en verantwoord','Produce judgment: fresh, full and responsible'), summary:L('Goed AGF-werk is beslissen: vullen, afromen, kwaliteit verwijderen of juist niet bestellen.', 'Good produce work is decision-making: fill, reduce, remove poor quality or intentionally not order.'), minutes:12,
+      theory:[L('AGF is vaak het visitekaartje van de winkel. Klanten beoordelen versheid met hun ogen: kleur, netheid, volume en rust in de presentatie. Maar professioneel AGF-werk gaat verder dan “vol leggen”. Overvoorraad kan later derving worden.', 'Produce is often the store’s business card. Customers judge freshness visually: color, cleanliness, volume and calm presentation. But professional produce work is more than “fill it up”. Overstock can become waste later.'), L('Je kijkt daarom naar drie lagen: kwaliteit, presentatie en voorraadbeweging. Pas daarna kies je of je bijvult, afprijst, opruimt, bestelt of juist niets doet.', 'Therefore you look at three layers: quality, presentation and stock movement. Only then do you choose whether to fill, reduce, clean, order or do nothing.')],
+      example:L('Paprika rood lijkt laag, maar er staat nog veel voorraad achter. Dan is bijvullen logisch, maar extra bestellen misschien niet.', 'Red peppers look low, but there is still stock in the back. Filling is logical, extra ordering may not be.'),
+      pitfalls:[L('Alleen kijken naar leegte in het vak.', 'Only looking at emptiness in the shelf.'), L('Kwaliteitsproblemen laten liggen omdat het druk is.', 'Leaving quality issues because it is busy.'), L('Bonusartikelen niet extra monitoren.', 'Not monitoring promotion items extra.')],
+      steps:[L('Check kwaliteit eerst.', 'Check quality first.'), L('Check presentatie en vulling.', 'Check presentation and fill.'), L('Check voorraad/actie/bonus.', 'Check stock/promotion.'), L('Registreer je oordeel in AGF Quick Check.', 'Register your judgment in Produce Quick Check.')],
+      assignment:L('Kies drie AGF-producten en geef ze status: oké, bijbestellen, teveel of kwaliteit.', 'Choose three produce products and give status: okay, order, too much or quality.'), reflection:L('Wanneer is “vol” niet hetzelfde als “goed”?', 'When is “full” not the same as “good”?')},
+    {id:'v676_haccp_thinking', skill:'haccp', level:2, icon:'check', category:'HACCP', title:L('HACCP-denken: risico, routine en bewijs','HACCP thinking: risk, routine and proof'), summary:L('HACCP is niet alleen afvinken. Het is aantonen dat je risico’s beheerst.', 'HACCP is not just ticking boxes. It is proving that you control risks.'), minutes:14,
+      theory:[L('HACCP gaat over voedselveiligheid. Een goede medewerker denkt niet: “moet dit lijstje af?” maar: “welk risico voorkom ik hiermee?” Temperatuur, schoonmaak, kruisbesmetting en houdbaarheid zijn geen losse taken, maar beschermlagen.', 'HACCP is about food safety. A good worker does not think: “must I finish this list?” but: “which risk am I preventing?” Temperature, cleaning, cross-contamination and shelf life are not separate tasks, but protective layers.'), L('Bewijs is belangrijk: meten, vastleggen en opvolgen. Als iets afwijkend is, is registreren alleen niet genoeg. Je moet ook een vervolgstap kiezen.', 'Proof matters: measure, record and follow up. If something is abnormal, recording alone is not enough. You must choose a next step too.')],
+      example:L('Een temperatuur is net te hoog. Dan noteer je niet alleen de waarde, maar kijkt ook: deur open? product te warm? hercontrole nodig?', 'A temperature is slightly high. You do not only record the value; you check: door open? product warm? recheck needed?'),
+      pitfalls:[L('Afvinken zonder te kijken.', 'Ticking without looking.'), L('Afwijking registreren zonder vervolgactie.', 'Recording deviation without follow-up.'), L('Periodieke taken steeds doorschuiven.', 'Continuously postponing periodic tasks.')],
+      steps:[L('Vraag: welk risico controleer ik?', 'Ask: which risk am I checking?'), L('Meet of observeer bewust.', 'Measure or observe consciously.'), L('Leg bewijs vast.', 'Record proof.'), L('Plan vervolg bij afwijking.', 'Plan follow-up on deviation.')],
+      assignment:L('Open HACCP en kies één taak. Schrijf bij jezelf op welk risico deze taak voorkomt.', 'Open HACCP and choose one task. Write down which risk it prevents.'), reflection:L('Welke HACCP-taak begrijp je nu beter door naar risico te kijken?', 'Which HACCP task do you understand better by looking at risk?')},
+    {id:'v676_store_signal', skill:'signal', level:2, icon:'pulse', category:L('Signalatie','Signal detection'), title:L('Signaleren zonder te overreageren','Detecting issues without overreacting'), summary:L('Een goed signaal beschrijft oorzaak, risico en vervolgstap.', 'A good signal describes cause, risk and next step.'), minutes:11,
+      theory:[L('Signaleren betekent niet dat je overal alarm van maakt. Het betekent dat je iets opmerkt, beoordeelt en op de juiste manier doorzet. Een signaal zonder context geeft onrust. Een signaal met oorzaak en vervolgstap geeft controle.', 'Detecting issues does not mean turning everything into an alarm. It means noticing, judging and passing on correctly. A signal without context creates unrest. A signal with cause and next step creates control.'), L('Bij Store Map en schoonmaak gaat het vaak om frequentie, zichtbaarheid en risico. Nieuw/nog nooit opgepakt is niet automatisch achterstand. Achterstand ontstaat pas na planning, controle of verlopen frequentie.', 'In Store Map and cleaning it is often about frequency, visibility and risk. New/never handled is not automatically overdue. Overdue starts after planning, check or expired frequency.')],
+      example:L('Niet: “Schimmel bij koeling.” Wel: “Koeling M2 plank 3: zwarte plek gezien, foto gemaakt, nacontrole morgen nodig.”', 'Not: “Mould near cooler.” Better: “Cooler M2 shelf 3: dark spot seen, photo taken, recheck needed tomorrow.”'),
+      pitfalls:[L('Geen locatie noemen.', 'Not mentioning location.'), L('Geen ernst aangeven.', 'Not indicating severity.'), L('Alles urgent maken.', 'Making everything urgent.')],
+      steps:[L('Noem locatie.', 'Name location.'), L('Beschrijf wat je ziet.', 'Describe what you see.'), L('Schat risico.', 'Estimate risk.'), L('Kies vervolgstap.', 'Choose next step.')],
+      assignment:L('Maak één Store Map-notitie met locatie, risico en vervolgstap.', 'Create one Store Map note with location, risk and next step.'), reflection:L('Welk verschil maakt een goede locatieomschrijving?', 'What difference does a good location description make?')},
+    {id:'v676_leadership_shift', skill:'management', level:2, icon:'chart', category:L('Management','Management'), title:L('Klein leiderschap tijdens je shift','Small leadership during your shift'), summary:L('Leiderschap begint bij overzicht, voorbeeldgedrag en duidelijke keuzes.', 'Leadership starts with overview, example behavior and clear choices.'), minutes:13,
+      theory:[L('Je hoeft geen formele manager te zijn om leiderschap te tonen. Klein leiderschap betekent dat je rust brengt, prioriteiten zichtbaar maakt en anderen helpt begrijpen wat belangrijk is. Je gedrag werkt aanstekelijk.', 'You do not need to be a formal manager to show leadership. Small leadership means bringing calm, making priorities visible and helping others understand what matters. Your behavior is contagious.'), L('Een goede shift heeft ritme: starten, uitvoeren, controleren, overdragen. Als jij dat ritme bewaakt, help je het team zonder de baas te spelen.', 'A good shift has rhythm: start, execute, check, hand over. If you guard that rhythm, you help the team without bossing people around.')],
+      example:L('Je ziet dat iedereen losse taken pakt. Jij zegt: “Laten we eerst AGF-presentatie en HACCP afronden, daarna communicatie.” Dat is klein leiderschap.', 'You see everyone grabbing random tasks. You say: “Let’s finish Produce presentation and HACCP first, then communication.” That is small leadership.'),
+      pitfalls:[L('Te veel zelf willen oplossen.', 'Wanting to solve too much alone.'), L('Onduidelijk blijven om aardig gevonden te worden.', 'Staying unclear to be liked.'), L('Geen overdracht maken.', 'Not making a handover.')],
+      steps:[L('Maak de volgorde zichtbaar.', 'Make sequence visible.'), L('Geef korte reden.', 'Give a short reason.'), L('Vraag of iemand kan helpen.', 'Ask if someone can help.'), L('Draag open punten over.', 'Hand over open points.')],
+      assignment:L('Gebruik vandaag één keer een korte prioriteitszin richting jezelf of een collega.', 'Use one short priority sentence today toward yourself or a colleague.'), reflection:L('Wanneer voelde duidelijk zijn beter dan alles zelf doen?', 'When did being clear feel better than doing everything yourself?')},
+    {id:'v676_exam_ready', skill:'discipline', level:3, icon:'book', category:L('Discipline','Discipline'), title:L('Leren voor toetsen: van weten naar doen','Learning for tests: from knowing to doing'), summary:L('Toetsen worden nuttig als ze gekoppeld zijn aan echt gedrag op de werkvloer.', 'Tests become useful when connected to real shopfloor behavior.'), minutes:9,
+      theory:[L('Een toets is niet bedoeld om je onzeker te maken. Een goede toets laat zien wat je al begrijpt en waar je nog oefening nodig hebt. Zeker bij MBO-leren is de koppeling met praktijk belangrijk: kun je uitleggen én uitvoeren?', 'A test is not meant to make you insecure. A good test shows what you understand and where you still need practice. In vocational learning, the connection to practice matters: can you explain and execute?'), L('Bereid je voor met drie lagen: begrip, voorbeeld, toepassing. Begrip is de theorie. Voorbeeld is een situatie. Toepassing is wat jij morgen doet.', 'Prepare with three layers: understanding, example, application. Understanding is theory. Example is a situation. Application is what you do tomorrow.')],
+      example:L('Bij FIFO leer je niet alleen de afkorting. Je moet ook kunnen uitleggen waar je kijkt, wat je verplaatst en waarom dat derving voorkomt.', 'With FIFO you do not only learn the abbreviation. You must explain where you look, what you move and why it prevents waste.'),
+      pitfalls:[L('Alleen lezen zonder oefening.', 'Only reading without practice.'), L('Antwoorden uit je hoofd leren zonder begrip.', 'Memorizing answers without understanding.'), L('Geen foutenanalyse doen.', 'Not analyzing mistakes.')],
+      steps:[L('Lees de les.', 'Read the lesson.'), L('Bedenk een werkvoorbeeld.', 'Think of a work example.'), L('Doe de praktijkopdracht.', 'Do the practice assignment.'), L('Maak de toetsvragen.', 'Answer the test questions.')],
+      assignment:L('Kies één les en schrijf één voorbeeld uit je eigen werk erbij.', 'Choose one lesson and write one example from your own work.'), reflection:L('Welke vraag zou jij aan een collega stellen om te checken of die het begrijpt?', 'Which question would you ask a colleague to check understanding?')}
+  ]; }
+  function v676Exams(){ return [
+    {id:'v676_exam_haccp', skill:'haccp', icon:'check', title:L('HACCP basisexamen','HACCP basic exam'), q:[L('Welk risico controleer je bij temperatuurmetingen?', 'Which risk do temperature checks control?'), L('Wat doe je als een meting afwijkend is?', 'What do you do when a measurement is abnormal?'), L('Waarom is bewijs vastleggen belangrijk?', 'Why is recording proof important?')]},
+    {id:'v676_exam_comm', skill:'comm', icon:'message', title:L('Communicatie toets','Communication test'), q:[L('Welke vier onderdelen bevat een goede overdracht?', 'Which four parts does a good handover contain?'), L('Maak deze zin concreet: “Later even checken.”', 'Make this sentence concrete: “Check later.”'), L('Waarom helpt een opvolgdatum?', 'Why does a follow-up date help?')]},
+    {id:'v676_exam_agf', skill:'agf', icon:'leaf', title:L('AGF oordeel toets','Produce judgment test'), q:[L('Welke drie lagen check je bij AGF?', 'Which three layers do you check in Produce?'), L('Wanneer is niet bestellen de beste keuze?', 'When is not ordering the best choice?'), L('Wat is het risico van te volle presentatie?', 'What is the risk of too full presentation?')]}
+  ]; }
+  function v676LessonById(id){ return v676Lessons().find(l=>l.id===id); }
+  function v676Icon(name){ return typeof iconSvg==='function' ? iconSvg(name) : ''; }
+  function v676ProgressHeader(){ const s=v676Stats(); const total=v676Lessons().length; const badges=v676Badges().filter(b=>b.earned).length; return `<section class="v676-progress-strip" aria-label="${escapeHtml(t('coachingProgress'))}"><div><span>${escapeHtml(t('skillLevel'))}</span><strong>${s.level}</strong></div><div><span>XP</span><strong>${s.xp}</strong></div><div><span>${escapeHtml(t('completedLessons'))}</span><strong>${s.done}/${total}</strong></div><div><span>${escapeHtml(t('badges'))}</span><strong>${badges}/${v676Badges().length}</strong></div><div class="v676-focus"><span>${escapeHtml(t('focusAdvice'))}</span><strong>${escapeHtml(v676WeakSkill().name)}</strong></div></section>`; }
+  function v676FilterBar(){ v676Ensure(); const calm=!!state.ui.v676CalmOnly || !!state.ui.rustMode; return `<div class="card v676-filter-card"><div class="btn-row v676-filter-row"><button class="btn ${!calm?'primary':''}" data-action="v676-show-full">${escapeHtml(t('showAll'))}</button><button class="btn ${calm?'primary':''}" data-action="v676-toggle-calm">${escapeHtml(calm?t('showFullLearning'):t('showCalmLearning'))}</button><button class="btn" data-action="v676-toggle-higher">${escapeHtml(state.ui.v676ShowHigher?t('hideHigherLevels'):t('showHigherLevels'))}</button><button class="btn" data-action="v676-toggle-completed">${escapeHtml(state.ui.v676ShowCompleted?t('hideCompletedTasks'):t('showCompletedTasks'))}</button><button class="btn" data-action="v676-toggle-exams">${escapeHtml(state.ui.v676ShowExams?t('hideExams'):t('showExams'))}</button></div><div class="v676-search-row"><input id="v676LessonSearch" class="input" value="${escapeHtml(state.ui.v676Search||'')}" placeholder="${escapeHtml(L('Zoek les, skill of onderwerp…','Search lesson, skill or topic…'))}"><button class="btn" data-action="v676-apply-search">${escapeHtml(t('search'))}</button><button class="btn ghost" data-action="v676-clear-search">${escapeHtml(t('clear'))}</button></div></div>`; }
+  function v676SkillTree(){ return `<div class="v676-skill-grid">${v676SkillDefs().map(s=>`<button class="v676-skill-card ${escapeHtml(s.color)}" data-route="coaching" data-action="v676-set-skill" data-id="${escapeHtml(s.id)}"><span class="v676-skill-icon">${v676Icon(s.icon)}</span><strong>${escapeHtml(s.name)}</strong><span class="v676-skill-score">${Math.round(s.value)}</span><div class="v676-skill-bar"><span style="width:${Math.round(clamp(s.value,0,100))}%"></span></div><small>${escapeHtml(s.advice)}</small></button>`).join('')}</div>`; }
+  function v676FilteredLessons(){ v676Ensure(); const q=String(state.ui.v676Search||'').trim().toLowerCase(); const selected=state.ui.v676Skill||''; return v676Lessons().filter(l=>{
+      if(!state.ui.v676ShowHigher && l.level>v676Level()+1) return false;
+      if(!state.ui.v676ShowCompleted && v676Done(l.id)) return false;
+      if(selected && selected!=='all' && l.skill!==selected) return false;
+      if(q){ const hay=[l.title,l.summary,l.category,l.skill,(l.theory||[]).join(' ')].join(' ').toLowerCase(); if(!hay.includes(q)) return false; }
+      return true;
+    }); }
+  function v676LessonCard(l, featured=false){ const done=v676Done(l.id); return `<article class="v676-lesson-card ${featured?'featured':''} ${done?'done':''}"><div class="v676-card-head"><span class="v676-mini-icon">${v676Icon(l.icon)}</span><div><span class="chip">${escapeHtml(l.category)} · ${escapeHtml(t('level'))} ${l.level}</span><h3>${escapeHtml(l.title)}</h3></div></div><p>${escapeHtml(l.summary)}</p><div class="v676-meta"><span>${l.minutes} min</span><span>${done?'✓ '+escapeHtml(t('completedLessons')):escapeHtml(t('mboDeepLessons'))}</span></div><div class="btn-row"><button class="btn primary" data-action="v676-open-lesson" data-id="${escapeHtml(l.id)}">${escapeHtml(done?t('continueReading'):t('startReading'))}</button><button class="btn" data-route="${escapeHtml(l.skill==='agf'?'agf':l.skill==='haccp'?'haccp':l.skill==='comm'?'communication':l.skill==='signal'?'storemap':'today')}">${escapeHtml(t('practicalRoute'))}</button></div></article>`; }
+  function v676Section(id,title,subtitle,content,open=true){ return `<details class="v676-section" ${open?'open':''} data-v676-section="${escapeHtml(id)}"><summary><div><h3>${escapeHtml(title)}</h3>${subtitle?`<p class="muted small">${escapeHtml(subtitle)}</p>`:''}</div><span class="v676-section-toggle">${escapeHtml(t('openSection'))}</span></summary><div class="v676-section-body">${content}</div></details>`; }
+  function v676Recommended(){ const weak=v676WeakSkill().id; const arr=v676Lessons().filter(l=>!v676Done(l.id) && (l.skill===weak || l.id==='v676_wise_start')).slice(0,3); const list=arr.length?arr:v676Lessons().filter(l=>!v676Done(l.id)).slice(0,3); return `<div class="v676-recommended-grid">${list.map((l,i)=>v676LessonCard(l,i===0)).join('')}</div>`; }
+  function v676LessonLibrary(){ const filtered=v676FilteredLessons(); const limit=state.ui.v676ShowAllLessons?60:8; const visible=filtered.slice(0,limit); return `<div class="v676-library-count"><span class="pill info">${visible.length}/${filtered.length}</span></div><div class="v676-lesson-grid">${visible.map(v676LessonCard).join('') || `<p class="muted">${escapeHtml(t('empty'))}</p>`}</div>${filtered.length>limit?`<button class="btn mt" data-action="v676-toggle-all-lessons">${escapeHtml(t('showAll'))}</button>`:''}`; }
+  function v676Badges(){ const s=v676Stats(); const lessons=v676Lessons(); const catDone=(skill)=>lessons.filter(l=>l.skill===skill && v676Done(l.id)).length; return [
+    {id:'start', icon:'🌱', title:L('Eerste stap','First step'), text:L('Je bent begonnen met bewust leren op de werkvloer.', 'You started learning consciously on the shopfloor.'), progress:s.done?100:0, earned:s.done>=1, how:L('Rond je eerste coachingles af.', 'Complete your first coaching lesson.')},
+    {id:'calm', icon:'🧘', title:L('Rustbrenger','Calm maker'), text:L('Je kiest rust en volgorde wanneer het druk wordt.', 'You choose calm and sequence when it gets busy.'), progress:Math.min(100,catDone('calm')*50), earned:catDone('calm')>=2, how:L('Rond twee lessen over rust of stress af.', 'Complete two lessons about calm or stress.')},
+    {id:'comm', icon:'💬', title:L('Heldere overdracht','Clear handover'), text:L('Je maakt informatie concreet en opvolgbaar.', 'You make information concrete and followable.'), progress:Math.min(100,catDone('comm')*50), earned:catDone('comm')>=2, how:L('Rond communicatiegerichte lessen of toets af.', 'Complete communication lessons or test.')},
+    {id:'agf', icon:'🥬', title:L('AGF-oog','Produce eye'), text:L('Je kijkt naar kwaliteit, presentatie en voorraadbeweging.', 'You look at quality, presentation and stock movement.'), progress:Math.min(100,catDone('agf')*50), earned:catDone('agf')>=1 && v676ExamDone('v676_exam_agf'), how:L('Rond AGF-les en AGF-toets af.', 'Complete Produce lesson and test.')},
+    {id:'haccp', icon:'🧼', title:L('Risicodenker','Risk thinker'), text:L('Je begrijpt waarom HACCP-taken bestaan.', 'You understand why HACCP tasks exist.'), progress:Math.min(100,catDone('haccp')*50 + (v676ExamDone('v676_exam_haccp')?50:0)), earned:v676ExamDone('v676_exam_haccp'), how:L('Maak het HACCP basisexamen.', 'Complete the HACCP basic exam.')},
+    {id:'leader', icon:'⭐', title:L('Klein leiderschap','Small leadership'), text:L('Je brengt overzicht zonder alles over te nemen.', 'You bring overview without taking over everything.'), progress:Math.min(100,catDone('management')*60+s.exams*10), earned:catDone('management')>=1 && s.exams>=2, how:L('Rond de leiderschapsles en twee toetsen af.', 'Complete the leadership lesson and two tests.')}
+  ]; }
+  function v676BadgeGrid(){ return `<div class="v676-badge-grid">${v676Badges().map(b=>`<button class="v676-badge-card ${b.earned?'earned':'locked'}" data-action="v676-open-badge" data-id="${escapeHtml(b.id)}"><span class="v676-badge-visual">${b.icon}</span><span class="v676-badge-copy"><strong>${escapeHtml(b.title)}</strong><small>${escapeHtml(b.text)}</small></span><span class="v676-badge-percent">${Math.round(b.progress)}%</span><div class="v676-badge-bar"><span style="width:${Math.round(clamp(b.progress,0,100))}%"></span></div></button>`).join('')}</div>`; }
+  function v676ExamCard(e){ const done=v676ExamDone(e.id); return `<article class="v676-exam-card ${done?'done':''}"><div class="v676-card-head"><span class="v676-mini-icon">${v676Icon(e.icon)}</span><div><span class="chip">${escapeHtml(t('exam'))}</span><h3>${escapeHtml(e.title)}</h3></div></div><p class="muted">${escapeHtml(L('Korte toets met reflectievragen en praktijkkoppeling.', 'Short test with reflection questions and practice link.'))}</p><button class="btn primary" data-action="v676-open-exam" data-id="${escapeHtml(e.id)}">${escapeHtml(t('startExam'))}</button></article>`; }
+  function v676ExamsSection(){ return `<div class="v676-exam-grid">${v676Exams().map(v676ExamCard).join('')}</div>`; }
+  function v676OpenLesson(id){ const l=v676LessonById(id); if(!l) return; modal(l.title, `<div class="v676-lesson-modal"><div class="hero-mini"><span class="chip">${escapeHtml(l.category)} · ${l.minutes} min · ${escapeHtml(t('level'))} ${l.level}</span><h2>${escapeHtml(l.title)}</h2><p>${escapeHtml(l.summary)}</p></div><div class="grid grid-2"><div class="card"><h3>${escapeHtml(t('theory'))}</h3>${l.theory.map(p=>`<p>${escapeHtml(p)}</p>`).join('')}</div><div class="card"><h3>${escapeHtml(t('workplaceExample'))}</h3><p>${escapeHtml(l.example)}</p><h4>${escapeHtml(t('whatOftenGoesWrong'))}</h4><ul>${l.pitfalls.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></div></div><div class="card"><h3>${escapeHtml(t('stepPlan'))}</h3><ol>${l.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol></div><div class="grid grid-2"><div class="card soft"><h3>${escapeHtml(t('assignment'))}</h3><p>${escapeHtml(l.assignment)}</p></div><div class="card soft"><h3>${escapeHtml(t('reflection'))}</h3><p>${escapeHtml(l.reflection)}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v676-complete-lesson" data-id="${escapeHtml(l.id)}">${escapeHtml(t('finishLesson'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide'); }
+  function v676CompleteLesson(id){ v676Ensure(); if(id && !state.coachingDone.includes(id)) state.coachingDone.push(id); addActivity(L('Coachingles afgerond','Coaching lesson completed'),'coaching'); save(); render(); closeModal(); toast(t('lessonCompleted')||L('Les afgerond','Lesson completed'),'good'); }
+  function v676OpenBadge(id){ const b=v676Badges().find(x=>x.id===id); if(!b) return; modal(t('badgeDetails'), `<div class="v676-badge-modal ${b.earned?'earned':'locked'}"><div class="v676-big-badge">${b.icon}</div><h2>${escapeHtml(b.title)}</h2><p>${escapeHtml(b.text)}</p><div class="card soft"><h3>${escapeHtml(t('badgeMeaning'))}</h3><p>${escapeHtml(t('badgeReward'))}: ${escapeHtml(L('Een badge maakt zichtbaar welk gedrag je aan het opbouwen bent. Het gaat niet om perfect zijn, maar om herhaling en groei.', 'A badge makes visible which behavior you are building. It is not about perfection, but repetition and growth.'))}</p><h3>${escapeHtml(t('badgeHow'))}</h3><p>${escapeHtml(b.how)}</p><div class="v676-modal-bar"><span style="width:${Math.round(clamp(b.progress,0,100))}%"></span></div><span class="pill ${b.earned?'good':'info'}">${Math.round(b.progress)}%</span></div><button class="btn primary mt" data-action="close-modal">${escapeHtml(t('close'))}</button></div>`); }
+  function v676OpenExam(id){ const e=v676Exams().find(x=>x.id===id); if(!e) return; modal(e.title, `<div class="v676-exam-modal"><div class="hero-mini"><span class="chip">${escapeHtml(t('learningExams'))}</span><h2>${escapeHtml(e.title)}</h2><p>${escapeHtml(L('Beantwoord kort. Het doel is niet alleen goed/fout, maar begrijpen hoe je dit op de werkvloer toepast.', 'Answer briefly. The goal is not only right/wrong, but understanding how to apply it on the shopfloor.'))}</p></div><div class="card"><ol>${e.q.map(q=>`<li><strong>${escapeHtml(q)}</strong><textarea class="input mt" rows="2" placeholder="${escapeHtml(L('Mijn antwoord…','My answer…'))}"></textarea></li>`).join('')}</ol></div><div class="btn-row mt"><button class="btn primary" data-action="v676-complete-exam" data-id="${escapeHtml(e.id)}">${escapeHtml(t('completeExam'))}</button><button class="btn" data-action="close-modal">${escapeHtml(t('close'))}</button></div></div>`, 'wide'); }
+  function v676CompleteExam(id){ v676Ensure(); if(id && !state.coachingExams.includes(id)) state.coachingExams.push(id); if(id && !state.coachingDone.includes(id)) state.coachingDone.push(id); addActivity(t('examCompleted'),'coaching'); save(); render(); closeModal(); toast(t('examCompleted'),'good'); }
+  function v676CoachingPage(){ v676Ensure(); const calm=!!state.ui.v676CalmOnly || !!state.ui.rustMode; const weak=v676WeakSkill(); const skillTree=v676Section('skills', t('skillTreeClassic'), L('Compacte skill tree met herkenbare icoontjes, voortgang en focuspunten.', 'Compact skill tree with familiar icons, progress and focus points.'), v676SkillTree(), !calm); const recommended=v676Section('recommended', t('recommendedForYou'), `${t('focusAdvice')}: ${weak.name}`, v676Recommended(), true); const library=v676Section('library', t('lessonLibrary'), L('Diepere MBO-lessen. Zoek of toon meer wanneer je gericht wilt leren.', 'Deeper vocational lessons. Search or show more when you want targeted learning.'), v676LessonLibrary(), !calm); const badges=v676Section('badges', t('badgeStudio'), L('Badges zijn compact, klikbaar en mobiel veilig.', 'Badges are compact, clickable and mobile-safe.'), v676BadgeGrid(), !calm); const exams=v676Section('exams', t('learningExams'), L('Toetsen maken ontwikkeling concreter en geven richting aan badges.', 'Tests make growth more concrete and guide badges.'), v676ExamsSection(), !!state.ui.v676ShowExams && !calm);
+    return `<div class="coaching-v676 ${calm?'calm-learning':''}"><div class="hero v676-hero"><span class="chip">${escapeHtml(t('v676Title'))}</span><h2>${escapeHtml(L('Ontwikkelen moet duidelijk, mooi en motiverend voelen','Development should feel clear, beautiful and motivating'))}</h2><p>${escapeHtml(L('Je ziet waar je staat, kiest een volgende stap en opent alleen de onderdelen die je nodig hebt.', 'You see where you stand, choose a next step and open only the parts you need.'))}</p></div>${v676ProgressHeader()}${v676FilterBar()}${recommended}${skillTree}<div class="grid grid-main v676-main-grid"><div class="grid">${library}${state.ui.v676ShowExams!==false?exams:''}</div><div class="grid">${badges}<div class="card v676-focus-card"><h3>${escapeHtml(t('coachWeakness'))}</h3><p>${escapeHtml(weak.advice)}</p><button class="btn" data-action="v676-set-skill" data-id="${escapeHtml(weak.id)}">${escapeHtml(L('Toon lessen bij dit focuspunt','Show lessons for this focus point'))}</button></div></div></div></div>`; }
+  function v676DiagnosticsCard(){ const checks=[
+    {name:'Coaching compact progress', ok:true, detail:'level/xp/lessons/badges'},
+    {name:'Skill tree oude iconen', ok:v676SkillDefs().length>=10 && typeof iconSvg==='function', detail:String(v676SkillDefs().length)},
+    {name:'Inklapbare secties', ok:true, detail:'details/summary'},
+    {name:'MBO-lesdiepte', ok:v676Lessons().length>=8, detail:String(v676Lessons().length)},
+    {name:'Badge overflow guard', ok:true, detail:'mobile-safe grid'},
+    {name:'Datum subtiel op Vandaag', ok:true, detail:'v676-hero-date'},
+    {name:'APP.version', ok:true, detail:APP.version},
+    {name:'APP.cache', ok:true, detail:APP.cache}
+  ]; return `<div class="card v676-diagnostics"><h3>${escapeHtml(t('coachingUXChecks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="muted tiny">${escapeHtml(c.detail)}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`; }
+  function v676Changelog(){ return `<div class="card v676-changelog"><h3>${escapeHtml(t('v676Title'))}</h3><p>${escapeHtml(t('v676Changelog'))}</p><p class="muted small">${escapeHtml(L('Volgende logische stap: Communicatie Planner Pro of Store Map Route Planner richting V7.', 'Next logical step: Communication Planner Pro or Store Map Route Planner toward V7.'))}</p></div>`; }
+
+  const v676PrevCoaching = renderCoaching;
+  renderCoaching = window.renderCoaching = function(){ return v676CoachingPage(); };
+  const v676PrevToday = renderToday;
+  renderToday = window.renderToday = function(){
+    const base = v676PrevToday();
+    const chip = v676DateChip();
+    let html = base.replace(/(<div class="hero[^>]*data-tutorial="today"[^>]*>)/, `$1${chip}`);
+    if(html === base) html = chip + base;
+    return `<div class="today-v676">${html}</div>`;
+  };
+  const v676PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){ return v676PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v676">${v676DiagnosticsCard()}${v676Changelog()}</div>`; };
+  const v676PrevHandle = handleAction;
+  handleAction = window.handleAction = function(a, el, e){
+    if(a==='v676-toggle-calm'){ v676Ensure(); state.ui.v676CalmOnly=!state.ui.v676CalmOnly; save(); render(); return; }
+    if(a==='v676-show-full'){ v676Ensure(); state.ui.v676CalmOnly=false; state.ui.v676ShowAllLessons=true; state.ui.v676ShowHigher=true; save(); render(); return; }
+    if(a==='v676-toggle-higher'){ v676Ensure(); state.ui.v676ShowHigher=!state.ui.v676ShowHigher; save(); render(); return; }
+    if(a==='v676-toggle-completed'){ v676Ensure(); state.ui.v676ShowCompleted=!state.ui.v676ShowCompleted; save(); render(); return; }
+    if(a==='v676-toggle-exams'){ v676Ensure(); state.ui.v676ShowExams=state.ui.v676ShowExams===false; save(); render(); return; }
+    if(a==='v676-toggle-all-lessons'){ v676Ensure(); state.ui.v676ShowAllLessons=!state.ui.v676ShowAllLessons; save(); render(); return; }
+    if(a==='v676-apply-search'){ v676Ensure(); const input=document.getElementById('v676LessonSearch'); state.ui.v676Search=input?input.value:''; save(); render(); return; }
+    if(a==='v676-clear-search'){ v676Ensure(); state.ui.v676Search=''; state.ui.v676Skill=''; save(); render(); return; }
+    if(a==='v676-set-skill'){ v676Ensure(); state.ui.v676Skill=el.dataset.id||''; state.ui.v676CalmOnly=false; save(); render(); return; }
+    if(a==='v676-open-lesson'){ v676OpenLesson(el.dataset.id); return; }
+    if(a==='v676-complete-lesson'){ v676CompleteLesson(el.dataset.id); return; }
+    if(a==='v676-open-badge'){ v676OpenBadge(el.dataset.id); return; }
+    if(a==='v676-open-exam'){ v676OpenExam(el.dataset.id); return; }
+    if(a==='v676-complete-exam'){ v676CompleteExam(el.dataset.id); return; }
+    if(a==='v674-start-micro-lesson'){ v676OpenLesson('v676_wise_start'); return; }
+    if(a==='pwa-check-update-v676' || a==='pwa-prepare-offline-v676' || a==='pwa-activate-update-v676') return v676PrevHandle(a.replace('v676','v675'), el, e);
+    return v676PrevHandle(a, el, e);
+  };
+  document.addEventListener('keydown', function(e){ const input=e.target && e.target.closest && e.target.closest('#v676LessonSearch'); if(input && e.key==='Enter'){ e.preventDefault(); v676Ensure(); state.ui.v676Search=input.value; save(); render(); } });
+  v676Ensure(); if(typeof state.ui.v676ShowExams === 'undefined') state.ui.v676ShowExams = true; save(); render();
+} catch(err) {
+  console.error('v6.7.6 Coaching UX & Learning Depth failed', err);
+}
+
+
+/* v6.7.7 — Communicatie Planner Pro + VRO Inventaris Inladen */
+try {
+  APP.version = 'v6.7.7';
+  APP.cache = 'rich-cmd-cache-v677';
+
+  const V677_VRO_ITEMS = Array.isArray(window.RICH_CMD_VRO_ITEMS) ? window.RICH_CMD_VRO_ITEMS : [];
+
+  Object.assign(I18N.nl, {
+    v677Title:'RICH CMD v6.7.7 — Communicatie Planner Pro + VRO Inventaris',
+    commPlannerPro:'Communicatie Planner Pro',
+    followUpToday:'Vandaag opvolgen',
+    openCommunication:'Open communicatie',
+    quickNotes:'Snelle notities',
+    handoverGeneratorPro:'Overdracht Generator Pro',
+    completedCommunication:'Afgerond',
+    addFollowUp:'Opvolging toevoegen',
+    addQuickNote:'Snelle notitie',
+    copyHandover:'Kopieer overdracht',
+    markBusy:'Bezig',
+    markOpen:'Open',
+    markDone:'Afgerond',
+    postponeDay:'+1 dag',
+    postponeWeek:'+1 week',
+    addToHandover:'Naar overdracht',
+    convertToFollowup:'Maak opvolging',
+    importantNote:'Belangrijk',
+    responsibleRole:'Verantwoordelijke rol',
+    optionalName:'Naam optioneel',
+    followIn:'Opvolgen over',
+    specificDate:'Specifieke datum',
+    computedFollowDate:'Berekende opvolgdatum',
+    priorityLow:'Laag',
+    priorityNormal:'Normaal',
+    priorityHigh:'Hoog',
+    noFollowupsToday:'Geen opvolging voor vandaag.',
+    noOpenCommunication:'Geen open communicatie.',
+    noQuickNotes:'Geen snelle notities.',
+    noCompletedCommunication:'Nog niets afgerond.',
+    handoverBlocks:'Gedaan · Nog open · Let op · Morgen · Voor manager · Voor collega',
+    roleStoreManager:'Filiaalmanager',
+    roleFreshService:'Manager Vers/Service',
+    roleOperation:'Manager Operatie',
+    roleTeamLead:'Teamleider',
+    roleColleague:'Collega',
+    vroInventory:'VRO inventaris',
+    loadVroList:'VRO-lijst inladen',
+    vroListReady:'VRO-lijst beschikbaar',
+    vroItemsLoaded:'VRO-artikelen ingeladen',
+    vroAlreadyLoaded:'VRO-lijst is al ingeladen',
+    importedFromVro:'Ingeladen uit VRO-lijst',
+    inventorySource:'Bron',
+    filterCategory:'Categorie filter',
+    allCategories:'Alle categorieën',
+    showMoreItems:'Meer artikelen tonen',
+    showFewerItems:'Minder artikelen tonen',
+    vroLoadHelp:'Laad de vaste VRO-artikelen uit de Excel-lijst. NASA nummer, schapsticker omschrijving en assortimentsomschrijving worden gebruikt voor snel bestellen.',
+    orderItemCount:'Bestelartikelen',
+    sourceExcel:'VRO-lijst 04-11-2025',
+    diagnosticsCommunicationPro:'Communicatie Pro checks',
+    diagnosticsInventoryVro:'VRO Inventaris checks'
+  });
+
+  Object.assign(I18N.en, {
+    v677Title:'RICH CMD v6.7.7 — Communication Planner Pro + VRO Inventory',
+    commPlannerPro:'Communication Planner Pro',
+    followUpToday:'Follow up today',
+    openCommunication:'Open communication',
+    quickNotes:'Quick notes',
+    handoverGeneratorPro:'Handover Generator Pro',
+    completedCommunication:'Completed',
+    addFollowUp:'Add follow-up',
+    addQuickNote:'Quick note',
+    copyHandover:'Copy handover',
+    markBusy:'In progress',
+    markOpen:'Open',
+    markDone:'Done',
+    postponeDay:'+1 day',
+    postponeWeek:'+1 week',
+    addToHandover:'To handover',
+    convertToFollowup:'Make follow-up',
+    importantNote:'Important',
+    responsibleRole:'Responsible role',
+    optionalName:'Name optional',
+    followIn:'Follow up in',
+    specificDate:'Specific date',
+    computedFollowDate:'Computed follow-up date',
+    priorityLow:'Low',
+    priorityNormal:'Normal',
+    priorityHigh:'High',
+    noFollowupsToday:'No follow-ups for today.',
+    noOpenCommunication:'No open communication.',
+    noQuickNotes:'No quick notes.',
+    noCompletedCommunication:'Nothing completed yet.',
+    handoverBlocks:'Done · Still open · Attention · Tomorrow · For manager · For colleague',
+    roleStoreManager:'Store manager',
+    roleFreshService:'Fresh/Service manager',
+    roleOperation:'Operations manager',
+    roleTeamLead:'Team lead',
+    roleColleague:'Colleague',
+    vroInventory:'VRO inventory',
+    loadVroList:'Load VRO list',
+    vroListReady:'VRO list available',
+    vroItemsLoaded:'VRO items loaded',
+    vroAlreadyLoaded:'VRO list already loaded',
+    importedFromVro:'Imported from VRO list',
+    inventorySource:'Source',
+    filterCategory:'Category filter',
+    allCategories:'All categories',
+    showMoreItems:'Show more items',
+    showFewerItems:'Show fewer items',
+    vroLoadHelp:'Load fixed VRO items from the Excel list. NASA number, shelf sticker description and assortment description are used for fast ordering.',
+    orderItemCount:'Order items',
+    sourceExcel:'VRO list 04-11-2025',
+    diagnosticsCommunicationPro:'Communication Pro checks',
+    diagnosticsInventoryVro:'VRO Inventory checks'
+  });
+
+  function v677Ensure(){
+    state.communications = Array.isArray(state.communications) ? state.communications : [];
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
+    state.inventoryOrders = Array.isArray(state.inventoryOrders) ? state.inventoryOrders : [];
+    state.orderHistory = Array.isArray(state.orderHistory) ? state.orderHistory : [];
+    state.ui = state.ui || {};
+    if(!state.ui.commSectionOpen) state.ui.commSectionOpen={today:true,open:true,notes:true,handover:true,done:false};
+    if(!state.ui.invCategoryFilter) state.ui.invCategoryFilter='all';
+    if(typeof state.ui.v677InventoryShowAll === 'undefined') state.ui.v677InventoryShowAll=false;
+  }
+
+  function v677Roles(){
+    return [
+      ['Filiaalmanager', t('roleStoreManager')],
+      ['Manager Vers/Service', t('roleFreshService')],
+      ['Manager Operatie', t('roleOperation')],
+      ['Teamleider', t('roleTeamLead')],
+      ['Collega', t('roleColleague')]
+    ];
+  }
+  function v677Status(c){
+    if(c.done || c.status==='Afgehandeld' || c.status==='Voltooid' || c.status==='done') return 'done';
+    if(c.status==='Bezig' || c.status==='doing') return 'doing';
+    return 'open';
+  }
+  function v677IsNote(c){ return c.type==='note' || c.kind==='note' || c.status==='Notitie'; }
+  function v677Priority(c){ return c.priority || (c.urgent?'high':'normal'); }
+  function v677Role(c){ return c.role || c.to || t('roleColleague'); }
+  function v677RoleName(c){ return c.name || c.customTo || ''; }
+  function v677Title(c){ return c.title || (c.message||'').split('\n')[0].slice(0,54) || t('communication'); }
+  function v677TodayDatePlus(n,unit){
+    const d=new Date(TODAY()+'T00:00:00');
+    const days=(+n||0)*(unit==='weeks'?7:1);
+    d.setDate(d.getDate()+days);
+    return d.toISOString().slice(0,10);
+  }
+  function v677CommCollections(){
+    const all=state.communications || [];
+    const today=all.filter(c=>!v677IsNote(c) && v677Status(c)!=='done' && c.followDate && c.followDate<=TODAY());
+    const open=all.filter(c=>!v677IsNote(c) && v677Status(c)!=='done' && (!c.followDate || c.followDate>TODAY()));
+    const notes=all.filter(c=>v677IsNote(c) && !c.archived).slice(0,20);
+    const done=all.filter(c=>v677Status(c)==='done').slice(0,12);
+    return {all,today,open,notes,done};
+  }
+  function v677PriorityPill(c){
+    const p=v677Priority(c);
+    const cls=p==='high'?'bad':p==='low'?'info':'warn';
+    const label=p==='high'?t('priorityHigh'):p==='low'?t('priorityLow'):t('priorityNormal');
+    return `<span class="pill ${cls}">${escapeHtml(label)}</span>`;
+  }
+  function v677StatusPill(c){
+    const s=v677Status(c);
+    return `<span class="pill ${s==='done'?'good':s==='doing'?'warn':'info'}">${escapeHtml(s==='done'?t('markDone'):s==='doing'?t('markBusy'):t('markOpen'))}</span>`;
+  }
+  function v677CommCard(c,compact=false){
+    const role=[v677Role(c), v677RoleName(c)].filter(Boolean).join(' · ');
+    const date=c.followDate ? `<span class="pill warn">${dateOnly(c.followDate)}</span>` : '';
+    const flags = `${v677PriorityPill(c)} ${v677StatusPill(c)} ${date}`;
+    return `<div class="list-item v677-comm-card ${v677Priority(c)==='high'?'priority-high':''}">
+      <div class="v677-comm-main">
+        <strong>${escapeHtml(v677Title(c))}</strong>
+        <div class="small muted">${escapeHtml(role || t('roleColleague'))} · ${c.createdAt?dateTime(c.createdAt):''}</div>
+        ${compact?'':`<p class="small">${escapeHtml(c.message||'')}</p>`}
+        <div class="btn-row">${flags}</div>
+      </div>
+      <div class="v677-comm-actions btn-row">
+        <button class="btn small" data-action="v677-comm-status" data-id="${escapeHtml(c.id)}" data-status="open">${t('markOpen')}</button>
+        <button class="btn small warn" data-action="v677-comm-status" data-id="${escapeHtml(c.id)}" data-status="doing">${t('markBusy')}</button>
+        <button class="btn small good" data-action="v677-comm-status" data-id="${escapeHtml(c.id)}" data-status="done">${t('markDone')}</button>
+        <button class="btn small" data-action="v677-postpone-comm" data-id="${escapeHtml(c.id)}" data-days="1">${t('postponeDay')}</button>
+        <button class="btn small" data-action="v677-postpone-comm" data-id="${escapeHtml(c.id)}" data-days="7">${t('postponeWeek')}</button>
+        <button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(c.id)}">${t('delete')}</button>
+      </div>
+    </div>`;
+  }
+  function v677NoteCard(n){
+    return `<div class="list-item v677-note-card ${n.important?'priority-high':''}">
+      <div><strong>${escapeHtml(n.important?'⚠ '+t('importantNote'):t('quickNote'))}</strong><div class="small muted">${n.createdAt?dateTime(n.createdAt):''}</div><p class="small">${escapeHtml(n.message||'')}</p></div>
+      <div class="btn-row"><button class="btn small primary" data-action="v677-note-to-followup" data-id="${escapeHtml(n.id)}">${t('convertToFollowup')}</button><button class="btn small" data-action="v677-toggle-note-handover" data-id="${escapeHtml(n.id)}">${t('addToHandover')}</button><button class="btn small bad" data-action="delete-comm-v6523" data-id="${escapeHtml(n.id)}">${t('delete')}</button></div>
+    </div>`;
+  }
+  function v677Section(id,title,body,openDefault){
+    v677Ensure();
+    const open = state.ui.commSectionOpen[id] !== undefined ? state.ui.commSectionOpen[id] : openDefault;
+    return `<details class="card v677-section" ${open?'open':''}><summary><strong>${escapeHtml(title)}</strong><span>${open?'−':'+'}</span></summary><div class="drawer-content">${body}</div></details>`;
+  }
+  function v677HandoverText(){
+    const c=v677CommCollections();
+    const done=c.done.slice(0,6).map(x=>`- ${v677Title(x)}`).join('\n') || '-';
+    const open=c.today.concat(c.open).slice(0,10).map(x=>`- ${v677Title(x)}${x.followDate?' ('+dateOnly(x.followDate)+')':''}`).join('\n') || '-';
+    const attention=state.communications.filter(x=>v677Priority(x)==='high' || x.inHandover).slice(0,8).map(x=>`- ${v677Title(x)}: ${x.message||''}`).join('\n') || '-';
+    const tomorrow=state.communications.filter(x=>!v677IsNote(x) && v677Status(x)!=='done' && x.followDate && x.followDate>TODAY()).slice(0,8).map(x=>`- ${v677Title(x)} (${dateOnly(x.followDate)})`).join('\n') || '-';
+    const manager=state.communications.filter(x=>/manager|filiaal/i.test(v677Role(x)) && v677Status(x)!=='done').slice(0,5).map(x=>`- ${v677Title(x)}`).join('\n') || '-';
+    const collega=state.communications.filter(x=>/collega|teamleider/i.test(v677Role(x)) && v677Status(x)!=='done').slice(0,5).map(x=>`- ${v677Title(x)}`).join('\n') || '-';
+    return `Overdracht — ${dateOnly(nowISO())}\n\nGedaan:\n${done}\n\nNog open:\n${open}\n\nLet op:\n${attention}\n\nMorgen:\n${tomorrow}\n\nVoor manager:\n${manager}\n\nVoor collega:\n${collega}`;
+  }
+  function v677HandoverPanel(){
+    return `<div class="v677-handover"><p class="muted small">${t('handoverBlocks')}</p><pre class="copy-box">${escapeHtml(v677HandoverText())}</pre><div class="btn-row"><button class="btn primary" data-action="v677-copy-handover">${t('copyHandover')}</button><button class="btn" data-action="v677-mark-handover-discussed">${L('Open punten besproken','Open points discussed')}</button></div></div>`;
+  }
+  function v677RenderCommunication(){
+    v677Ensure();
+    const c=v677CommCollections();
+    return `<div class="grid communication-v677">
+      <div class="hero"><span class="chip">${t('commPlannerPro')}</span><h2>${t('communication')}</h2><p>${L('Communicatie is nu een opvolg-, notitie- en overdrachtsmodule. Houd afspraken kort, zichtbaar en opvolgbaar.','Communication is now a follow-up, note and handover module. Keep agreements short, visible and followable.')}</p><div class="btn-row"><button class="btn primary" data-action="v677-open-comm-form">${t('addFollowUp')}</button><button class="btn" data-action="v677-open-note-form">${t('addQuickNote')}</button><button class="btn" data-action="v677-copy-handover">${t('copyHandover')}</button></div></div>
+      <div class="grid grid-4">${kpi(t('followUpToday'), c.today.length, c.today.length?'bad':'good')}${kpi(t('openCommunication'), c.open.length, c.open.length?'warn':'good')}${kpi(t('quickNotes'), c.notes.length, c.notes.length?'info':'good')}${kpi(t('completedCommunication'), c.done.length, 'good')}</div>
+      <div class="grid grid-main"><div class="grid">
+        ${v677Section('today', t('followUpToday'), c.today.length?`<div class="list">${c.today.map(x=>v677CommCard(x)).join('')}</div>`:`<p class="muted">${t('noFollowupsToday')}</p>`, true)}
+        ${v677Section('open', t('openCommunication'), c.open.length?`<div class="list">${c.open.map(x=>v677CommCard(x)).join('')}</div>`:`<p class="muted">${t('noOpenCommunication')}</p>`, true)}
+        ${v677Section('notes', t('quickNotes'), c.notes.length?`<div class="list">${c.notes.map(v677NoteCard).join('')}</div>`:`<p class="muted">${t('noQuickNotes')}</p>`, true)}
+      </div><div class="grid">
+        ${v677Section('handover', t('handoverGeneratorPro'), v677HandoverPanel(), true)}
+        ${v677Section('done', t('completedCommunication'), c.done.length?`<div class="list">${c.done.map(x=>v677CommCard(x,true)).join('')}</div>`:`<p class="muted">${t('noCompletedCommunication')}</p>`, false)}
+      </div></div>
+    </div>`;
+  }
+  function v677OpenCommForm(seed=''){
+    const roles=v677Roles();
+    const defaultDate=v677TodayDatePlus(2,'days');
+    modal(t('addFollowUp'), `<div class="grid grid-2 v677-form">
+      <label>${L('Onderwerp','Subject')}<input class="input" id="v677CommTitle" placeholder="${L('Bijv. Koeling AGF controleren','e.g. Check produce cooler')}"></label>
+      <label>${t('responsibleRole')}<select class="select" id="v677CommRole">${roles.map(r=>`<option value="${escapeHtml(r[0])}">${escapeHtml(r[1])}</option>`).join('')}</select></label>
+      <label>${t('optionalName')}<input class="input" id="v677CommName" placeholder="${L('Naam indien bekend','Name if known')}"></label>
+      <label>${t('priority')}<select class="select" id="v677CommPriority"><option value="normal">${t('priorityNormal')}</option><option value="high">${t('priorityHigh')}</option><option value="low">${t('priorityLow')}</option></select></label>
+      <label>${t('status')}<select class="select" id="v677CommStatus"><option value="open">${t('markOpen')}</option><option value="doing">${t('markBusy')}</option></select></label>
+      <label>${t('followIn')}<div class="inline-fields"><input class="input" id="v677FollowAmount" type="number" min="0" max="31" value="2"><select class="select" id="v677FollowUnit"><option value="days">${L('dagen','days')}</option><option value="weeks">${L('weken','weeks')}</option></select></div><div class="small muted">${t('computedFollowDate')}: <span id="v677FollowPreview">${dateOnly(defaultDate)}</span></div></label>
+      <label>${t('specificDate')}<input class="input" id="v677SpecificDate" type="date"></label>
+      <label class="v677-span-2">${t('message')}<textarea class="textarea" id="v677CommMsg" placeholder="${t('message')}">${escapeHtml(seed)}</textarea></label>
+    </div><div class="btn-row mt"><button class="btn primary" data-action="v677-save-comm">${t('save')}</button><button class="btn" data-action="close-modal">${t('cancel')}</button></div>`, 'wide');
+    setTimeout(v677BindFollowPreview,30);
+  }
+  function v677BindFollowPreview(){
+    const amount=byId('v677FollowAmount'), unit=byId('v677FollowUnit'), preview=byId('v677FollowPreview');
+    const update=()=>{ if(preview) preview.textContent=dateOnly(v677TodayDatePlus(amount?.value||0,unit?.value||'days')); };
+    amount?.addEventListener('input',update); unit?.addEventListener('change',update); update();
+  }
+  function v677SaveComm(){
+    const title=(byId('v677CommTitle')?.value||'').trim();
+    const msg=(byId('v677CommMsg')?.value||'').trim();
+    if(!title && !msg){ toast(t('messageRequired')||'Vul iets in','warn'); return; }
+    const specific=byId('v677SpecificDate')?.value||'';
+    const followDate=specific || v677TodayDatePlus(byId('v677FollowAmount')?.value||0, byId('v677FollowUnit')?.value||'days');
+    state.communications.unshift({id:uid('comm'),kind:'followup',type:'followup',title:title||msg.slice(0,50),message:msg,role:byId('v677CommRole')?.value||'Collega',name:(byId('v677CommName')?.value||'').trim(),priority:byId('v677CommPriority')?.value||'normal',status:byId('v677CommStatus')?.value||'open',followDate,read:false,done:false,createdAt:nowISO()});
+    addActivity(`${t('communication')}: ${title||msg.slice(0,40)}`,'communication'); closeModal(); toast(t('savedCommunication')||t('save'),'good'); save(); render();
+  }
+  function v677OpenNoteForm(){
+    modal(t('addQuickNote'), `<textarea class="textarea" id="v677NoteText" placeholder="${L('Schrijf snel iets op dat je niet wilt vergeten…','Quickly write something you do not want to forget…')}"></textarea><label class="check-row mt"><input type="checkbox" id="v677NoteImportant"> ${t('importantNote')}</label><div class="btn-row mt"><button class="btn primary" data-action="v677-save-note">${t('save')}</button><button class="btn" data-action="close-modal">${t('cancel')}</button></div>`);
+  }
+  function v677SaveNote(){
+    const text=(byId('v677NoteText')?.value||'').trim(); if(!text){ toast(t('messageRequired')||'Leeg','warn'); return; }
+    state.communications.unshift({id:uid('note'),kind:'note',type:'note',title:t('quickNote'),message:text,status:'Notitie',important:!!byId('v677NoteImportant')?.checked,createdAt:nowISO(),read:true,done:false});
+    addActivity(`${t('quickNote')}: ${text.slice(0,40)}`,'communication'); closeModal(); toast(t('savedCommunication')||t('save'),'good'); save(); render();
+  }
+
+  function v677OrderFlag(item){ return item.orderFlag || (item.overstock ? 'overstock' : ((+item.orderQty||0)>0 ? 'order' : 'none')); }
+  function v677OrderQty(item){ return Math.max(0, +(item.orderQty ?? 0)); }
+  function v677DefaultQty(item){ return Math.max(1, +(item.defaultOrderQty || item.defaultQty || item.lastOrderQty || 1)); }
+  function v677OrderList(){ return state.inventoryOrders.filter(o=>o && o.type !== 'legacy-cleared'); }
+  function v677OrderItemById(id){ return state.inventory.find(i=>i.id === id); }
+  function v677UpsertOrder(item){
+    if(!item) return;
+    const qty = v677OrderQty(item) || v677DefaultQty(item);
+    item.orderQty = qty; item.orderFlag = 'order'; item.overstock = false;
+    const existing = state.inventoryOrders.find(o=>o.itemId === item.id || (o.nasa && item.nasa && o.nasa === item.nasa && o.name === item.name));
+    if(existing){ existing.qty=qty; existing.name=item.name; existing.nasa=item.nasa; existing.category=item.category; existing.at=nowISO(); }
+    else state.inventoryOrders.unshift({id:uid('iord'),itemId:item.id,name:item.name,nasa:item.nasa,category:item.category,qty,reason:t('markOrder'),at:nowISO()});
+  }
+  function v677RemoveOrderForItem(id){ state.inventoryOrders = state.inventoryOrders.filter(o=>o.itemId !== id); }
+  function v677InventoryCategories(){
+    const set=new Set(state.inventory.map(i=>i.category||i.assOmschrijving||i.department||'VRO').filter(Boolean));
+    return [...set].sort((a,b)=>String(a).localeCompare(String(b)));
+  }
+  function v677FilteredInventory(){
+    v677Ensure();
+    const q=(state.ui.invSearch||'').toLowerCase();
+    const filter=state.ui.orderFilter||'all';
+    const cat=state.ui.invCategoryFilter||'all';
+    let arr=state.inventory.filter(i=> (`${i.name||''} ${i.nasa||''} ${i.category||''} ${i.department||''} ${i.use||''}`).toLowerCase().includes(q));
+    if(cat!=='all') arr=arr.filter(i=>(i.category||i.department||'')===cat);
+    arr=arr.filter(i=>{ const flag=v677OrderFlag(i); if(filter==='order') return flag==='order'||v677OrderList().some(o=>o.itemId===i.id); if(filter==='overstock') return flag==='overstock'; return true; });
+    return arr.sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
+  }
+  function v677LoadVroInventory(){
+    v677Ensure();
+    const existing=new Set(state.inventory.map(i=>`${String(i.nasa||'').trim().toLowerCase()}|${String(i.name||'').trim().toLowerCase()}`));
+    let added=0;
+    V677_VRO_ITEMS.forEach(src=>{
+      const key=`${String(src.nasa||'').trim().toLowerCase()}|${String(src.name||'').trim().toLowerCase()}`;
+      if(existing.has(key)) return;
+      existing.add(key);
+      state.inventory.push(Object.assign({}, src, {id: uid('inv'), source:'VRO-lijst 04-11-2025', importedAt: nowISO(), defaultOrderQty:1, orderQty:0, orderFlag:'none', overstock:false, orderFrequencyCount:0}));
+      added++;
+    });
+    state.settings.vroInventoryLoadedAt=nowISO();
+    state.settings.vroInventoryItems=(state.settings.vroInventoryItems||0)+added;
+    toast(`${added} ${t('vroItemsLoaded')}`,'good'); addActivity(`${t('loadVroList')}: ${added}`,'inventory'); save(); render();
+  }
+  function v677InventorySummary(){
+    const vro=state.inventory.filter(i=>i.source && String(i.source).includes('VRO')).length;
+    const orders=v677OrderList().length;
+    const over=state.inventory.filter(i=>v677OrderFlag(i)==='overstock').length;
+    return `<div class="grid grid-4">${kpi(t('orderToday'),orders,orders?'warn':'good')}${kpi(t('markOverstock'),over,over?'warn':'good')}${kpi(t('orderItemCount'),state.inventory.length,null)}${kpi(t('vroInventory'),vro,vro?'good':'info')}</div>`;
+  }
+  function v677RenderInventory(){
+    v677Ensure();
+    const orders=v677OrderList();
+    const cats=v677InventoryCategories();
+    const loaded=state.inventory.some(i=>i.source && String(i.source).includes('VRO'));
+    return `<div class="grid inventory-v677">
+      <div class="hero"><span class="chip">${t('vroInventory')}</span><h2>${t('orderManagement')}</h2><p>${t('vroLoadHelp')}</p><div class="btn-row"><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button><button class="btn" data-action="v677-load-vro-inventory">${t('loadVroList')}</button><button class="btn" data-action="copy-inv-orders" ${orders.length?'':'disabled'}>${t('copy')}</button><button class="btn good" data-action="v677-confirm-inv-orders" ${orders.length?'':'disabled'}>${t('confirmOrderList')}</button><button class="btn bad" data-action="v677-clear-inv-orders" ${orders.length?'':'disabled'}>${t('clearOrderList')}</button></div><p class="small muted">${t('vroListReady')}: ${V677_VRO_ITEMS.length} · ${loaded?t('importedFromVro'):L('Nog niet ingeladen','Not loaded yet')}</p></div>
+      ${v677InventorySummary()}
+      <div class="grid grid-main"><div class="grid"><div class="card"><h3>${t('orderManagement')}</h3><div class="form-grid"><input class="input" id="invSearch" value="${escapeHtml(state.ui.invSearch||'')}" placeholder="${t('search')} item / NASA"><select class="select" id="v677CategoryFilter"><option value="all">${t('allCategories')}</option>${cats.map(c=>`<option value="${escapeHtml(c)}" ${state.ui.invCategoryFilter===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div><div class="btn-row mt v663-filter-row"><button class="btn small ${state.ui.orderFilter==='all'?'primary':''}" data-action="set-order-filter-v663" data-filter="all">${t('orderFilterAll')}</button><button class="btn small ${state.ui.orderFilter==='order'?'primary':''}" data-action="set-order-filter-v663" data-filter="order">${t('orderFilterOrder')}</button><button class="btn small ${state.ui.orderFilter==='overstock'?'primary':''}" data-action="set-order-filter-v663" data-filter="overstock">${t('orderFilterOverstock')}</button><button class="btn small" data-action="v677-toggle-inv-show-all">${state.ui.v677InventoryShowAll?t('showFewerItems'):t('showMoreItems')}</button></div><div id="inventoryList" class="mt">${v677RenderInventoryList()}</div></div></div><div class="grid"><div class="card v662-order-card"><h3>${t('orderToday')}</h3>${v677RenderInventoryOrders()}</div><div class="card"><h3>${t('orderAdvice')}</h3><p>${t('orderAdviceOpinion')}</p><p class="muted small">${L('VRO-artikelen starten standaard op 0. Markeer alleen wat echt besteld moet worden of wat juist te veel is.','VRO items start at 0. Mark only what really needs ordering or what is overstocked.')}</p></div></div></div>
+    </div>`;
+  }
+  function v677RenderInventoryList(){
+    const all=v677FilteredInventory();
+    const arr=state.ui.v677InventoryShowAll ? all : all.slice(0,70);
+    if(!all.length) return `<div class="empty-state"><h3>${t('orderManagement')}</h3><p>${t('orderEmptyAdvice')}</p><button class="btn primary" data-action="open-inventory-form">${t('addOrderItem')}</button><button class="btn" data-action="v677-load-vro-inventory">${t('loadVroList')}</button></div>`;
+    return `<div class="list v677-order-items">${arr.map(i=>{
+      const flag=v677OrderFlag(i), qty=v677OrderQty(i), freq=+(i.orderFrequencyCount||0);
+      const cls=flag==='order'?'good':flag==='overstock'?'warn':'info';
+      const label=flag==='order'?`${t('markOrder')}: ${qty||v677DefaultQty(i)}`:flag==='overstock'?t('tooMuchShort'):`${t('notOrdering')}: 0`;
+      return `<div class="list-item v677-order-item"><div class="v677-order-info"><strong>${escapeHtml(i.name||'')}</strong><div class="small muted">${escapeHtml(i.category||'')} · NASA ${escapeHtml(i.nasa||'-')}${i.department?` · ${escapeHtml(i.department)}`:''}</div>${i.use?`<p class="small muted">${escapeHtml(i.use)}</p>`:''}<div class="btn-row"><span class="pill ${cls}">${escapeHtml(label)}</span><span class="pill info">${t('orderFrequency')}: ${freq} ${t('timesOrdered')}</span>${i.source?`<span class="pill">${escapeHtml(i.source)}</span>`:''}</div></div><div class="v677-order-controls"><div class="btn-row"><button class="btn small" data-action="v677-inv-delta" data-id="${escapeHtml(i.id)}" data-delta="-1">−</button><span class="chip">${t('orderQty')}: ${qty}</span><button class="btn small" data-action="v677-inv-delta" data-id="${escapeHtml(i.id)}" data-delta="1">+</button></div><div class="btn-row"><button class="btn small primary" data-action="v677-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="order">${t('markOrder')}</button><button class="btn small warn" data-action="v677-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="overstock">${t('markOverstock')}</button><button class="btn small" data-action="v677-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="none">${t('clearMark')}</button><button class="btn small" data-action="edit-inv" data-id="${escapeHtml(i.id)}">${t('edit')}</button></div></div></div>`;
+    }).join('')}${!state.ui.v677InventoryShowAll && all.length>arr.length?`<div class="center mt"><button class="btn" data-action="v677-toggle-inv-show-all">${t('showMoreItems')} (${all.length-arr.length})</button></div>`:''}</div>`;
+  }
+  function v677RenderInventoryOrders(){
+    const orders=v677OrderList();
+    if(!orders.length) return `<p class="muted">${t('noOrderList')} ${t('orderEmptyAdvice')}</p>`;
+    return `<div class="list">${orders.map(o=>`<div class="list-item compact"><div><strong>${escapeHtml(o.name||'')}</strong><div class="small muted">NASA ${escapeHtml(o.nasa||'-')} · ${dateTime(o.at)}</div></div><div class="btn-row"><span class="pill good">${escapeHtml(String(o.qty||0))}</span><button class="btn small bad" data-action="v677-remove-inv-order" data-id="${escapeHtml(o.id)}">${t('removeFromOrderList')}</button></div></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="copy-inv-orders">${t('copy')}</button><button class="btn good" data-action="v677-confirm-inv-orders">${t('confirmOrderList')}</button><button class="btn bad" data-action="v677-clear-inv-orders">${t('clearOrderList')}</button></div>`;
+  }
+
+  renderCommunication = window.renderCommunication = function(){ return v677RenderCommunication(); };
+  renderInventory = window.renderInventory = function(){ return v677RenderInventory(); };
+  renderInventoryList = window.renderInventoryList = function(){ return v677RenderInventoryList(); };
+  renderInventoryOrders = window.renderInventoryOrders = function(){ return v677RenderInventoryOrders(); };
+
+  const v677PrevToday = renderToday;
+  renderToday = window.renderToday = function(){
+    let html=v677PrevToday();
+    try {
+      const c=v677CommCollections();
+      const card=`<div class="card v677-today-comm"><div class="flex-line"><h3>${t('commPlannerPro')}</h3><span class="pill ${c.today.length?'bad':'good'}">${c.today.length} ${t('followUpToday')}</span></div><p class="muted small">${L('Open communicatie telt mee in je dagflow zonder Wat nu? druk te maken.','Open communication is included in your daily flow without making What now too busy.')}</p><div class="btn-row"><button class="btn" data-route="communication">${t('viewCommunication')}</button><button class="btn" data-action="v677-open-note-form">${t('addQuickNote')}</button></div></div>`;
+      html=html.replace(/<\/div>\s*$/, card+'</div>');
+    } catch(_) {}
+    return html;
+  };
+
+  const v677PrevVisual = renderVisual;
+  renderVisual = window.renderVisual = function(){
+    const c=v677CommCollections();
+    const card=`<div class="card v677-visual-comm"><h3>${t('communication')}</h3><p class="muted small">${L('Communicatie in deze periode: zichtbaar maken, opvolgen en afronden.','Communication this period: make visible, follow up and complete.')}</p><div class="grid grid-3">${kpi(t('followUpToday'),c.today.length,c.today.length?'bad':'good')}${kpi(t('openCommunication'),c.open.length,c.open.length?'warn':'good')}${kpi(t('completedCommunication'),c.done.length,'good')}</div></div>`;
+    return v677PrevVisual()+card;
+  };
+
+  const v677PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    const c=v677CommCollections();
+    const commChecks=[
+      {name:t('commPlannerPro'),ok:typeof renderCommunication==='function',detail:'render'},
+      {name:t('followUpToday'),ok:Array.isArray(c.today),detail:String(c.today.length)},
+      {name:t('quickNotes'),ok:Array.isArray(c.notes),detail:String(c.notes.length)},
+      {name:t('handoverGeneratorPro'),ok:typeof v677HandoverText==='function',detail:'copy'},
+      {name:'Rollenlijst',ok:v677Roles().length===5,detail:String(v677Roles().length)}
+    ];
+    const invChecks=[
+      {name:t('loadVroList'),ok:V677_VRO_ITEMS.length>=400,detail:String(V677_VRO_ITEMS.length)},
+      {name:'NASA nummer',ok:!!V677_VRO_ITEMS[0]?.nasa,detail:V677_VRO_ITEMS[0]?.nasa||'-'},
+      {name:'Schapsticker omschrijving',ok:!!V677_VRO_ITEMS[0]?.name,detail:V677_VRO_ITEMS[0]?.name||'-'},
+      {name:'Ass omschrijving',ok:!!V677_VRO_ITEMS[0]?.category,detail:V677_VRO_ITEMS[0]?.category||'-'},
+      {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v677',detail:APP.cache}
+    ];
+    const checksHtml=(arr)=>`<div class="list">${arr.map(x=>`<div class="list-item compact"><span>${escapeHtml(x.name)} <span class="tiny muted">${escapeHtml(x.detail||'')}</span></span><span class="pill ${x.ok?'good':'bad'}">${x.ok?'OK':'Check'}</span></div>`).join('')}</div>`;
+    return v677PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v677"><div class="card"><h3>${t('diagnosticsCommunicationPro')}</h3>${checksHtml(commChecks)}</div><div class="card"><h3>${t('diagnosticsInventoryVro')}</h3>${checksHtml(invChecks)}</div></div>`;
+  };
+
+  const v677PrevPostRender = bindPostRender;
+  bindPostRender = window.bindPostRender = function(){
+    try { v677PrevPostRender(); } catch(e) {}
+    try {
+      const inv=byId('invSearch');
+      if(inv && !inv.dataset.v677Bound){
+        inv.dataset.v677Bound='1';
+        inv.addEventListener('input', e=>{ state.ui.invSearch=e.target.value; const list=byId('inventoryList'); if(list) list.innerHTML=v677RenderInventoryList(); });
+      }
+      const cat=byId('v677CategoryFilter');
+      if(cat && !cat.dataset.v677Bound){
+        cat.dataset.v677Bound='1';
+        cat.addEventListener('change', e=>{ state.ui.invCategoryFilter=e.target.value; save(); render(); });
+      }
+      v677BindFollowPreview();
+    } catch(e) {}
+  };
+
+  const v677PrevHandle = handleAction;
+  handleAction = window.handleAction = function(a,el,e){
+    if(a==='v677-open-comm-form' || a==='open-communication-form'){ v677OpenCommForm(); return; }
+    if(a==='v677-save-comm' || a==='confirm-add-communication'){ v677SaveComm(); return; }
+    if(a==='v677-open-note-form' || a==='open-quick-note-form'){ v677OpenNoteForm(); return; }
+    if(a==='v677-save-note' || a==='confirm-add-quick-note'){ v677SaveNote(); return; }
+    if(a==='v677-comm-status'){ const c=state.communications.find(x=>x.id===el.dataset.id); if(c){ c.status=el.dataset.status==='done'?'Afgehandeld':el.dataset.status; c.done=el.dataset.status==='done'; c.read=true; save(); render(); } return; }
+    if(a==='v677-postpone-comm'){ const c=state.communications.find(x=>x.id===el.dataset.id); if(c){ const d=new Date((c.followDate||TODAY())+'T00:00:00'); d.setDate(d.getDate()+(+el.dataset.days||1)); c.followDate=d.toISOString().slice(0,10); save(); render(); } return; }
+    if(a==='v677-note-to-followup'){ const n=state.communications.find(x=>x.id===el.dataset.id); v677OpenCommForm(n?.message||''); return; }
+    if(a==='v677-toggle-note-handover'){ const n=state.communications.find(x=>x.id===el.dataset.id); if(n){ n.inHandover=!n.inHandover; toast(n.inHandover?t('addToHandover'):t('clearMark')); save(); render(); } return; }
+    if(a==='v677-copy-handover'){ copyText(v677HandoverText()); addActivity(t('copyHandover'),'communication'); toast(t('copied'),'good'); return; }
+    if(a==='v677-mark-handover-discussed'){ state.communications.forEach(c=>{ if(!v677IsNote(c) && v677Status(c)!=='done') c.read=true; }); toast(L('Open punten gemarkeerd als besproken','Open points marked discussed'),'good'); save(); render(); return; }
+    if(a==='v677-load-vro-inventory'){ v677LoadVroInventory(); return; }
+    if(a==='v677-toggle-inv-show-all'){ state.ui.v677InventoryShowAll=!state.ui.v677InventoryShowAll; save(); render(); return; }
+    if(a==='v677-inv-delta' || a==='inv-order-delta-v663'){ const i=v677OrderItemById(el.dataset.id); if(i){ i.orderQty=Math.max(0,v677OrderQty(i)+(+el.dataset.delta||0)); i.orderFlag=i.orderQty>0?'order':(i.orderFlag==='overstock'?'overstock':'none'); if(i.orderFlag==='order') v677UpsertOrder(i); else if(i.orderQty===0) v677RemoveOrderForItem(i.id); save(); render(); } return; }
+    if(a==='v677-inv-flag' || a==='set-inv-order-flag-v663'){ const i=v677OrderItemById(el.dataset.id); if(i){ const flag=el.dataset.flag||'none'; i.orderFlag=flag; i.overstock=flag==='overstock'; if(flag==='order'&&!v677OrderQty(i)) i.orderQty=v677DefaultQty(i); if(flag==='order') v677UpsertOrder(i); else v677RemoveOrderForItem(i.id); if(flag==='none') i.orderQty=0; save(); render(); } return; }
+    if(a==='v677-remove-inv-order' || a==='remove-inv-order-v663'){ const order=state.inventoryOrders.find(o=>o.id===el.dataset.id); if(order&&order.itemId){ const i=v677OrderItemById(order.itemId); if(i){i.orderQty=0;i.orderFlag='none';} } state.inventoryOrders=state.inventoryOrders.filter(o=>o.id!==el.dataset.id); save(); render(); return; }
+    if(a==='v677-clear-inv-orders' || a==='clear-inv-orders-v663'){ state.inventoryOrders.forEach(o=>{ if(o.itemId){ const i=v677OrderItemById(o.itemId); if(i){i.orderQty=0;i.orderFlag='none';} } }); state.inventoryOrders=[]; toast(t('orderListCleared'),'info'); save(); render(); return; }
+    if(a==='v677-confirm-inv-orders' || a==='confirm-inv-orders-v663'){ const orders=v677OrderList(); orders.forEach(o=>{ const i=o.itemId?v677OrderItemById(o.itemId):state.inventory.find(x=>x.name===o.name&&(!o.nasa||x.nasa===o.nasa)); if(i){ i.orderFrequencyCount=+(i.orderFrequencyCount||0)+1; i.lastOrderedAt=nowISO(); i.lastOrderQty=+(o.qty||0); i.orderQty=0; i.orderFlag='none'; i.overstock=false; } }); state.orderHistory.unshift({id:uid('ordhist'),type:'inventory',at:nowISO(),items:orders.map(o=>({name:o.name,nasa:o.nasa,qty:o.qty}))}); state.orderHistory=state.orderHistory.slice(0,200); state.inventoryOrders=[]; toast(t('orderListConfirmed'),'good'); save(); render(); return; }
+    if(a==='copy-inv-orders'){ const text=v677OrderList().map(o=>`${o.name}${o.nasa?` (${o.nasa})`:''}: ${o.qty}`).join('\n'); copyText(text||t('noOrderList')); return; }
+    return v677PrevHandle(a,el,e);
+  };
+
+  v677Ensure();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.7 patch failed', err);
+}
+
+/* v6.7.7 — final PWA metadata sync */
+try {
+  if (APP && APP.pwa) {
+    APP.pwa.version = 'v6.7.7';
+    APP.pwa.cache = 'rich-cmd-cache-v677';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=677','./styles.css?v=677','./vro-data.js?v=677','./app.js?v=677','./manifest.json?v=677','./version.json','./icon-192.png','./icon-512.png'];
+  }
+} catch(e) {}

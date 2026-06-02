@@ -1,16 +1,97 @@
-const CACHE = 'rich-cmd-cache-v6527';
-const ASSETS = ['./','./index.html?v=6527','./styles.css?v=6527','./app.js?v=6527','./manifest.json?v=6527'];
+const CACHE = 'rich-cmd-cache-v677';
+const APP_VERSION = 'v6.7.7';
+const CORE_ASSETS = [
+  './',
+  './index.html',
+  './index.html?v=677',
+  './styles.css?v=677',
+  './vro-data.js?v=677',
+  './app.js?v=677',
+  './manifest.json?v=677',
+  './version.json',
+  './icon-192.png',
+  './icon-512.png'
+];
+
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(()=>self.skipWaiting()));
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(CORE_ASSETS))
+      .then(() => self.skipWaiting())
+  );
 });
+
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k.includes('rich-cmd-cache')).map(k => caches.delete(k)))).then(()=>self.clients.claim()));
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys
+        .filter(key => key !== CACHE && key.includes('rich-cmd-cache'))
+        .map(key => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
 });
+
+self.addEventListener('message', event => {
+  const type = event.data && event.data.type;
+  if (type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  if (type === 'CACHE_CORE') {
+    event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE_ASSETS)));
+    return;
+  }
+  if (type === 'GET_VERSION') {
+    event.source && event.source.postMessage({type:'VERSION_STATUS', version: APP_VERSION, cache: CACHE});
+  }
+});
+
+function cacheResponse(request, response) {
+  if (!response || response.status !== 200 || response.type === 'opaque') return response;
+  const copy = response.clone();
+  caches.open(CACHE).then(cache => cache.put(request, copy)).catch(() => {});
+  return response;
+}
+
+function cachedAppShell() {
+  return caches.match('./index.html?v=677')
+    .then(match => match || caches.match('./index.html') || caches.match('./'));
+}
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  event.respondWith(fetch(event.request).then(resp => {
-    const copy = resp.clone();
-    caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(()=>{});
-    return resp;
-  }).catch(() => caches.match(event.request).then(match => match || caches.match('./index.html?v=6527'))));
+
+  const request = event.request;
+  const url = new URL(request.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then(response => cacheResponse(request, response))
+        .catch(() => caches.match(request).then(match => match || cachedAppShell()))
+    );
+    return;
+  }
+
+  if (sameOrigin && /\/(service-worker\.js|version\.json)$/.test(url.pathname)) {
+    event.respondWith(fetch(request, {cache:'no-store'}).catch(() => caches.match(request)));
+    return;
+  }
+
+  if (sameOrigin && /\/(app\.js|vro-data\.js|styles\.css|manifest\.json|icon-192\.png|icon-512\.png)$/.test(url.pathname)) {
+    event.respondWith(
+      caches.match(request)
+        .then(match => match || fetch(request).then(response => cacheResponse(request, response)))
+        .catch(() => caches.match(url.pathname.split('/').pop()))
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then(response => cacheResponse(request, response))
+      .catch(() => caches.match(request))
+  );
 });

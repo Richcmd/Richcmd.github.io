@@ -1,0 +1,41 @@
+{
+  "app": "RICH CMD",
+  "latestVersion": "v6.7.7",
+  "releaseName": "Communicatie Planner Pro + VRO Inventaris",
+  "cache": "rich-cmd-cache-v677",
+  "releasedAt": "2026-06-02",
+  "minSupportedVersion": "v6.0.0",
+  "forceBelowVersion": "",
+  "forceMessageNl": "Deze versie wordt niet meer ondersteund. Open de app online en werk bij naar de nieuwste versie.",
+  "forceMessageEn": "This version is no longer supported. Open the app online and update to the latest version.",
+  "notesNl": [
+    "Communicatie opnieuw opgebouwd als Planner Pro met Vandaag opvolgen, Open communicatie, Snelle notities, Overdracht en Afgerond",
+    "Opvolgingen hebben rol, optionele naam, prioriteit, status, opvolgdatum en snelle +1 dag/+1 week-acties",
+    "Snelle notities kunnen worden omgezet naar opvolging of toegevoegd aan de overdracht",
+    "Overdracht Generator Pro maakt blokken voor Gedaan, Nog open, Let op, Morgen, Voor manager en Voor collega",
+    "Inventaris kan de VRO-lijst inladen met NASA nummer, schapsticker omschrijving en assortimentsomschrijving",
+    "VRO-artikelen starten op 0 en werken met Bestellen / Teveel / Reset",
+    "Diagnostiek bevat Communication Pro- en VRO Inventaris-checks"
+  ],
+  "notesEn": [
+    "Communication rebuilt as Planner Pro with Follow up today, Open communication, Quick notes, Handover and Completed",
+    "Follow-ups have role, optional name, priority, status, follow-up date and quick +1 day/+1 week actions",
+    "Quick notes can be converted to follow-ups or added to the handover",
+    "Handover Generator Pro creates blocks for Done, Still open, Attention, Tomorrow, For manager and For colleague",
+    "Inventory can load the VRO list with NASA number, shelf sticker description and assortment description",
+    "VRO items start at 0 and use Order / Overstock / Reset",
+    "Diagnostics includes Communication Pro and VRO Inventory checks"
+  ],
+  "currentVersion": "v6.7.7",
+  "cacheName": "rich-cmd-cache-v677",
+  "releaseNotes": [
+    "v6.7.7: Communicatie Planner Pro plus VRO Inventaris-inladen uit Excel.",
+    "v6.7.6: Coaching UX & Learning Depth met rustiger design, oude skill-tree iconen, betere badges, inklapbare secties en diepere MBO-lessen.",
+    "v6.7.5: Coaching Pro met progressie bovenaan, skill tree, filters, diepere MBO-lessen, examens en badge-layoutfix.",
+    "v6.7.4: Coaching geïntegreerd tot één geheel, Start microles gefixt en V7 Routekaart toegevoegd.",
+    "v6.7.3: Weekcoach, Coach vandaag, uitgebreide wijze lessen, ontworpen badgekaarten en coaching-checks.",
+    "v6.7.2: Weekoverzicht, weekrapport, datum/weeknummer en rustigere Visualisatie.",
+    "v6.7.1: Shift Report & Tomorrow Prep met slimme shift-afsluiting, dagrapport, overdracht en morgenvoorbereiding.",
+    "v6.7.0: V7 Foundation Cleanup met centrale QA-laag, regressiechecks en oude-patch-opruiming."
+  ]
+}
