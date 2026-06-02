@@ -10621,7 +10621,7 @@ try {
       {name:'NASA nummer',ok:!!V677_VRO_ITEMS[0]?.nasa,detail:V677_VRO_ITEMS[0]?.nasa||'-'},
       {name:'Schapsticker omschrijving',ok:!!V677_VRO_ITEMS[0]?.name,detail:V677_VRO_ITEMS[0]?.name||'-'},
       {name:'Ass omschrijving',ok:!!V677_VRO_ITEMS[0]?.category,detail:V677_VRO_ITEMS[0]?.category||'-'},
-      {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v677',detail:APP.cache}
+      {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v678',detail:APP.cache}
     ];
     const checksHtml=(arr)=>`<div class="list">${arr.map(x=>`<div class="list-item compact"><span>${escapeHtml(x.name)} <span class="tiny muted">${escapeHtml(x.detail||'')}</span></span><span class="pill ${x.ok?'good':'bad'}">${x.ok?'OK':'Check'}</span></div>`).join('')}</div>`;
     return v677PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v677"><div class="card"><h3>${t('diagnosticsCommunicationPro')}</h3>${checksHtml(commChecks)}</div><div class="card"><h3>${t('diagnosticsInventoryVro')}</h3>${checksHtml(invChecks)}</div></div>`;
@@ -10683,3 +10683,308 @@ try {
     APP.pwa.assets = ['./','./index.html','./index.html?v=677','./styles.css?v=677','./vro-data.js?v=677','./app.js?v=677','./manifest.json?v=677','./version.json','./icon-192.png','./icon-512.png'];
   }
 } catch(e) {}
+
+/* v6.7.8 — Store Map Route Planner & VRO Inventaris Polish */
+try {
+  APP.version = 'v6.7.8';
+  APP.cache = 'rich-cmd-cache-v678';
+  if (APP.pwa) {
+    APP.pwa.version = 'v6.7.8';
+    APP.pwa.cache = 'rich-cmd-cache-v678';
+    APP.pwa.assets = ['./','./index.html','./index.html?v=678','./styles.css?v=678','./vro-data.js?v=678','./app.js?v=678','./manifest.json?v=678','./version.json','./icon-192.png','./icon-512.png'];
+  }
+
+  function v678Text(nl,en){ return currentLang()==='en' ? en : nl; }
+  function v678Ensure(){
+    state.ui = state.ui || {};
+    if (!state.ui.v678InvFilter) state.ui.v678InvFilter = state.ui.orderFilter || 'all';
+    if (!state.ui.v678InvCategory) state.ui.v678InvCategory = state.ui.invCategoryFilter || 'all';
+    if (state.ui.v678InvShowAll === undefined) state.ui.v678InvShowAll = false;
+    if (!Array.isArray(state.ui.v678RouteIds)) state.ui.v678RouteIds = [];
+    if (!state.settings) state.settings = {};
+  }
+  function v678ActiveCleanItems(){
+    return (state.cleaning?.items || []).filter(i=>i && !i.archived);
+  }
+  function v678ItemLabel(i){
+    return i?.label || [i?.zone, i?.meter ? 'M'+i.meter : '', i?.kind, i?.level ? i.level : ''].filter(Boolean).join(' ') || v678Text('Schoonmaakpunt','Cleaning point');
+  }
+  function v678HasBaseline(i){
+    const status = i?.status || 'neutral';
+    return !!(i?.lastChecked || i?.lastCleaned || i?.planned || i?.plannedAt || i?.createdAt || (i?.history||[]).length || ['dirty','mold1','mold2','mold3','followup','checked','clean'].includes(status));
+  }
+  function v678BaseDate(i){
+    return i?.lastCleaned || i?.lastChecked || i?.plannedAt || i?.createdAt || ((i?.history||[])[0]?.at||'').slice(0,10) || '';
+  }
+  function v678AddDays(dateStr,days){
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    if (Number.isNaN(d.getTime())) return '';
+    d.setDate(d.getDate() + (+days || 0));
+    return d.toISOString().slice(0,10);
+  }
+  function v678DaysUntil(dateStr){
+    if (!dateStr) return null;
+    const a = new Date(dateStr + 'T00:00:00').getTime();
+    const b = new Date(TODAY() + 'T00:00:00').getTime();
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    return Math.ceil((a-b)/86400000);
+  }
+  function v678DueDate(i){
+    if (!v678HasBaseline(i)) return '';
+    return v678AddDays(v678BaseDate(i), +(i.frequencyDays || 180));
+  }
+  function v678StatusLabel(i){
+    const s = i?.status || 'neutral';
+    const map = {
+      neutral:v678Text('Nieuw / baseline','New / baseline'),
+      checked:v678Text('Gecontroleerd','Checked'),
+      clean:v678Text('Schoon','Clean'),
+      planned:v678Text('Gepland','Planned'),
+      dirty:v678Text('Aandacht / vuil','Attention / dirty'),
+      followup:v678Text('Nacontrole nodig','Follow-up needed'),
+      due:v678Text('Controle nodig','Check needed'),
+      mold1:v678Text('Schimmel graad 1','Mould grade 1'),
+      mold2:v678Text('Schimmel graad 2','Mould grade 2'),
+      mold3:v678Text('Schimmel graad 3','Mould grade 3')
+    };
+    return map[s] || s;
+  }
+  function v678RouteScore(i){
+    if (!i || !v678HasBaseline(i)) return 0;
+    const s = i.status || 'neutral';
+    let score = 0;
+    if (i.planned) score += 45;
+    if (s === 'mold3') score += 100;
+    else if (s === 'mold2') score += 90;
+    else if (s === 'mold1') score += 80;
+    else if (s === 'followup') score += 70;
+    else if (s === 'dirty') score += 60;
+    else if (s === 'due') score += 45;
+    const due = v678DueDate(i);
+    const days = v678DaysUntil(due);
+    if (days !== null) {
+      if (days <= 0) score += 35;
+      else if (days <= 7) score += 20;
+      else if (days <= 14) score += 8;
+    }
+    return score;
+  }
+  function v678RouteItems(){
+    const deptOrder = {'Vers':1,'Vers hoog':1,'Vers laag':1,'Actiekoeling':2,'Houdbaar':3};
+    return v678ActiveCleanItems()
+      .map(i=>Object.assign({}, i, {_score:v678RouteScore(i), _due:v678DueDate(i)}))
+      .filter(i=>i._score > 0)
+      .sort((a,b)=> (b._score-a._score) || ((deptOrder[displayDepartment(a.department)]||9)-(deptOrder[displayDepartment(b.department)]||9)) || String(a.zone||'').localeCompare(String(b.zone||'')) || (+a.meter||0)-(+b.meter||0))
+      .slice(0,30);
+  }
+  function v678CleaningUrgent(){
+    return v678RouteItems().filter(i=>i.planned || ['dirty','mold1','mold2','mold3','followup','due'].includes(i.status) || (v678DaysUntil(i._due) !== null && v678DaysUntil(i._due) <= 0));
+  }
+  cleaningUrgent = window.cleaningUrgent = v678CleaningUrgent;
+
+  function v678RouteCard(){
+    const route = v678RouteItems();
+    const est = route.slice(0,8).reduce((a,i)=>a+(typeof cleanDuration==='function'?cleanDuration(i):8),0);
+    if (!route.length) {
+      return `<div class="card v678-route-card"><div class="flex-line"><h3>${v678Text('Route vandaag','Today route')}</h3><span class="pill good">0</span></div><p class="muted">${v678Text('Geen echte Store Map-urgenties. Nieuwe baseline-punten tellen niet als achterstand tot ze gecontroleerd, gepland of gesignaleerd zijn.','No real Store Map urgencies. New baseline points do not count as backlog until checked, planned or signalled.')}</p><div class="btn-row"><button class="btn" data-action="load-storemap">${v678Text('Indeling laden','Load layout')}</button><button class="btn" data-action="open-clean-add-form">${v678Text('Punt toevoegen','Add point')}</button></div></div>`;
+    }
+    return `<div class="card v678-route-card"><div class="flex-line"><h3>${v678Text('Route vandaag','Today route')}</h3><span class="pill warn">${route.length}</span></div><p class="muted small">${v678Text('Slimme controlevolgorde op basis van urgentie, nacontrole en planning.','Smart check order based on urgency, follow-up and planning.')} ${v678Text('Geschatte tijd','Estimated time')}: ${minutesToText(est)}.</p><div class="list v678-route-list">${route.slice(0,6).map((i,idx)=>`<div class="list-item compact"><span><b>${idx+1}. ${escapeHtml(v678ItemLabel(i))}</b><br><span class="tiny muted">${escapeHtml(displayDepartment(i.department||''))} · ${escapeHtml(i.zone||'')} · ${v678StatusLabel(i)}${i._due?' · '+v678Text('volgende','next')+': '+dateOnly(i._due):''}</span></span><span class="pill ${i._score>80?'bad':i._score>50?'warn':'info'}">${i._score}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v678-start-store-route">${v678Text('Start route','Start route')}</button><button class="btn" data-action="plan-urgent-cleaning">${v678Text('Plan in HACCP','Plan in HACCP')}</button></div></div>`;
+  }
+  function v678StoreStats(){
+    const active = v678ActiveCleanItems();
+    const route = v678RouteItems();
+    const follow = active.filter(i=>i.status==='followup').length;
+    const dirty = active.filter(i=>['dirty','mold1','mold2','mold3'].includes(i.status)).length;
+    const baseline = active.filter(i=>!v678HasBaseline(i)).length;
+    return `<div class="grid grid-4 v678-store-stats">${kpi(v678Text('Routepunten','Route points'),route.length,route.length?'warn':'good')}${kpi(v678Text('Nacontrole','Follow-up'),follow,follow?'warn':'good')}${kpi(v678Text('Aandacht','Attention'),dirty,dirty?'bad':'good')}${kpi(v678Text('Baseline nieuw','New baseline'),baseline,'info')}</div>`;
+  }
+  function v678RenderStoreMap(){
+    ensureStoreMap(false);
+    const route = v678RouteItems();
+    let overview = '<p class="muted">'+v678Text('Geen winkeloverzicht beschikbaar.','No store overview available.')+'</p>';
+    let heat = '<p class="muted">Heatmap niet beschikbaar.</p>';
+    let queue = '<p class="muted">Geen routepunten.</p>';
+    try { overview = renderStoreHierarchy(); } catch(_) {}
+    try { heat = renderHeatmap(); } catch(_) {}
+    try { queue = renderCleaningQueue(route); } catch(_) { queue = route.map(i=>`<p>${escapeHtml(v678ItemLabel(i))}</p>`).join(''); }
+    return `<div class="grid storemap-v678"><div class="hero"><span class="chip">${v678Text('Store Map Route Planner','Store Map Route Planner')}</span><h2>${v678Text('Schoonmaakroute voor vandaag','Cleaning route for today')}</h2><p>${v678Text('Loop alleen de punten die nu echt aandacht vragen. Nieuwe, neutrale onderdelen blijven baseline en veroorzaken geen valse achterstand.','Walk only the points that truly need attention. New neutral items remain baseline and do not create false backlog.')}</p><div class="btn-row"><button class="btn primary" data-action="v678-start-store-route" ${route.length?'':'disabled'}>${v678Text('Start route','Start route')}</button><button class="btn" data-action="load-storemap">${v678Text('Standaard winkelindeling laden','Load standard layout')}</button><button class="btn" data-action="open-clean-add-form">${v678Text('Metrage / plank toevoegen','Add meter / shelf')}</button><button class="btn" data-action="plan-urgent-cleaning" ${route.length?'':'disabled'}>${v678Text('Route naar HACCP','Route to HACCP')}</button></div></div>${v678StoreStats()}<div class="grid grid-main"><div class="grid">${v678RouteCard()}<div class="card"><h3>${v678Text('Winkeloverzicht','Store overview')}</h3>${overview}</div></div><div class="grid"><div class="card"><h3>${v678Text('Mobiele checkmodus','Mobile check mode')}</h3><p class="muted small">${v678Text('Stap voor stap door de route met grote knoppen voor telefoon.','Step by step through the route with large phone-friendly buttons.')}</p><button class="btn primary" data-action="v678-start-store-route" ${route.length?'':'disabled'}>${v678Text('Start mobiele route','Start mobile route')}</button></div><div class="card"><h3>${v678Text('Te plannen','To plan')}</h3>${queue}</div><div class="card"><h3>Heatmap</h3>${heat}</div></div></div></div>`;
+  }
+  renderStoreMap = window.renderStoreMap = v678RenderStoreMap;
+
+  function v678RouteSnapshot(){
+    const ids = (state.ui.v678RouteIds||[]);
+    const items = ids.map(id=>state.cleaning.items.find(i=>i.id===id)).filter(Boolean);
+    return items.length ? items : v678RouteItems();
+  }
+  function v678OpenRoute(index){
+    const list = v678RouteSnapshot();
+    if (!list.length) { modal(v678Text('Geen route','No route'), `<p class="muted">${v678Text('Er zijn geen Store Map-punten die vandaag echt aandacht vragen.','There are no Store Map points that truly need attention today.')}</p>`); return; }
+    const n = Math.max(0, Math.min(+index||0, list.length-1));
+    const i = list[n];
+    const due = v678DueDate(i);
+    modal(v678Text('Store Map route','Store Map route'), `<div class="v678-route-modal"><span class="chip">${v678Text('Controle','Check')} ${n+1}/${list.length}</span><h2>${escapeHtml(v678ItemLabel(i))}</h2><p class="muted">${escapeHtml(displayDepartment(i.department||''))} · ${escapeHtml(i.zone||'')} · ${v678Text('Meter','Meter')} ${escapeHtml(String(i.meter||'-'))}</p><div class="grid grid-2"><div class="card soft"><p><b>${t('status')}:</b> ${escapeHtml(v678StatusLabel(i))}</p><p><b>${v678Text('Laatste controle','Last check')}:</b> ${i.lastChecked?dateOnly(i.lastChecked):'-'}</p><p><b>${v678Text('Laatste schoonmaak','Last clean')}:</b> ${i.lastCleaned?dateOnly(i.lastCleaned):'-'}</p><p><b>${v678Text('Volgende controle','Next check')}:</b> ${due?dateOnly(due):v678Text('nog geen baseline','no baseline yet')}</p></div><div class="card soft"><h3>${v678Text('Status vastleggen','Save status')}</h3><div class="btn-row v678-route-actions"><button class="btn good" data-action="v678-clean-status" data-id="${escapeHtml(i.id)}" data-status="checked" data-next="${n+1}">${v678Text('Oké','OK')}</button><button class="btn warn" data-action="v678-clean-status" data-id="${escapeHtml(i.id)}" data-status="dirty" data-next="${n+1}">${v678Text('Aandacht','Attention')}</button><button class="btn bad" data-action="v678-clean-status" data-id="${escapeHtml(i.id)}" data-status="followup" data-next="${n+1}">${v678Text('Nacontrole','Follow-up')}</button><button class="btn" data-action="v678-clean-status" data-id="${escapeHtml(i.id)}" data-status="clean" data-next="${n+1}">${v678Text('Schoon','Clean')}</button><button class="btn" data-action="v678-plan-clean" data-id="${escapeHtml(i.id)}">HACCP</button></div></div></div><div class="btn-row mt"><button class="btn" data-action="v678-route-step" data-index="${n-1}" ${n===0?'disabled':''}>${t('previous')}</button><button class="btn primary" data-action="v678-route-step" data-index="${n+1}" ${n>=list.length-1?'disabled':''}>${t('next')}</button><button class="btn" data-action="close-modal">${t('close')}</button></div></div>`, 'wide');
+  }
+  function v678SetCleanStatus(id,status,nextIndex){
+    const i = state.cleaning.items.find(x=>x.id===id);
+    if (!i) return;
+    const at = nowISO();
+    i.status = status;
+    i.lastChecked = TODAY();
+    if (status === 'clean') i.lastCleaned = TODAY();
+    if (status === 'checked' || status === 'clean') i.planned = false;
+    i.history = Array.isArray(i.history) ? i.history : [];
+    i.history.unshift({type:'route-'+status,at});
+    addActivity(`${v678Text('Store Map route','Store Map route')}: ${v678ItemLabel(i)} — ${v678StatusLabel(i)}`,'storemap');
+    save();
+    const list = v678RouteSnapshot();
+    if (+nextIndex < list.length) v678OpenRoute(+nextIndex); else { closeModal(); toast(v678Text('Routecontrole opgeslagen','Route check saved'),'good'); render(); }
+  }
+
+  function v678OrderFlag(i){ return i?.orderFlag || (i?.overstock ? 'overstock' : ((+i?.orderQty||0)>0 ? 'order' : 'none')); }
+  function v678OrderQty(i){ return Math.max(0, +(i?.orderQty || 0)); }
+  function v678DefaultQty(i){ return Math.max(1, +(i?.defaultOrderQty || i?.lastOrderQty || 1)); }
+  function v678OrderList(){ return (state.inventoryOrders||[]).filter(o=>o && o.type !== 'legacy-cleared'); }
+  function v678Categories(){ return [...new Set((state.inventory||[]).map(i=>i.category || i.assOmschrijving || i.department || 'VRO').filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b))); }
+  function v678FilteredInventory(){
+    v678Ensure();
+    const q = String(state.ui.invSearch || '').toLowerCase().trim();
+    const filter = state.ui.v678InvFilter || 'all';
+    const cat = state.ui.v678InvCategory || 'all';
+    let arr = (state.inventory||[]).filter(i=>`${i.name||''} ${i.nasa||''} ${i.category||''} ${i.department||''} ${i.use||''} ${i.assGroup||''} ${i.source||''}`.toLowerCase().includes(q));
+    if (cat !== 'all') arr = arr.filter(i=>(i.category || i.department || 'VRO') === cat);
+    if (filter === 'order') arr = arr.filter(i=>v678OrderFlag(i)==='order' || v678OrderList().some(o=>o.itemId===i.id));
+    if (filter === 'overstock') arr = arr.filter(i=>v678OrderFlag(i)==='overstock');
+    if (filter === 'recent') arr = arr.filter(i=>i.lastOrderedAt || i.lastChecked || i.importedAt).sort((a,b)=>String(b.lastOrderedAt||b.lastChecked||b.importedAt||'').localeCompare(String(a.lastOrderedAt||a.lastChecked||a.importedAt||'')));
+    if (filter === 'frequent') arr = arr.filter(i=>(+i.orderFrequencyCount||0)>0).sort((a,b)=>(+b.orderFrequencyCount||0)-(+a.orderFrequencyCount||0));
+    if (!['recent','frequent'].includes(filter)) arr.sort((a,b)=>String(a.category||'').localeCompare(String(b.category||'')) || String(a.name||'').localeCompare(String(b.name||'')));
+    return arr;
+  }
+  function v678LoadVroInventory(){
+    const src = Array.isArray(window.RICH_CMD_VRO_ITEMS) ? window.RICH_CMD_VRO_ITEMS : [];
+    const existing = new Set((state.inventory||[]).map(i=>`${String(i.nasa||'').trim().toLowerCase()}|${String(i.name||'').trim().toLowerCase()}`));
+    let added = 0;
+    src.forEach(item=>{
+      const name = (item.name || item.nasa || '').toString().trim();
+      const key = `${String(item.nasa||'').trim().toLowerCase()}|${name.toLowerCase()}`;
+      if (!name || existing.has(key)) return;
+      existing.add(key);
+      state.inventory.push(Object.assign({}, item, {id:uid('inv'), name, source:item.source||'VRO-lijst 04-11-2025', importedAt:nowISO(), defaultOrderQty:1, orderQty:0, orderFlag:'none', overstock:false, orderFrequencyCount:+(item.orderFrequencyCount||0)}));
+      added++;
+    });
+    state.settings.vroInventoryLoadedAt = nowISO();
+    state.settings.vroInventoryItems = (state.inventory||[]).filter(i=>String(i.source||'').includes('VRO')).length;
+    toast(`${added} ${v678Text('VRO-artikelen toegevoegd','VRO items added')}`,'good');
+    addActivity(`VRO import: ${added}`,'inventory');
+    save(); render();
+  }
+  function v678UpsertOrder(i){
+    if (!i) return;
+    const qty = v678OrderQty(i) || v678DefaultQty(i);
+    i.orderQty = qty; i.orderFlag = 'order'; i.overstock = false;
+    const existing = state.inventoryOrders.find(o=>o.itemId===i.id || (o.nasa && i.nasa && o.nasa===i.nasa && o.name===i.name));
+    if (existing) Object.assign(existing,{qty,name:i.name,nasa:i.nasa,category:i.category,at:nowISO()});
+    else state.inventoryOrders.unshift({id:uid('iord'),itemId:i.id,name:i.name,nasa:i.nasa,category:i.category,qty,reason:v678Text('Bijbestellen','Order'),at:nowISO()});
+  }
+  function v678RemoveOrderFor(id){ state.inventoryOrders = (state.inventoryOrders||[]).filter(o=>o.itemId!==id && o.id!==id); }
+  function v678RenderInventoryList(){
+    const all = v678FilteredInventory();
+    const arr = state.ui.v678InvShowAll ? all : all.slice(0,60);
+    if (!all.length) return `<div class="empty-state"><h3>${v678Text('Geen artikelen gevonden','No items found')}</h3><p class="muted">${v678Text('Zoek op NASA, schapsticker omschrijving, categorie of gebruikstekst.','Search by NASA, shelf sticker description, category or usage text.')}</p><button class="btn" data-action="v678-load-vro">${v678Text('VRO-lijst inladen','Load VRO list')}</button></div>`;
+    return `<div class="list v678-inv-list">${arr.map(i=>{
+      const flag=v678OrderFlag(i), qty=v678OrderQty(i), freq=+(i.orderFrequencyCount||0);
+      const badge = flag==='order' ? `<span class="pill good">${v678Text('Bijbestellen','Order')}: ${qty||v678DefaultQty(i)}</span>` : flag==='overstock' ? `<span class="pill warn">${v678Text('Teveel','Overstock')}</span>` : `<span class="pill info">0</span>`;
+      return `<div class="list-item v678-inv-item"><div class="v678-inv-main"><strong>${escapeHtml(i.name||'')}</strong><div class="small muted">NASA ${escapeHtml(i.nasa||'-')} · ${escapeHtml(i.category||i.department||'VRO')}</div>${i.use?`<div class="tiny muted v678-use">${escapeHtml(i.use)}</div>`:''}<div class="btn-row v678-mini-meta">${badge}<span class="pill">${v678Text('Frequentie','Frequency')}: ${freq}</span>${i.lastOrderedAt?`<span class="pill info">${v678Text('Laatst','Last')}: ${dateOnly(i.lastOrderedAt)}</span>`:''}</div></div><div class="v678-inv-controls"><div class="btn-row"><button class="btn small" data-action="v678-inv-delta" data-id="${escapeHtml(i.id)}" data-delta="-1">−</button><span class="chip">${qty}</span><button class="btn small" data-action="v678-inv-delta" data-id="${escapeHtml(i.id)}" data-delta="1">+</button></div><div class="btn-row"><button class="btn small primary" data-action="v678-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="order">${v678Text('Bijbestellen','Order')}</button><button class="btn small warn" data-action="v678-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="overstock">${v678Text('Teveel','Overstock')}</button><button class="btn small" data-action="v678-inv-flag" data-id="${escapeHtml(i.id)}" data-flag="none">Reset</button></div></div></div>`;
+    }).join('')}${!state.ui.v678InvShowAll && all.length>arr.length?`<div class="center mt"><button class="btn" data-action="v678-toggle-inv-show-all">${t('more')} (${all.length-arr.length})</button></div>`:''}</div>`;
+  }
+  function v678RenderInventoryOrders(){
+    const orders = v678OrderList();
+    if (!orders.length) return `<p class="muted">${v678Text('Geen bestellijst. Artikelen staan standaard op 0. Markeer alleen wat echt besteld moet worden.','No order list. Items start at 0. Only mark what really needs ordering.')}</p>`;
+    return `<div class="v678-order-toolbar"><div class="flex-line"><strong>${orders.length} ${v678Text('artikelen','items')}</strong><span class="pill good">${orders.reduce((a,o)=>a+(+o.qty||0),0)}</span></div><div class="btn-row"><button class="btn" data-action="copy-inv-orders">${t('copy')}</button><button class="btn good" data-action="v678-confirm-orders">${v678Text('Bevestig','Confirm')}</button><button class="btn bad" data-action="v678-clear-orders">${v678Text('Leegmaken','Clear')}</button></div></div><div class="list mt">${orders.map(o=>`<div class="list-item compact"><span><b>${escapeHtml(o.name||'')}</b><br><span class="tiny muted">NASA ${escapeHtml(o.nasa||'-')} · ${dateTime(o.at)}</span></span><span class="btn-row"><span class="pill good">${escapeHtml(String(o.qty||0))}</span><button class="btn small bad" data-action="v678-remove-order" data-id="${escapeHtml(o.id)}">${t('delete')}</button></span></div>`).join('')}</div>`;
+  }
+  function v678InventoryStats(){
+    const orders=v678OrderList();
+    const over=(state.inventory||[]).filter(i=>v678OrderFlag(i)==='overstock').length;
+    const vro=(state.inventory||[]).filter(i=>String(i.source||'').includes('VRO')).length;
+    const frequent=(state.inventory||[]).filter(i=>(+i.orderFrequencyCount||0)>0).length;
+    return `<div class="grid grid-4">${kpi(v678Text('Bestellijst','Order list'),orders.length,orders.length?'warn':'good')}${kpi(v678Text('Teveel','Overstock'),over,over?'warn':'good')}${kpi('VRO',vro,vro?'good':'info')}${kpi(v678Text('Vaak besteld','Frequently ordered'),frequent,'info')}</div>`;
+  }
+  function v678RenderInventory(){
+    v678Ensure();
+    const cats=v678Categories();
+    const loaded=(state.inventory||[]).some(i=>String(i.source||'').includes('VRO'));
+    const totalSource=(Array.isArray(window.RICH_CMD_VRO_ITEMS)?window.RICH_CMD_VRO_ITEMS.length:0);
+    const filters=[['all',t('all')],['order',v678Text('Bijbestellen','Order')],['overstock',v678Text('Teveel','Overstock')],['recent',v678Text('Recent gebruikt','Recently used')],['frequent',v678Text('Vaak besteld','Frequently ordered')]];
+    return `<div class="grid inventory-v678"><div class="hero"><span class="chip">${v678Text('VRO Bestelbeheer','VRO Order Management')}</span><h2>${v678Text('Inventaris voor bijbestellen','Inventory for ordering')}</h2><p>${v678Text('Zoek snel op NASA-nummer, schapsticker omschrijving of assortimentsomschrijving. Alles staat standaard op 0.','Quickly search by NASA number, shelf sticker description or assortment description. Everything starts at 0.')}</p><div class="btn-row"><button class="btn primary" data-action="open-inventory-form">${v678Text('Artikel toevoegen','Add item')}</button><button class="btn" data-action="v678-load-vro">${v678Text('VRO-lijst inladen','Load VRO list')}</button><button class="btn" data-action="copy-inv-orders" ${v678OrderList().length?'':'disabled'}>${t('copy')}</button></div></div>${v678InventoryStats()}<div class="grid grid-main"><div class="grid"><div class="card"><h3>${v678Text('Artikelen zoeken','Search items')}</h3><div class="form-grid"><input class="input" id="invSearch" value="${escapeHtml(state.ui.invSearch||'')}" placeholder="NASA / naam / categorie / gebruik"><select class="select" id="v678InvCategory" data-action="v678-inv-category"><option value="all">${v678Text('Alle categorieën','All categories')}</option>${cats.map(c=>`<option value="${escapeHtml(c)}" ${state.ui.v678InvCategory===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div><div class="btn-row mt v678-filter-row">${filters.map(f=>`<button class="btn small ${state.ui.v678InvFilter===f[0]?'primary':''}" data-action="v678-inv-filter" data-filter="${f[0]}">${escapeHtml(f[1])}</button>`).join('')}<button class="btn small" data-action="v678-toggle-inv-show-all">${state.ui.v678InvShowAll?t('less'):t('more')}</button></div><div id="inventoryList" class="mt">${v678RenderInventoryList()}</div></div></div><div class="grid"><div class="card v678-order-card"><h3>${v678Text('Bestellijst vandaag','Today order list')}</h3>${v678RenderInventoryOrders()}</div><div class="card"><h3>${v678Text('VRO-data beheer','VRO data management')}</h3><p class="muted small">${v678Text('Bron','Source')}: VRO-lijst 04-11-2025</p><div class="list"><div class="list-item compact"><span>${v678Text('Bronartikelen','Source items')}</span><strong>${totalSource}</strong></div><div class="list-item compact"><span>${v678Text('Ingeladen','Loaded')}</span><strong>${(state.inventory||[]).filter(i=>String(i.source||'').includes('VRO')).length}</strong></div><div class="list-item compact"><span>${v678Text('Laatste import','Last import')}</span><strong>${state.settings.vroInventoryLoadedAt?dateTime(state.settings.vroInventoryLoadedAt):'-'}</strong></div></div><div class="btn-row mt"><button class="btn" data-action="v678-load-vro">${loaded?v678Text('VRO opnieuw inladen','Reload VRO'):v678Text('VRO-lijst inladen','Load VRO list')}</button><button class="btn" data-action="v678-check-vro-duplicates">${v678Text('Duplicaten controleren','Check duplicates')}</button></div></div></div></div></div>`;
+  }
+  renderInventory = window.renderInventory = v678RenderInventory;
+  renderInventoryList = window.renderInventoryList = v678RenderInventoryList;
+  renderInventoryOrders = window.renderInventoryOrders = v678RenderInventoryOrders;
+
+  const v678PrevToday = renderToday;
+  renderToday = window.renderToday = function(){
+    const route = v678RouteItems();
+    const card = `<div class="card v678-today-store"><div class="flex-line"><h3>${v678Text('Store Map vandaag','Store Map today')}</h3><span class="pill ${route.length?'warn':'good'}">${route.length}</span></div><p class="muted small">${route.length?v678Text('Er staat een korte Store Map-route klaar.','A short Store Map route is ready.'):v678Text('Geen echte Store Map-urgentie. Baseline-punten tellen niet als achterstand.','No real Store Map urgency. Baseline points do not count as backlog.')}</p><div class="btn-row"><button class="btn" data-route="storemap">${v678Text('Open Store Map','Open Store Map')}</button>${route.length?`<button class="btn primary" data-action="v678-start-store-route">${v678Text('Start route','Start route')}</button>`:''}</div></div>`;
+    let html = v678PrevToday();
+    try { html = html.replace(/<\/div>\s*$/, card+'</div>'); } catch(_) { html += card; }
+    return html;
+  };
+  const v678PrevNextAction = typeof nextAction === 'function' ? nextAction : null;
+  if (v678PrevNextAction) {
+    nextAction = window.nextAction = function(){
+      const route = v678RouteItems();
+      if (route.length && state.route === 'today') return {title:v678Text('Start Store Map route','Start Store Map route'), reason:v678Text('Er zijn Store Map-punten die vandaag echt aandacht vragen.','There are Store Map points that truly need attention today.'), route:'storemap'};
+      return v678PrevNextAction();
+    };
+  }
+  const v678PrevDiagnostics = renderDiagnostics;
+  renderDiagnostics = window.renderDiagnostics = function(){
+    const route=v678RouteItems();
+    const vroSrc=Array.isArray(window.RICH_CMD_VRO_ITEMS)?window.RICH_CMD_VRO_ITEMS.length:0;
+    const vroLoaded=(state.inventory||[]).filter(i=>String(i.source||'').includes('VRO')).length;
+    const checks=[
+      {name:'Store Map Route Planner',ok:typeof renderStoreMap==='function',detail:String(route.length)},
+      {name:v678Text('Geen valse baseline-achterstand','No false baseline backlog'),ok:v678ActiveCleanItems().every(i=>v678HasBaseline(i)||!['due','dirty','followup','mold1','mold2','mold3'].includes(i.status||'neutral')),detail:'baseline'},
+      {name:'VRO brondata',ok:vroSrc>=400,detail:String(vroSrc)},
+      {name:'VRO geladen',ok:vroLoaded>=0,detail:String(vroLoaded)},
+      {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v678',detail:APP.cache}
+    ];
+    return v678PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v678"><div class="card"><h3>v6.7.8 Store Map / VRO checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${escapeHtml(c.name)} <span class="tiny muted">${escapeHtml(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${v678Text('Routeplanner-status','Route planner status')}</h3><p class="muted small">${v678Text('Routepunten worden alleen opgebouwd uit echte signalen, planning, nacontrole of verlopen controles met baseline.','Route points are built only from real signals, planning, follow-up or due checks with baseline.')}</p><button class="btn" data-route="storemap">${v678Text('Open Store Map','Open Store Map')}</button></div></div>`;
+  };
+  const v678PrevPostRender = bindPostRender;
+  bindPostRender = window.bindPostRender = function(){
+    try { v678PrevPostRender(); } catch(e) {}
+    try {
+      const inv=byId('invSearch');
+      if(inv && !inv.dataset.v678Bound){
+        inv.dataset.v678Bound='1';
+        inv.addEventListener('input', e=>{ state.ui.invSearch=e.target.value; const list=byId('inventoryList'); if(list) list.innerHTML=v678RenderInventoryList(); });
+      }
+    } catch(e) {}
+  };
+  const v678PrevHandle = handleAction;
+  handleAction = window.handleAction = function(a,el,e){
+    if(a==='v678-start-store-route'){ state.ui.v678RouteIds = v678RouteItems().map(i=>i.id); save(); v678OpenRoute(0); return; }
+    if(a==='v678-route-step'){ v678OpenRoute(el.dataset.index); return; }
+    if(a==='v678-clean-status'){ v678SetCleanStatus(el.dataset.id, el.dataset.status, el.dataset.next); return; }
+    if(a==='v678-plan-clean'){ const i=state.cleaning.items.find(x=>x.id===el.dataset.id); if(i){ i.planned=true; i.plannedAt=TODAY(); i.history=Array.isArray(i.history)?i.history:[]; i.history.unshift({type:'plannedFromRoute',at:nowISO()}); } save(); toast(v678Text('Gepland in HACCP','Planned in HACCP'),'good'); render(); return; }
+    if(a==='v678-load-vro' || a==='v677-load-vro-inventory'){ v678LoadVroInventory(); return; }
+    if(a==='v678-inv-filter'){ state.ui.v678InvFilter=el.dataset.filter||'all'; state.ui.orderFilter=state.ui.v678InvFilter; save(); render(); return; }
+    if(a==='v678-inv-category'){ state.ui.v678InvCategory=el.value||'all'; save(); render(); return; }
+    if(a==='v678-toggle-inv-show-all'){ state.ui.v678InvShowAll=!state.ui.v678InvShowAll; save(); render(); return; }
+    if(a==='v678-inv-delta'){ const i=state.inventory.find(x=>x.id===el.dataset.id); if(i){ i.orderQty=Math.max(0, v678OrderQty(i)+(+el.dataset.delta||0)); i.orderFlag=i.orderQty>0?'order':(v678OrderFlag(i)==='overstock'?'overstock':'none'); if(i.orderFlag==='order') v678UpsertOrder(i); else if(i.orderQty===0) v678RemoveOrderFor(i.id); save(); render(); } return; }
+    if(a==='v678-inv-flag'){ const i=state.inventory.find(x=>x.id===el.dataset.id); if(i){ const flag=el.dataset.flag||'none'; i.orderFlag=flag; i.overstock=flag==='overstock'; if(flag==='order' && !v678OrderQty(i)) i.orderQty=v678DefaultQty(i); if(flag==='order') v678UpsertOrder(i); else v678RemoveOrderFor(i.id); if(flag==='none') { i.orderQty=0; i.overstock=false; } save(); render(); } return; }
+    if(a==='v678-remove-order'){ const o=state.inventoryOrders.find(x=>x.id===el.dataset.id); if(o?.itemId){ const i=state.inventory.find(x=>x.id===o.itemId); if(i){i.orderQty=0;i.orderFlag='none';} } state.inventoryOrders=state.inventoryOrders.filter(x=>x.id!==el.dataset.id); save(); render(); return; }
+    if(a==='v678-clear-orders'){ state.inventoryOrders.forEach(o=>{ if(o.itemId){ const i=state.inventory.find(x=>x.id===o.itemId); if(i){i.orderQty=0;i.orderFlag='none';} } }); state.inventoryOrders=[]; toast(v678Text('Bestellijst leeggemaakt','Order list cleared'),'info'); save(); render(); return; }
+    if(a==='v678-confirm-orders'){ const orders=v678OrderList(); orders.forEach(o=>{ const i=o.itemId?state.inventory.find(x=>x.id===o.itemId):state.inventory.find(x=>x.name===o.name&&(!o.nasa||x.nasa===o.nasa)); if(i){ i.orderFrequencyCount=+(i.orderFrequencyCount||0)+1; i.lastOrderedAt=nowISO(); i.lastOrderQty=+(o.qty||0); i.orderQty=0; i.orderFlag='none'; i.overstock=false; } }); state.orderHistory.unshift({id:uid('ordhist'),type:'inventory-vro',at:nowISO(),items:orders.map(o=>({name:o.name,nasa:o.nasa,qty:o.qty}))}); state.orderHistory=state.orderHistory.slice(0,200); state.inventoryOrders=[]; toast(v678Text('Bestellijst bevestigd','Order list confirmed'),'good'); save(); render(); return; }
+    if(a==='v678-check-vro-duplicates'){ const keys={}; (state.inventory||[]).forEach(i=>{ const k=`${String(i.nasa||'').toLowerCase()}|${String(i.name||'').toLowerCase()}`; keys[k]=(keys[k]||0)+1; }); const dups=Object.values(keys).filter(v=>v>1).length; modal(v678Text('Duplicatencontrole','Duplicate check'), `<p>${dups?dups+' '+v678Text('mogelijke duplicaten gevonden.','possible duplicates found.'):v678Text('Geen duplicaten gevonden op NASA + naam.','No duplicates found on NASA + name.')}</p>`); return; }
+    if(a==='copy-inv-orders'){ const text=v678OrderList().map(o=>`${o.name}${o.nasa?` (${o.nasa})`:''}: ${o.qty}`).join('\n'); copyText(text||v678Text('Geen bestellijst','No order list')); return; }
+    return v678PrevHandle(a,el,e);
+  };
+
+  v678Ensure();
+  save();
+  render();
+} catch(err) {
+  console.error('v6.7.8 patch failed', err);
+}

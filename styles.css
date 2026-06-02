@@ -1062,3 +1062,34 @@ html[data-v670-cleaning="1"] .assist-extra.v661-assist-extra { display:none!impo
   .inventory-v677 .form-grid { grid-template-columns:1fr; }
   .v677-form .inline-fields { grid-template-columns:1fr 1fr; }
 }
+
+/* v6.7.8 — Store Map Route Planner & VRO Inventaris Polish */
+.storemap-v678 .hero,
+.inventory-v678 .hero{overflow:hidden}
+.v678-route-card{border:1px solid color-mix(in srgb,var(--primary) 22%,var(--card-border));}
+.v678-route-list .list-item{align-items:flex-start;}
+.v678-route-actions .btn{min-width:112px;}
+.v678-route-modal h2{margin:.35rem 0 .2rem;}
+.v678-store-stats .kpi,.inventory-v678 .kpi{min-height:88px;}
+.v678-today-store{border-left:4px solid var(--primary);}
+.v678-inv-list .list-item{gap:1rem;align-items:flex-start;}
+.v678-inv-item{display:grid;grid-template-columns:minmax(0,1fr) auto;}
+.v678-inv-main{min-width:0;}
+.v678-inv-main strong{display:block;white-space:normal;overflow-wrap:anywhere;}
+.v678-use{margin-top:.25rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.v678-inv-controls{display:grid;gap:.45rem;justify-items:end;}
+.v678-mini-meta{gap:.35rem;margin-top:.4rem;}
+.v678-filter-row{gap:.4rem;}
+.v678-order-toolbar{display:grid;gap:.75rem;}
+.diagnostics-v678{margin-top:1rem;}
+@media (max-width: 760px){
+  .v678-inv-item{grid-template-columns:1fr;}
+  .v678-inv-controls{justify-items:start;width:100%;}
+  .v678-inv-controls .btn-row,.v678-route-actions{width:100%;}
+  .v678-inv-controls .btn,.v678-route-actions .btn{flex:1 1 auto;}
+  .v678-store-stats,.inventory-v678 .grid-4{grid-template-columns:1fr 1fr;}
+}
+@media (max-width: 480px){
+  .v678-store-stats,.inventory-v678 .grid-4{grid-template-columns:1fr;}
+  .v678-filter-row .btn{flex:1 1 45%;}
+}
