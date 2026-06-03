@@ -1093,3 +1093,241 @@ html[data-v670-cleaning="1"] .assist-extra.v661-assist-extra { display:none!impo
   .v678-store-stats,.inventory-v678 .grid-4{grid-template-columns:1fr;}
   .v678-filter-row .btn{flex:1 1 45%;}
 }
+
+/* === v6.7.9 HACCP Periodiek & Planning Polish === */
+.haccp-v679 .hero{border:1px solid var(--border);}
+.v679-haccp-kpis{margin-top:.25rem;}
+.v679-task{align-items:flex-start;gap:.8rem;}
+.v679-task.is-overdue{border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.045);}
+.v679-task-meta{display:flex;flex-wrap:wrap;gap:.35rem .65rem;align-items:center;margin-top:.35rem;font-size:.78rem;color:var(--muted);}
+.v679-section{margin:.55rem 0;border:1px solid var(--border);border-radius:16px;background:var(--card-soft);overflow:hidden;}
+.v679-section summary{display:flex;justify-content:space-between;gap:.75rem;align-items:center;padding:.75rem .85rem;cursor:pointer;font-weight:800;}
+.v679-section .drawer-content{padding:.25rem .75rem .8rem;}
+.v679-today-do .list,.v679-periodic .list{gap:.5rem;}
+.v679-store-inline{margin-top:.8rem;padding:.75rem;border-radius:16px;background:var(--card-soft);border:1px solid var(--border);}
+.v679-week-card .list,.v679-store-card .list{gap:.45rem;}
+.v679-deferral .tiny,.v679-today-haccp .tiny{font-size:.72rem;}
+.v679-today-haccp{border-left:4px solid rgba(37,99,235,.35);}
+@media (max-width: 760px){
+  .haccp-v679 .grid-main{display:block;}
+  .haccp-v679 .grid-main>.grid{margin-bottom:1rem;}
+  .v679-task{display:block;}
+  .v679-task .btn-row{margin-top:.7rem;}
+  .v679-task-meta{display:grid;grid-template-columns:1fr;gap:.25rem;}
+  .v679-section summary{padding:.7rem;}
+}
+
+/* === v6.7.10 HACCP Startlijst & Prioriteit Fix === */
+.haccp-v6710{gap:1rem;}
+.haccp-v6710-hero{border:1px solid var(--line);}
+.v6710-kpis{margin-top:.25rem;}
+.v6710-startlist{border-left:4px solid var(--accent);}
+.v6710-urgency{border-left:4px solid color-mix(in srgb, var(--bad, #ef4444) 70%, transparent);}
+.v6710-policy{background:color-mix(in srgb, var(--panel) 90%, var(--accent) 10%);}
+.v6710-start-steps{gap:.65rem;}
+.v6710-start-row{align-items:flex-start;gap:.8rem;}
+.v6710-step-no{flex:0 0 2rem;width:2rem;height:2rem;border-radius:999px;display:grid;place-items:center;font-weight:800;background:color-mix(in srgb, var(--accent) 16%, transparent);color:var(--accent);}
+.v6710-step-main{min-width:0;flex:1;}
+.v6710-step-actions{display:flex;align-items:flex-start;justify-content:flex-end;min-width:140px;}
+.v6710-meta{display:flex;flex-wrap:wrap;gap:.35rem .65rem;font-size:.78rem;color:var(--muted);margin-top:.25rem;}
+.v6710-start-row.is-done{opacity:.72;background:color-mix(in srgb, var(--good, #22c55e) 7%, transparent);}
+.v6710-task{align-items:flex-start;gap:.75rem;}
+.v6710-today-haccp{border-left:4px solid var(--accent);}
+@media (max-width: 760px){
+  .v6710-start-row,.v6710-task{display:grid;grid-template-columns:auto 1fr;}
+  .v6710-step-actions,.v6710-task>.btn-row{grid-column:1/-1;justify-content:flex-start;min-width:0;width:100%;}
+  .v6710-step-actions .btn-row,.v6710-task>.btn-row{width:100%;}
+  .v6710-step-actions .btn,.v6710-task>.btn-row .btn{flex:1 1 auto;}
+  .haccp-v6710 .grid-main{grid-template-columns:1fr;}
+}
+
+
+/* v6.7.11 — HACCP Restore & Flow Alignment */
+.haccp-v6711 .hero{border:1px solid var(--line);}
+.haccp-v6711 .v6711-kpis{margin-bottom:var(--gap);}
+.v6711-task-meta{display:flex;flex-wrap:wrap;gap:.35rem .55rem;margin-top:.35rem;font-size:.82rem;color:var(--muted);align-items:center;}
+.v6711-task .btn-row,.v6711-daily-row .btn-row{justify-content:flex-end;}
+.v6711-daily-row.is-done{opacity:.72;}
+.v6711-mini-stats{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0;}
+.v6711-mini-stats span{font-size:.78rem;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:.25rem .55rem;}
+.v6711-store-haccp .list-item compact{align-items:flex-start;}
+.v6711-urgency{border-color:rgba(220,38,38,.22);box-shadow:0 10px 28px rgba(220,38,38,.06);}
+.haccp-calm .card,.haccp-calm .hero{max-width:980px;margin-left:auto;margin-right:auto;}
+@media (max-width: 720px){
+  .haccp-v6711 .grid-main{display:block;}
+  .haccp-v6711 .grid-main>.grid{margin-bottom:var(--gap);}
+  .v6711-task,.v6711-daily-row{display:block;}
+  .v6711-task .btn-row,.v6711-daily-row .btn-row{margin-top:.7rem;justify-content:flex-start;}
+  .v6711-task-meta{font-size:.76rem;}
+  .v6711-mini-stats span{font-size:.74rem;}
+}
+
+/* === v6.7.12 HACCP Planning Timeline Polish === */
+.haccp-v6712 .haccp-v6712-hero { margin-bottom: .2rem; }
+.v6712-main-plan { overflow: hidden; }
+.v6712-timeline { display: grid; gap: .72rem; margin-top: .85rem; }
+.v6712-plan-item { display: grid; grid-template-columns: 4.4rem minmax(0,1fr); gap: .7rem; align-items: stretch; }
+.v6712-plan-item .timeline-time { align-self: stretch; display: flex; align-items: center; justify-content: center; border-radius: 1rem; background: color-mix(in srgb, var(--panel) 84%, var(--accent) 16%); color: var(--muted); font-weight: 800; font-size: .88rem; border: 1px solid var(--border); }
+.v6712-plan-item .timeline-card { width: 100%; min-width: 0; border-radius: 1.1rem; border: 1px solid var(--border); background: var(--card); padding: .78rem .86rem; box-shadow: var(--shadow-soft); }
+.v6712-plan-item.bad .timeline-card { border-color: color-mix(in srgb, var(--bad) 42%, var(--border)); background: color-mix(in srgb, var(--bad) 7%, var(--card)); }
+.v6712-plan-item.warn .timeline-card { border-color: color-mix(in srgb, var(--warn) 38%, var(--border)); background: color-mix(in srgb, var(--warn) 7%, var(--card)); }
+.v6712-plan-item.info .timeline-card { background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.v6712-plan-item.is-missing .timeline-card { border-style: dashed; }
+.v6712-meta { display: flex; flex-wrap: wrap; gap: .35rem .65rem; margin-top: .38rem; }
+.v6712-meta span { white-space: nowrap; }
+.v6712-icons { display: flex; flex-wrap: nowrap; gap: .28rem; justify-content: flex-end; }
+.icon-btn { width: 2.05rem; height: 2.05rem; border-radius: .72rem; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-weight: 900; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; line-height: 1; }
+.icon-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-soft); }
+.icon-btn.good { background: color-mix(in srgb, var(--good) 13%, var(--panel)); border-color: color-mix(in srgb, var(--good) 35%, var(--border)); }
+.icon-btn.warn { background: color-mix(in srgb, var(--warn) 13%, var(--panel)); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
+.haccp-v6712 .chip.bad, .haccp-v6712 .chip.warn, .haccp-v6712 .chip.info { font-size: .74rem; }
+.haccp-v6712 .chip.bad { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.haccp-v6712 .chip.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.haccp-v6712 .chip.info { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.v6712-store .list-item.compact, .v6712-other .list-item.compact { align-items: center; }
+.v6712-help p { line-height: 1.55; }
+@media (max-width: 720px){
+  .v6712-plan-item { grid-template-columns: 3.7rem minmax(0,1fr); gap: .5rem; }
+  .v6712-plan-item .timeline-time { font-size: .78rem; border-radius: .85rem; }
+  .v6712-plan-item .timeline-card { padding: .68rem; border-radius: .95rem; }
+  .v6712-plan-item .timeline-card .flex-line { align-items: flex-start; gap: .5rem; }
+  .v6712-icons { gap: .2rem; }
+  .icon-btn { width: 1.86rem; height: 1.86rem; border-radius: .62rem; font-size: .86rem; }
+  .v6712-meta { font-size: .78rem; gap: .25rem .48rem; }
+  .haccp-v6712 .btn-row { gap: .45rem; }
+}
+
+/* RICH CMD v6.7.13 — HACCP Layout Recovery & Smart Timeline */
+.haccp-v6713{gap:1rem;}
+.h13-action-menu{border:1px solid var(--line);background:linear-gradient(135deg,color-mix(in srgb,var(--panel) 92%,var(--accent) 8%),var(--card));}
+.h13-action-menu h2{margin:.2rem 0;}
+.h13-menu-buttons{gap:.5rem;}
+.h13-urgent{border-color:color-mix(in srgb,var(--bad) 45%,var(--border));background:color-mix(in srgb,var(--bad) 6%,var(--card));}
+.h13-planning{overflow:hidden;}
+.h13-timeline{display:grid;gap:.72rem;margin-top:.85rem;}
+.h13-plan-row{display:grid;grid-template-columns:4.35rem minmax(0,1fr);gap:.7rem;align-items:stretch;}
+.h13-plan-row .timeline-time{align-self:stretch;display:flex;align-items:center;justify-content:center;border-radius:1rem;background:color-mix(in srgb,var(--panel) 84%,var(--accent) 16%);color:var(--muted);font-weight:800;font-size:.88rem;border:1px solid var(--border);}
+.h13-plan-row .timeline-card{width:100%;min-width:0;border-radius:1.1rem;border:1px solid var(--border);background:var(--card);padding:.78rem .86rem;box-shadow:var(--shadow-soft);}
+.h13-plan-row.bad .timeline-card{border-color:color-mix(in srgb,var(--bad) 42%,var(--border));background:color-mix(in srgb,var(--bad) 7%,var(--card));}
+.h13-plan-row.warn .timeline-card{border-color:color-mix(in srgb,var(--warn) 38%,var(--border));background:color-mix(in srgb,var(--warn) 7%,var(--card));}
+.h13-plan-row.info .timeline-card{background:color-mix(in srgb,var(--accent) 5%,var(--card));}
+.h13-icons{display:flex;flex-wrap:nowrap;gap:.24rem;justify-content:flex-end;}
+.h13-icon{width:1.92rem;height:1.92rem;border-radius:.68rem;font-size:.86rem;}
+.h13-meta{display:flex;flex-wrap:wrap;gap:.25rem .58rem;margin-top:.38rem;}
+.h13-meta span{white-space:nowrap;}
+.haccp-v6713 .chip.bad,.haccp-v6713 .chip.warn,.haccp-v6713 .chip.info{font-size:.73rem;}
+.haccp-v6713 .chip.bad{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad);}
+.haccp-v6713 .chip.warn{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn);}
+.haccp-v6713 .chip.info{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);}
+.h13-cap-list{display:grid;gap:.35rem;}
+.h13-week-grid{gap:.45rem;}
+.h13-calm .h13-action-menu,.h13-calm .card{max-width:980px;margin-left:auto;margin-right:auto;width:100%;}
+.h13-calm-note{border-left:4px solid var(--warn);}
+@media(max-width:760px){
+  .haccp-v6713 .grid-main{display:block;}
+  .haccp-v6713 .grid-main>.grid{margin-bottom:var(--gap);}
+  .h13-menu-buttons{display:grid!important;grid-template-columns:1fr 1fr;}
+  .h13-menu-buttons .btn{width:100%;justify-content:center;}
+  .h13-plan-row{grid-template-columns:3.55rem minmax(0,1fr);gap:.48rem;}
+  .h13-plan-row .timeline-time{font-size:.76rem;border-radius:.82rem;}
+  .h13-plan-row .timeline-card{padding:.64rem;border-radius:.92rem;}
+  .h13-plan-row .timeline-card .flex-line{align-items:flex-start;gap:.48rem;}
+  .h13-icons{gap:.18rem;}
+  .h13-icon{width:1.72rem;height:1.72rem;border-radius:.58rem;font-size:.78rem;}
+  .h13-meta{font-size:.76rem;gap:.2rem .42rem;}
+  .h13-cap-list .list-item{display:grid!important;grid-template-columns:1fr auto!important;}
+}
+
+
+/* =========================================================
+   RICH CMD v6.7.15 — Shiftleider Vers Avondshift UI
+========================================================= */
+.sl15-page .hero.sl15-hero{padding:1.15rem 1.25rem}.sl15-datebox{min-width:120px;text-align:right;border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--primary) 7%,var(--surface));padding:.75rem}.sl15-datebox strong{display:block;font-size:.98rem}.sl15-datebox span{display:block;color:var(--muted);font-size:.82rem;margin-top:.15rem}.sl15-kpis .kpi{min-height:96px}.sl15-lane-grid{align-items:start}.sl15-lane-card{display:grid;gap:.65rem;border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:.85rem}.sl15-lane-card .input,.sl15-lane-card .select{padding:.55rem .65rem;border-radius:12px}.sl15-mini-form{grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}.sl15-person,.sl15-task{align-items:center}.sl15-person-right{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}.sl15-capacity .list{gap:.5rem}.sl15-report-preview{white-space:pre-wrap;background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:.85rem;max-height:420px;overflow:auto;font-size:.82rem}.sl15-today-wrap{display:block}.sl15-today-card{border-color:color-mix(in srgb,var(--primary) 28%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 7%,var(--surface)),var(--surface))}.sl15-help ul{margin:.5rem 0 0;padding-left:1.2rem}.sl15-page .nowrap{white-space:nowrap}@media (max-width:980px){.sl15-page .grid-main,.sl15-lane-grid,.sl15-kpis{grid-template-columns:1fr}.sl15-datebox{text-align:left;min-width:0}.sl15-hero .flex-line{align-items:flex-start}.sl15-person,.sl15-task{display:grid;grid-template-columns:1fr;gap:.55rem}.sl15-person-right{justify-content:flex-start}.sl15-mini-form{grid-template-columns:1fr 1fr}}@media (max-width:640px){.sl15-page .btn-row{gap:.42rem}.sl15-page .btn{padding:.56rem .68rem}.sl15-lane-card{padding:.75rem;border-radius:18px}.sl15-mini-form{grid-template-columns:1fr}.sl15-datebox{font-size:.9rem}.sl15-report-preview{font-size:.78rem}}
+
+/* v6.7.16 — Shiftleider Planning Polish */
+.sl16-page .hero{overflow:hidden}
+.sl16-kpis .kpi{min-height:auto}
+.sl16-time-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.5rem;margin-top:.35rem}
+.sl16-lane-table{display:grid;gap:.65rem;margin-top:1rem}
+.sl16-lane-row{display:grid;grid-template-columns:1.15fr 1.2fr .8fr .8fr .7fr .7fr .9fr 1.2fr;gap:.55rem;align-items:end;padding:.75rem;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:rgba(255,255,255,.62)}
+[data-theme="dark"] .sl16-lane-row{background:rgba(15,23,42,.38)}
+.sl16-lane-row.done{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.28)}
+.sl16-lane-row label{font-size:.72rem;color:var(--muted);display:grid;gap:.25rem;min-width:0}
+.sl16-lane-row input,.sl16-lane-row select{width:100%;min-width:0}
+.sl16-lane-name{display:grid;gap:.35rem;align-self:center;min-width:0}
+.sl16-lane-note{grid-column:auto}
+.sl16-person-right{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.sl16-task.done{background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.32)}
+.sl16-task.done strong{color:#166534}
+[data-theme="dark"] .sl16-task.done strong{color:#86efac}
+.sl16-task.deferred{background:rgba(245,158,11,.08)}
+.sl16-task .btn-row.nowrap{flex-wrap:nowrap}
+@media (max-width: 1180px){.sl16-lane-row{grid-template-columns:1fr 1fr 1fr 1fr}.sl16-lane-name{grid-column:1 / -1}.sl16-lane-note{grid-column:1 / -1}}
+@media (max-width: 720px){.sl16-time-pair{grid-template-columns:1fr}.sl16-lane-row{grid-template-columns:1fr;padding:.7rem}.sl16-person{align-items:flex-start}.sl16-person-right{justify-content:flex-start}.sl16-task .btn-row.nowrap{flex-wrap:wrap}.sl16-page .grid-main{grid-template-columns:1fr!important}}
+
+/* v6.7.17 — Shiftleider compact planning */
+.sl17-page .hero{overflow:hidden}
+.sl17-lane-list{display:grid;gap:.65rem;margin-top:.8rem}
+.sl17-lane-card{border:1px solid var(--border,#dbe3ea);border-radius:16px;padding:.8rem;background:var(--card,#fff);box-shadow:0 6px 18px rgba(15,23,42,.04)}
+.sl17-lane-card.done{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.28)}
+.sl17-lane-top,.sl17-lane-main{display:flex;justify-content:space-between;gap:.75rem;align-items:center}
+.sl17-lane-title{display:flex;align-items:center;gap:.5rem;min-width:0;flex-wrap:wrap}
+.sl17-lane-title strong{font-size:1rem}
+.sl17-status{border:0;cursor:pointer;padding:.22rem .55rem;font-size:.75rem;line-height:1.2}
+.sl17-lane-actions{display:flex;gap:.35rem;flex-shrink:0}
+.sl17-person-select{display:grid;gap:.2rem;min-width:180px;flex:1;max-width:280px}
+.sl17-person-select span{font-size:.72rem;color:var(--muted,#64748b);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.sl17-lane-meta{display:flex;align-items:center;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted,#64748b);text-align:right;min-width:190px}
+.sl17-lane-note-chip{margin-top:.55rem;font-size:.82rem;color:var(--text,#0f172a);background:rgba(148,163,184,.12);border-radius:12px;padding:.48rem .6rem;line-height:1.35}
+.sl17-person-right{display:flex;gap:.35rem;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.sl17-task.done{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.25)}
+.sl17-task.deferred{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.22)}
+.sl17-planning-check .detail-drawer{margin-top:.75rem}
+.diagnostics-v6717 .list-item{align-items:flex-start}
+@media (max-width: 760px){
+  .sl17-page .grid-main{display:grid;grid-template-columns:1fr!important}
+  .sl17-kpis.grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .sl17-lane-card{padding:.72rem;border-radius:14px}
+  .sl17-lane-top{align-items:flex-start}
+  .sl17-lane-main{display:grid;grid-template-columns:1fr;gap:.5rem;margin-top:.55rem}
+  .sl17-person-select{max-width:none;min-width:0;width:100%}
+  .sl17-lane-meta{justify-content:flex-start;text-align:left;min-width:0;font-size:.82rem}
+  .sl17-lane-actions .btn{padding:.38rem .5rem;min-width:38px}
+  .sl17-page .btn-row{gap:.4rem}
+  .sl17-page .hero .btn-row .btn{flex:1 1 auto}
+}
+
+
+/* RICH CMD v6.7.18 — Shiftleider Pad & Planning Extras */
+.sl18-page .hero{overflow:hidden}
+.sl18-lane-list{display:grid;gap:.6rem;margin-top:.8rem}
+.sl18-lane-card{border:1px solid var(--border,#dbe3ea);border-radius:16px;padding:.76rem;background:var(--card,#fff);box-shadow:0 6px 18px rgba(15,23,42,.04)}
+.sl18-lane-card.done{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.28)}
+.sl18-lane-top,.sl18-lane-main{display:flex;justify-content:space-between;gap:.75rem;align-items:center}
+.sl18-lane-title{display:flex;align-items:center;gap:.45rem;min-width:0;flex-wrap:wrap}
+.sl18-lane-title strong{font-size:.98rem}
+.sl18-status{border:0;cursor:pointer;padding:.22rem .55rem;font-size:.74rem;line-height:1.2}
+.sl18-lane-actions{display:flex;gap:.35rem;flex-shrink:0}
+.sl18-person-select{display:grid;gap:.2rem;min-width:180px;flex:1;max-width:280px}
+.sl18-person-select span{font-size:.72rem;color:var(--muted,#64748b);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.sl18-lane-meta{display:flex;align-items:center;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;font-size:.85rem;color:var(--muted,#64748b);text-align:right;min-width:190px}
+.sl18-lane-note-chip{margin-top:.52rem;font-size:.82rem;color:var(--text,#0f172a);background:rgba(148,163,184,.12);border-radius:12px;padding:.45rem .6rem;line-height:1.35}
+.sl18-person-right{display:flex;gap:.35rem;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.sl18-task.done{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.25)}
+.sl18-task.deferred{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.22)}
+.sl18-tools .grid-3{gap:.55rem}
+.sl18-tools .btn{justify-content:center}
+.diagnostics-v6718 .list-item{align-items:flex-start}
+@media (max-width: 760px){
+  .sl18-page .grid-main{display:grid;grid-template-columns:1fr!important}
+  .sl18-kpis.grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .sl18-actionbar .btn{flex:1 1 auto}
+  .sl18-lane-card{padding:.7rem;border-radius:14px}
+  .sl18-lane-top{align-items:flex-start}
+  .sl18-lane-main{display:grid;grid-template-columns:1fr;gap:.5rem;margin-top:.55rem}
+  .sl18-person-select{max-width:none;min-width:0;width:100%}
+  .sl18-lane-meta{justify-content:flex-start;text-align:left;min-width:0;font-size:.82rem}
+  .sl18-lane-actions .btn{padding:.38rem .5rem;min-width:38px}
+  .sl18-page .btn-row{gap:.4rem}
+  .sl18-tools .grid-3{grid-template-columns:1fr!important}
+}

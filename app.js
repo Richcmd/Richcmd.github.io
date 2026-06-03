@@ -10988,3 +10988,2468 @@ try {
 } catch(err) {
   console.error('v6.7.8 patch failed', err);
 }
+
+/* === RICH CMD v6.7.9 — HACCP Periodiek & Planning Polish === */
+(function(){
+  try {
+    APP.version = 'v6.7.9';
+    APP.cache = 'rich-cmd-cache-v679';
+
+    const v679Txt = (nl,en) => (typeof currentLang === 'function' && currentLang()==='en') ? en : nl;
+    const v679Today = () => (typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10));
+    const v679Iso = () => (typeof nowISO === 'function' ? nowISO() : new Date().toISOString());
+    const v679Date = (d) => { const x = new Date((d || v679Today()) + 'T00:00:00'); return isNaN(x) ? new Date() : x; };
+    const v679Ymd = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
+    const v679AddDays = (date, days) => { const d = v679Date(date); d.setDate(d.getDate() + (+days || 0)); return v679Ymd(d); };
+    const v679Esc = (s) => (typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+    const v679Minutes = (m) => (typeof minutesToText === 'function' ? minutesToText(+m||0) : `${+m||0}m`);
+    const v679DateOnly = (d) => d ? (typeof dateOnly === 'function' ? dateOnly(d) : d) : '-';
+    const v679Kpi = (a,b,tone) => (typeof kpi === 'function' ? kpi(a,b,tone) : `<div class="card"><strong>${v679Esc(b)}</strong><p>${v679Esc(a)}</p></div>`);
+    const v679Pill = (label,tone='info') => `<span class="pill ${tone}">${v679Esc(label)}</span>`;
+    const v679WeekNo = (dateStr=v679Today()) => {
+      const d = v679Date(dateStr); d.setHours(0,0,0,0); d.setDate(d.getDate() + 3 - ((d.getDay()+6)%7));
+      const week1 = new Date(d.getFullYear(),0,4); return 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay()+6)%7)) / 7);
+    };
+    const v679CompareDate = (a,b) => String(a||'9999-12-31').localeCompare(String(b||'9999-12-31'));
+
+    function v679Ensure(){
+      state.ui = state.ui || {};
+      state.ui.haccp679 = state.ui.haccp679 || {showFuture:false, weekOpen:true};
+      state.haccpPlanning = state.haccpPlanning || {updatedAt:null, weekNotes:[], storeLinks:[]};
+      state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+      state.tasks.forEach(task => {
+        if (!task.id) task.id = (typeof uid==='function'?uid('task'):'task_'+Math.random().toString(36).slice(2));
+        if (!task.status) task.status = 'Open';
+        if (!task.createdAt) task.createdAt = v679Iso();
+        if (!task.dueDate && task.status !== 'Voltooid') task.dueDate = v679Today();
+      });
+    }
+
+    function v679FreqKey(task){
+      const hay = `${task.frequency||''} ${task.group||''} ${task.category||''} ${task.title||''}`.toLowerCase();
+      if (hay.includes('jaar') || hay.includes('annual')) return 'yearly';
+      if (hay.includes('half') || hay.includes('6 maand') || hay.includes('6-month')) return 'halfyearly';
+      if (hay.includes('maand') || hay.includes('month') || task.group === 'monthly') return 'monthly';
+      if (hay.includes('week') || task.group === 'weekly') return 'weekly';
+      if (hay.includes('dag') || hay.includes('daily') || task.group === 'daily') return 'daily';
+      if (task.linkedCleaningId || hay.includes('nacontrole')) return 'followup';
+      return 'adHoc';
+    }
+    function v679FreqLabel(key){
+      return ({daily:v679Txt('Dagelijks','Daily'), weekly:v679Txt('Wekelijks','Weekly'), monthly:v679Txt('Maandelijks','Monthly'), halfyearly:v679Txt('Halfjaarlijks','Half-yearly'), yearly:v679Txt('Jaarlijks','Yearly'), followup:v679Txt('Nacontrole','Follow-up'), adHoc:v679Txt('Losse taak','Ad-hoc')})[key] || key;
+    }
+    function v679FreqDays(key){ return ({daily:1, weekly:7, monthly:30, halfyearly:182, yearly:365, followup:1, adHoc:0})[key] || 0; }
+    function v679PriorityScore(task){
+      const p = String(task.priority||'').toLowerCase();
+      let s = p.includes('krit') || p.includes('hoog') || p.includes('high') ? 90 : p.includes('laag') || p.includes('low') ? 30 : 55;
+      if (task.status === 'Uitgesteld') s += 12;
+      if (task.linkedCleaningId) s += 15;
+      const due = v679TaskDue(task); if (due && v679CompareDate(due, v679Today()) < 0) s += 25;
+      return s;
+    }
+    function v679TaskLast(task){ return task.completedAt || task.lastDoneAt || task.lastCompletedAt || task.checkedAt || ''; }
+    function v679TaskDue(task){
+      if (task.status !== 'Voltooid' && task.dueDate) return task.dueDate;
+      const key = v679FreqKey(task); const days = v679FreqDays(key); const last = v679TaskLast(task);
+      if (last && days) return v679AddDays(String(last).slice(0,10), days);
+      return task.dueDate || (task.status === 'Voltooid' ? '' : v679Today());
+    }
+    function v679IsDue(task){ const due = v679TaskDue(task); return !due || v679CompareDate(due, v679Today()) <= 0; }
+    function v679IsOverdue(task){ const due = v679TaskDue(task); return due && v679CompareDate(due, v679Today()) < 0 && task.status !== 'Voltooid'; }
+    function v679TaskName(task){ return typeof taskTitle === 'function' ? taskTitle(task) : (task.title || v679Txt('Taak','Task')); }
+    function v679OpenTasks(){ return (state.tasks||[]).filter(t => t.status !== 'Voltooid'); }
+    function v679TodayTasks(){ return v679OpenTasks().filter(t => v679IsDue(t)).sort((a,b)=>v679PriorityScore(b)-v679PriorityScore(a) || v679CompareDate(v679TaskDue(a), v679TaskDue(b))); }
+    function v679FutureTasks(){ return v679OpenTasks().filter(t => !v679IsDue(t)).sort((a,b)=>v679CompareDate(v679TaskDue(a), v679TaskDue(b))); }
+    function v679Groups(tasks=(state.tasks||[])){
+      const g = {daily:[], weekly:[], monthly:[], halfyearly:[], yearly:[], followup:[], deferred:[], adHoc:[], completed:[]};
+      tasks.forEach(task => {
+        if (task.status === 'Voltooid') { g.completed.push(task); return; }
+        if (task.status === 'Uitgesteld') { g.deferred.push(task); return; }
+        const key = v679FreqKey(task); (g[key] || g.adHoc).push(task);
+      });
+      Object.keys(g).forEach(k => g[k].sort((a,b)=>v679PriorityScore(b)-v679PriorityScore(a) || v679CompareDate(v679TaskDue(a), v679TaskDue(b))));
+      return g;
+    }
+    function v679StoreRouteItems(){
+      try { if (typeof v678RouteItems === 'function') return v678RouteItems(); } catch(_) {}
+      try { if (typeof cleaningUrgent === 'function') return cleaningUrgent(); } catch(_) {}
+      return [];
+    }
+    function v679StoreLabel(item){
+      try { if (typeof v678ItemLabel === 'function') return v678ItemLabel(item); } catch(_) {}
+      return item?.name || item?.title || item?.zone || v679Txt('Store Map punt','Store Map point');
+    }
+    function v679TaskMeta(task){
+      const key = v679FreqKey(task); const due = v679TaskDue(task); const last = v679TaskLast(task);
+      const tone = task.status === 'Uitgesteld' ? 'warn' : v679IsOverdue(task) ? 'bad' : key === 'followup' ? 'warn' : 'info';
+      return `<div class="v679-task-meta"><span>${v679Pill(v679FreqLabel(key), tone)}</span><span>${v679Txt('Volgende','Next')}: <b>${due?v679DateOnly(due):'-'}</b></span>${last?`<span>${v679Txt('Laatste','Last')}: ${v679DateOnly(String(last).slice(0,10))}</span>`:''}<span>${v679Minutes(task.duration||10)}</span>${task.deferReason?`<span>${v679Txt('Reden','Reason')}: ${v679Esc(task.deferReason)}</span>`:''}</div>`;
+    }
+    function v679TaskCard(task, compact=false){
+      return `<div class="list-item v679-task ${v679IsOverdue(task)?'is-overdue':''}" data-task-card="${v679Esc(task.id)}"><div><strong>${v679Esc(v679TaskName(task))}</strong>${v679TaskMeta(task)}${task.linkedCleaningId?`<div class="tiny muted">${v679Txt('Vanuit Store Map','From Store Map')}</div>`:''}</div><div class="btn-row"><button class="btn small good" data-action="task-done" data-id="${v679Esc(task.id)}">${t('done')}</button><button class="btn small warn" data-action="task-defer" data-id="${v679Esc(task.id)}">${t('defer')}</button>${compact?'':`<button class="btn small" data-action="task-focus" data-id="${v679Esc(task.id)}">${t('focus')}</button><button class="btn small" data-action="task-edit" data-id="${v679Esc(task.id)}">${t('edit')}</button>`}</div></div>`;
+    }
+    function v679TaskSection(title, arr, opts={}){
+      const open = opts.open !== false; const max = opts.max || 8;
+      const more = arr.length > max ? `<p class="tiny muted">+${arr.length-max} ${v679Txt('meer in planning','more in planning')}</p>` : '';
+      return `<details class="detail-drawer v679-section" ${open?'open':''}><summary><span>${v679Esc(title)}</span><span class="pill ${arr.length?'warn':'good'}">${arr.length}</span></summary><div class="drawer-content">${arr.length?`<div class="list">${arr.slice(0,max).map(t=>v679TaskCard(t,true)).join('')}</div>${more}`:`<p class="muted small">${t('empty')}</p>`}</div></details>`;
+    }
+    function v679TodayDoCard(){
+      const tasks = v679TodayTasks();
+      const store = v679StoreRouteItems();
+      const top = tasks.slice(0,5);
+      return `<div class="card v679-today-do"><div class="flex-line"><h3>${v679Txt('Vandaag doen','Do today')}</h3><span class="pill ${tasks.length?'warn':'good'}">${tasks.length}</span></div><p class="muted small">${v679Txt('Eerst wat echt vandaag moet. Toekomstige periodieke taken blijven rustig in de weekplanning.','First what truly needs doing today. Future periodic tasks stay calmly in the week plan.')}</p>${top.length?`<div class="list">${top.map(t=>v679TaskCard(t,true)).join('')}</div>`:`<p class="muted">${v679Txt('Geen urgente HACCP-taken voor vandaag.','No urgent HACCP tasks for today.')}</p>`}${store.length?`<div class="v679-store-inline"><strong>${v679Txt('Vanuit Store Map','From Store Map')}</strong><p class="small muted">${store.length} ${v679Txt('routepunten kunnen naar HACCP worden gezet.','route points can be added to HACCP.')}</p><button class="btn small" data-action="v679-plan-storemap">${v679Txt('Toevoegen aan HACCP vandaag','Add to HACCP today')}</button></div>`:''}</div>`;
+    }
+    function v679WeekCard(){
+      const g = v679Groups(state.tasks||[]); const week = v679WeekNo();
+      const dailyOpen = g.daily.filter(v679IsDue).length;
+      const weeklyOpen = g.weekly.filter(v679IsDue).length;
+      const monthlyOpen = g.monthly.filter(v679IsDue).length;
+      const deferred = g.deferred.length; const overdue = v679OpenTasks().filter(v679IsOverdue).length;
+      const advice = overdue ? v679Txt('Rond eerst één achterstallige of doorgeschoven taak af.','First finish one overdue or deferred task.') : weeklyOpen ? v679Txt('Plan deze week nog één wekelijkse taak in.','Plan one more weekly task this week.') : v679Txt('HACCP-weekplanning is beheersbaar.','HACCP week planning is manageable.');
+      return `<div class="card v679-week-card"><div class="flex-line"><h3>${v679Txt('HACCP weekplanning','HACCP week plan')}</h3><span class="chip">${v679Txt('Week','Week')} ${week}</span></div><div class="list"><div class="list-item compact"><span>${v679Txt('Dagelijks open','Daily open')}</span><strong>${dailyOpen}</strong></div><div class="list-item compact"><span>${v679Txt('Wekelijks open','Weekly open')}</span><strong>${weeklyOpen}</strong></div><div class="list-item compact"><span>${v679Txt('Maandelijks open','Monthly open')}</span><strong>${monthlyOpen}</strong></div><div class="list-item compact"><span>${v679Txt('Uitgesteld','Deferred')}</span><strong>${deferred}</strong></div><div class="list-item compact"><span>${v679Txt('Achterstallig','Overdue')}</span><strong>${overdue}</strong></div></div><p class="muted small"><b>${v679Txt('Advies','Advice')}:</b> ${v679Esc(advice)}</p></div>`;
+    }
+    function v679PeriodicCard(){
+      const g = v679Groups(v679OpenTasks());
+      return `<div class="card v679-periodic"><h3>${v679Txt('Periodieke planning','Periodic planning')}</h3>${v679TaskSection(v679Txt('Dagelijks','Daily'),g.daily,{max:5})}${v679TaskSection(v679Txt('Wekelijks','Weekly'),g.weekly,{max:5})}${v679TaskSection(v679Txt('Maandelijks','Monthly'),g.monthly,{max:5})}${v679TaskSection(v679Txt('Halfjaarlijks','Half-yearly'),g.halfyearly,{max:4,open:false})}${v679TaskSection(v679Txt('Jaarlijks','Yearly'),g.yearly,{max:4,open:false})}${state.ui.haccp679.showFuture?v679TaskSection(v679Txt('Later gepland','Planned later'),v679FutureTasks(),{max:8}):`<div class="btn-row mt"><button class="btn small" data-action="v679-toggle-future">${v679Txt('Later geplande taken tonen','Show future tasks')}</button></div>`}</div>`;
+    }
+    function v679StoreCard(){
+      const items = v679StoreRouteItems();
+      return `<div class="card v679-store-card"><div class="flex-line"><h3>${v679Txt('Store Map → HACCP','Store Map → HACCP')}</h3><span class="pill ${items.length?'warn':'good'}">${items.length}</span></div><p class="muted small">${items.length?v679Txt('Routepunten met echte signalen kunnen direct als HACCP-actie worden gepland.','Route points with real signals can be planned directly as HACCP actions.'):v679Txt('Geen Store Map-punten die nu naar HACCP moeten.','No Store Map points need HACCP planning now.')}</p>${items.length?`<div class="list">${items.slice(0,5).map(i=>`<div class="list-item compact"><span>${v679Esc(v679StoreLabel(i))}</span><span class="pill warn">${v679Txt('Route','Route')}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v679-plan-storemap">${v679Txt('Toevoegen aan HACCP vandaag','Add to HACCP today')}</button><button class="btn" data-route="storemap">${v679Txt('Open Store Map','Open Store Map')}</button></div>`:`<button class="btn" data-route="storemap">${v679Txt('Open Store Map','Open Store Map')}</button>`}</div>`;
+    }
+    function v679DeferralCard(){
+      const deferred = (state.tasks||[]).filter(t=>t.status==='Uitgesteld');
+      const map = {}; deferred.forEach(t=>{ const k=t.deferReason||v679Txt('Geen reden','No reason'); map[k]=(map[k]||0)+1; });
+      const rows = Object.entries(map);
+      return `<div class="card v679-deferral"><h3>${v679Txt('Uitstel met reden','Deferral with reason')}</h3>${rows.length?`<div class="list">${rows.map(([k,v])=>`<div class="list-item compact"><span>${v679Esc(k)}</span><strong>${v}</strong></div>`).join('')}</div>`:`<p class="muted small">${v679Txt('Nog geen uitgestelde HACCP-taken.','No deferred HACCP tasks yet.')}</p>`}<p class="muted tiny">${v679Txt('Uitstellen vraagt nu om een reden en nieuwe planning.','Deferring now asks for a reason and new timing.')}</p></div>`;
+    }
+    function v679HaccpOverview(){
+      const today=v679TodayTasks(), open=v679OpenTasks(), future=v679FutureTasks(), store=v679StoreRouteItems();
+      const overdue=open.filter(v679IsOverdue).length;
+      return `<div class="grid grid-4 v679-haccp-kpis">${v679Kpi(v679Txt('Vandaag open','Open today'),today.length,today.length?'warn':'good')}${v679Kpi(v679Txt('Achterstallig','Overdue'),overdue,overdue?'bad':'good')}${v679Kpi(v679Txt('Later gepland','Planned later'),future.length,'info')}${v679Kpi('Store Map',store.length,store.length?'warn':'good')}</div>`;
+    }
+    function v679RenderHaccp(){
+      v679Ensure();
+      const tasks = v679TodayTasks();
+      const cap = (+state.settings.haccpHours||3.5)*60;
+      const openMin = v679OpenTasks().filter(v679IsDue).reduce((a,t)=>a+(+t.duration||10),0);
+      return `<div class="grid haccp-v679"><div class="hero haccp-v679-hero"><span class="chip">v6.7.9</span><h2>${v679Txt('HACCP Periodiek & Planning','HACCP Periodic & Planning')}</h2><p>${v679Txt('Duidelijk wat vandaag moet, wat later mag, wat periodiek terugkomt en wat uitgesteld is met reden.','Clear view of what is due today, what can wait, what recurs and what was deferred with a reason.')}</p><div class="btn-row"><button class="btn primary" data-action="open-template-loader">${v679Txt('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${v679Txt('Nieuwe taak','New task')}</button><button class="btn" data-action="open-focus">Focus</button><button class="btn" data-action="v679-plan-storemap">Store Map → HACCP</button></div></div>${v679HaccpOverview()}<div class="grid grid-main"><div class="grid">${v679TodayDoCard()}<div class="card"><h3>${v679Txt('Tijdlijn vandaag','Today timeline')}</h3>${typeof renderHaccpTimeline==='function'?renderHaccpTimeline(tasks):''}</div>${v679PeriodicCard()}</div><div class="grid">${v679WeekCard()}<div class="card"><h3>${v679Txt('Capaciteit','Capacity')}</h3>${typeof capacityCard==='function'?capacityCard():''}${typeof bar==='function'?bar(v679Txt('Vandaag gepland','Planned today'),Math.round(openMin/cap*100),openMin>cap?'bad':openMin>cap*0.75?'warn':'good'):''}</div>${v679StoreCard()}${v679DeferralCard()}<div class="card"><h3>${v679Txt('Beheer','Manage')}</h3><details class="detail-drawer"><summary>${v679Txt('Templates en taken beheren','Manage templates and tasks')}</summary><div class="drawer-content">${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details></div></div></div></div>`;
+    }
+    renderHaccp = window.renderHaccp = v679RenderHaccp;
+
+    const v679PrevCompleteTask = typeof completeTask === 'function' ? completeTask : null;
+    completeTask = window.completeTask = function(id){
+      const task = state.tasks.find(t=>t.id===id);
+      if (task) { task.lastDoneAt = v679Iso(); task.completedDate = v679Today(); }
+      if (v679PrevCompleteTask) return v679PrevCompleteTask(id);
+      if (task) { task.status='Voltooid'; task.completedAt=v679Iso(); addActivity(`Taak voltooid: ${task.title}`,'task'); toast('Taak voltooid','good'); }
+    };
+
+    deferTask = window.deferTask = function(id){
+      const task = state.tasks.find(t=>t.id===id); if(!task) return;
+      const reasons = [
+        [v679Txt('Geen tijd','No time'),'tomorrow'],
+        [v679Txt('Niet urgent','Not urgent'),'week'],
+        [v679Txt('Wacht op collega','Waiting for colleague'),'tomorrow'],
+        [v679Txt('Materiaal nodig','Material needed'),'week'],
+        [v679Txt('Later vandaag','Later today'),'today'],
+        [v679Txt('Morgen','Tomorrow'),'tomorrow']
+      ];
+      modal(v679Txt('Taak uitstellen','Defer task'), `<p class="muted">${v679Esc(v679TaskName(task))}</p><div class="grid grid-2">${reasons.map(r=>`<button class="btn" data-action="confirm-defer-v679" data-id="${v679Esc(id)}" data-reason="${v679Esc(r[0])}" data-when="${r[1]}">${v679Esc(r[0])}</button>`).join('')}</div><hr><div class="form-grid"><label>${v679Txt('Aantal','Amount')}<input class="input" type="number" min="1" value="2" id="v679DeferAmount"></label><label>${v679Txt('Eenheid','Unit')}<select class="select" id="v679DeferUnit"><option value="days">${v679Txt('dagen','days')}</option><option value="weeks">${v679Txt('weken','weeks')}</option></select></label></div><button class="btn primary mt" data-action="confirm-defer-custom-v679" data-id="${v679Esc(id)}">${v679Txt('Uitstellen met eigen planning','Defer with custom timing')}</button>`);
+    };
+    function v679ApplyDefer(id, reason, when, amount, unit){
+      const task = state.tasks.find(t=>t.id===id); if(!task) return;
+      let due = v679Today();
+      if (when === 'tomorrow') due = (typeof nextWorkday === 'function') ? nextWorkday(v679Today()) : v679AddDays(v679Today(),1);
+      else if (when === 'week') due = v679AddDays(v679Today(),7);
+      else if (when === 'today') due = v679Today();
+      if (amount) due = v679AddDays(v679Today(), (+amount||1) * (unit === 'weeks' ? 7 : 1));
+      task.status = 'Uitgesteld'; task.deferReason = reason || v679Txt('Uitgesteld','Deferred'); task.deferredAt = v679Iso(); task.dueDate = due;
+      addActivity(`${v679Txt('Taak uitgesteld','Task deferred')}: ${v679TaskName(task)} — ${task.deferReason} (${v679DateOnly(due)})`,'task');
+      closeModal(); save(); render();
+    }
+    function v679PlanStoreMap(){
+      const items = v679StoreRouteItems();
+      let added = 0;
+      items.forEach(i=>{
+        if ((state.tasks||[]).some(t=>t.linkedCleaningId===i.id && t.status !== 'Voltooid')) return;
+        state.tasks.unshift({id:(typeof uid==='function'?uid('task'):'task_'+Math.random().toString(36).slice(2)), title:`Store Map: ${v679StoreLabel(i)}`, duration:10, priority:'Hoog', category:'Store Map', group:'daily', frequency:'Nacontrole', status:'Open', createdAt:v679Iso(), dueDate:v679Today(), linkedCleaningId:i.id});
+        i.planned = true; i.plannedAt = v679Today(); i.history = Array.isArray(i.history) ? i.history : []; i.history.unshift({type:'plannedToHaccp679',at:v679Iso()}); added++;
+      });
+      toast(added ? `${added} ${v679Txt('Store Map-punten toegevoegd aan HACCP','Store Map points added to HACCP')}` : v679Txt('Geen nieuwe Store Map-punten om toe te voegen','No new Store Map points to add'), added?'good':'info');
+      save(); render();
+    }
+
+    const v679PrevToday = typeof renderToday === 'function' ? renderToday : null;
+    if (v679PrevToday) renderToday = window.renderToday = function(){
+      const html = v679PrevToday();
+      const open = v679TodayTasks().length, deferred = (state.tasks||[]).filter(t=>t.status==='Uitgesteld').length, store = v679StoreRouteItems().length;
+      const card = `<div class="card v679-today-haccp"><div class="flex-line"><h3>${v679Txt('HACCP vandaag','HACCP today')}</h3><span class="pill ${open?'warn':'good'}">${open}</span></div><p class="muted small">${open?v679Txt('Er staan HACCP-taken voor vandaag klaar.','HACCP tasks are ready for today.'):v679Txt('Geen urgente HACCP-taken.','No urgent HACCP tasks.')}</p><div class="list"><div class="list-item compact"><span>${v679Txt('Uitgesteld','Deferred')}</span><strong>${deferred}</strong></div><div class="list-item compact"><span>Store Map</span><strong>${store}</strong></div><div class="list-item compact"><span>${v679Txt('Week','Week')}</span><strong>${v679WeekNo()}</strong></div></div><div class="btn-row mt"><button class="btn" data-route="haccp">${v679Txt('Open HACCP','Open HACCP')}</button>${open?`<button class="btn primary" data-route="haccp">${v679Txt('Vandaag doen','Do today')}</button>`:''}</div></div>`;
+      try { return html.replace(/<\/div>\s*$/, card+'</div>'); } catch(_) { return html + card; }
+    };
+
+    const v679PrevNextAction = typeof nextAction === 'function' ? nextAction : null;
+    if (v679PrevNextAction) nextAction = window.nextAction = function(){
+      const urgent = v679TodayTasks().filter(t=>v679IsOverdue(t) || String(t.priority||'').toLowerCase().includes('hoog')).slice(0,1);
+      if (state.route === 'today' && urgent.length) return {title:v679Txt('Open HACCP vandaag','Open HACCP today'), reason:v679Txt('Er staat een urgente of achterstallige HACCP-taak klaar.','An urgent or overdue HACCP task is ready.'), route:'haccp', taskId:urgent[0].id};
+      return v679PrevNextAction();
+    };
+
+    const v679PrevDiagnostics = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if (v679PrevDiagnostics) renderDiagnostics = window.renderDiagnostics = function(){
+      const today = v679TodayTasks(); const groups = v679Groups(v679OpenTasks()); const store = v679StoreRouteItems();
+      const checks = [
+        {name:'HACCP Periodieke Planning',ok:typeof renderHaccp==='function',detail:`${today.length} vandaag`},
+        {name:v679Txt('Uitstellen met reden','Deferral with reason'),ok:typeof deferTask==='function',detail:String((state.tasks||[]).filter(t=>t.status==='Uitgesteld').length)},
+        {name:'Store Map → HACCP',ok:Array.isArray(store),detail:String(store.length)},
+        {name:v679Txt('Weekplanning','Week planning'),ok:!!v679WeekNo(),detail:'week '+v679WeekNo()},
+        {name:v679Txt('Dag/week/maand groepen','Day/week/month groups'),ok:['daily','weekly','monthly'].every(k=>Array.isArray(groups[k])),detail:`${groups.daily.length}/${groups.weekly.length}/${groups.monthly.length}`},
+        {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v679',detail:APP.cache}
+      ];
+      return v679PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v679"><div class="card"><h3>v6.7.9 HACCP checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${v679Esc(c.name)} <span class="tiny muted">${v679Esc(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${v679Txt('HACCP planning beleid','HACCP planning policy')}</h3><p class="muted small">${v679Txt('Taken worden nu verdeeld in dagelijks, wekelijks, maandelijks, halfjaarlijks, jaarlijks, nacontrole en uitgesteld. Uitstellen bewaart reden en nieuwe datum.','Tasks are now divided into daily, weekly, monthly, half-yearly, yearly, follow-up and deferred. Deferral stores reason and new date.')}</p></div></div>`;
+    };
+
+    const v679PrevHandle = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if (a === 'confirm-defer-v679') { v679ApplyDefer(el.dataset.id, el.dataset.reason, el.dataset.when); return; }
+      if (a === 'confirm-defer-custom-v679') { const amount = +(document.getElementById('v679DeferAmount')?.value||1); const unit = document.getElementById('v679DeferUnit')?.value || 'days'; v679ApplyDefer(el.dataset.id, `${v679Txt('Eigen planning','Custom timing')} (${amount} ${unit==='weeks'?v679Txt('weken','weeks'):v679Txt('dagen','days')})`, '', amount, unit); return; }
+      if (a === 'v679-plan-storemap') { v679PlanStoreMap(); return; }
+      if (a === 'v679-toggle-future') { state.ui.haccp679 = state.ui.haccp679 || {}; state.ui.haccp679.showFuture = !state.ui.haccp679.showFuture; save(); render(); return; }
+      if (v679PrevHandle) return v679PrevHandle(a,el,e);
+    };
+
+    v679Ensure();
+    try { save(); render(); } catch(_) {}
+  } catch(err){ console.error('v6.7.9 patch failed', err); }
+})();
+
+/* === RICH CMD v6.7.11 — HACCP Startlijst & Prioriteit Fix === */
+(function(){
+  try {
+    APP.version = 'v6.7.11';
+    APP.cache = 'rich-cmd-cache-v6711';
+
+    const v6710Txt = (nl,en) => (typeof currentLang === 'function' && currentLang()==='en') ? en : nl;
+    const v6710Today = () => (typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10));
+    const v6710Iso = () => (typeof nowISO === 'function' ? nowISO() : new Date().toISOString());
+    const v6710Esc = (s) => (typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]||c)));
+    const v6710DateOnly = (d) => d ? (typeof dateOnly === 'function' ? dateOnly(d) : String(d).slice(0,10)) : '-';
+    const v6710Minutes = (m) => (typeof minutesToText === 'function' ? minutesToText(+m||0) : `${+m||0}m`);
+    const v6710Uid = (p) => (typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}`);
+    const v6710Kpi = (a,b,tone) => (typeof kpi === 'function' ? kpi(a,b,tone) : `<div class="card"><strong>${v6710Esc(b)}</strong><p>${v6710Esc(a)}</p></div>`);
+    const v6710Toast = (msg,tone='info') => { try { if (typeof toast === 'function') toast(msg,tone); } catch(_) {} };
+    const v6710SaveRender = () => { try { if (typeof save === 'function') save(); } catch(_){} try { if (typeof render === 'function') render(); } catch(_){} };
+    const v6710StartSpecs = [
+      {key:'temp', titleNl:'Temperatuurscontrole', titleEn:'Temperature control', match:['temperatuur','temperature'], duration:5, priority:'Hoog', whyNl:'Voedselveiligheidsrisico: eerst controleren of koeling/temperatuur op orde is.', whyEn:'Food-safety risk: first check that cooling/temperature is under control.'},
+      {key:'emballage', titleNl:'Emballage', titleEn:'Deposit/empties area', match:['emballage','empties','deposit'], duration:15, priority:'Hoog', whyNl:'Voorkomt obstructie, rommel en onrust in het klantgebied.', whyEn:'Prevents obstruction, clutter and visual disorder in the customer area.'},
+      {key:'sinaasappel', titleNl:'Sinaasappelpers schoonmaken', titleEn:'Orange press check', match:['sinaasappel','orange press','pers'], duration:5, priority:'Hoog', whyNl:'Zichtbare hygiëne en klantbeleving: meteen netjes en veilig houden.', whyEn:'Visible hygiene and customer experience: keep it clean and safe early.'},
+      {key:'vloer', titleNl:'Winkelvloer en magazijn', titleEn:'Shop floor and stockroom', match:['winkelvloer','shop floor','vloer','stockroom','magazijn'], duration:30, priority:'Medium', whyNl:'Directe winkelveiligheid en uitstraling voordat onverwachte taken je weghalen.', whyEn:'Immediate store safety and appearance before unexpected work pulls you away.'}
+    ];
+    const v6710Norm = (s) => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const v6710TaskName = (task) => (typeof taskTitle === 'function' ? taskTitle(task) : (task?.title || v6710Txt('Taak','Task')));
+    const v6710TaskText = (task) => v6710Norm(`${task?.title||''} ${task?.category||''} ${task?.group||''} ${task?.frequency||''}`);
+    const v6710MatchesSpec = (task, spec) => spec.match.some(m => v6710TaskText(task).includes(v6710Norm(m)));
+    const v6710IsOpen = (task) => task && task.status !== 'Voltooid';
+    const v6710TaskDue = (task) => task?.dueDate || task?.plannedDate || (task?.status === 'Voltooid' ? '' : v6710Today());
+    const v6710IsDueToday = (task) => !v6710TaskDue(task) || String(v6710TaskDue(task)).slice(0,10) <= v6710Today();
+    const v6710IsOverdue = (task) => !!v6710TaskDue(task) && String(v6710TaskDue(task)).slice(0,10) < v6710Today() && v6710IsOpen(task);
+    const v6710FreqKey = (task) => {
+      const hay = v6710TaskText(task);
+      if (task?.linkedCleaningId || hay.includes('nacontrole') || hay.includes('follow')) return 'followup';
+      if (hay.includes('jaar') || hay.includes('annual')) return 'yearly';
+      if (hay.includes('half') || hay.includes('6 maand') || hay.includes('6-month')) return 'halfyearly';
+      if (hay.includes('maand') || hay.includes('month') || task?.group === 'monthly') return 'monthly';
+      if (hay.includes('week') || task?.group === 'weekly') return 'weekly';
+      if (hay.includes('dag') || hay.includes('daily') || task?.group === 'daily' || hay.includes('basisroutine')) return 'daily';
+      return 'adhoc';
+    };
+    const v6710PriorityTone = (task) => {
+      const p = v6710Norm(task?.priority||'');
+      if (p.includes('krit') || task?.emergency) return 'bad';
+      if (p.includes('hoog') || p.includes('high') || task?.linkedCleaningId) return 'warn';
+      return 'info';
+    };
+    const v6710PriorityScore = (task) => {
+      const p = v6710Norm(task?.priority||'');
+      let s = p.includes('krit') ? 110 : p.includes('hoog') || p.includes('high') ? 80 : p.includes('laag') || p.includes('low') ? 30 : 55;
+      if (task?.emergency) s += 50;
+      if (task?.linkedCleaningId) s += 18;
+      if (v6710IsOverdue(task)) s += 25;
+      if (task?.status === 'Uitgesteld') s += 8;
+      return s;
+    };
+    function v6710Ensure(){
+      state.ui = state.ui || {};
+      state.ui.haccp6710 = state.ui.haccp6710 || {showPeriodic:false, showDoneStart:false};
+      state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+      state.templates = state.templates || (typeof defaultTemplates === 'function' ? defaultTemplates() : {daily:[],weekly:[],monthly:[]});
+      state.tasks.forEach(task => { if(!task.id) task.id = v6710Uid('task'); if(!task.status) task.status='Open'; if(!task.createdAt) task.createdAt=v6710Iso(); });
+    }
+    function v6710FindTaskForSpec(spec){
+      const tasks = (state.tasks||[]).filter(t => v6710MatchesSpec(t,spec));
+      return tasks.sort((a,b)=> (a.status==='Voltooid') - (b.status==='Voltooid') || String(v6710TaskDue(a)||'9999').localeCompare(String(v6710TaskDue(b)||'9999')))[0] || null;
+    }
+    function v6710TemplateForSpec(spec){
+      const all = Object.values(state.templates||{}).flat();
+      return all.find(t => v6710MatchesSpec(t,spec)) || null;
+    }
+    function v6710StartRows(){
+      return v6710StartSpecs.map((spec,idx) => {
+        const task = v6710FindTaskForSpec(spec);
+        const tpl = v6710TemplateForSpec(spec);
+        return {spec, order:idx+1, task, tpl, title: task ? v6710TaskName(task) : (tpl?.title || v6710Txt(spec.titleNl,spec.titleEn)), duration: task?.duration || tpl?.duration || spec.duration, priority: task?.priority || tpl?.priority || spec.priority, done: task?.status === 'Voltooid'};
+      });
+    }
+    function v6710TrueUrgencies(){
+      const startIds = new Set(v6710StartRows().map(r=>r.task?.id).filter(Boolean));
+      return (state.tasks||[]).filter(t => v6710IsOpen(t) && v6710IsDueToday(t) && !startIds.has(t.id)).filter(t => {
+        const p = v6710Norm(t.priority||'');
+        const txt = v6710TaskText(t);
+        return t.emergency || p.includes('krit') || t.linkedCleaningId || txt.includes('koeling buiten') || txt.includes('glas') || txt.includes('lekkage') || txt.includes('schimmel') || txt.includes('voedselveilig');
+      }).sort((a,b)=>v6710PriorityScore(b)-v6710PriorityScore(a)).slice(0,5);
+    }
+    function v6710PeriodicTasks(){
+      const startIds = new Set(v6710StartRows().map(r=>r.task?.id).filter(Boolean));
+      return (state.tasks||[]).filter(t => v6710IsOpen(t) && !startIds.has(t.id) && !v6710TrueUrgencies().some(u=>u.id===t.id)).sort((a,b)=>{
+        const order = {daily:0,followup:1,weekly:2,monthly:3,halfyearly:4,yearly:5,adhoc:6};
+        return (order[v6710FreqKey(a)]||9)-(order[v6710FreqKey(b)]||9) || v6710PriorityScore(b)-v6710PriorityScore(a) || String(v6710TaskDue(a)||'9999').localeCompare(String(v6710TaskDue(b)||'9999'));
+      });
+    }
+    function v6710StatusPill(row){
+      if(row.task?.status === 'Voltooid') return `<span class="pill good">${v6710Txt('Gedaan','Done')}</span>`;
+      if(row.task?.status === 'Uitgesteld') return `<span class="pill warn">${v6710Txt('Uitgesteld','Deferred')}</span>`;
+      if(row.task) return `<span class="pill warn">${v6710Txt('Open','Open')}</span>`;
+      return `<span class="pill info">${v6710Txt('Nog inladen','Load first')}</span>`;
+    }
+    function v6710TaskMeta(task, fallbackDuration){
+      if(!task) return `<div class="v6710-meta"><span>${v6710Txt('Nog niet als taak ingeladen','Not loaded as a task yet')}</span><span>${v6710Minutes(fallbackDuration||10)}</span></div>`;
+      const due = v6710TaskDue(task);
+      const key = v6710FreqKey(task);
+      const freq = {daily:v6710Txt('Dagelijks','Daily'), weekly:v6710Txt('Wekelijks','Weekly'), monthly:v6710Txt('Maandelijks','Monthly'), halfyearly:v6710Txt('Halfjaarlijks','Half-yearly'), yearly:v6710Txt('Jaarlijks','Yearly'), followup:v6710Txt('Nacontrole','Follow-up'), adhoc:v6710Txt('Losse taak','Ad-hoc')}[key] || key;
+      return `<div class="v6710-meta"><span>${v6710Esc(freq)}</span><span>${v6710Txt('Vandaag','Today')}: ${v6710DateOnly(due)}</span><span>${v6710Minutes(task.duration||fallbackDuration||10)}</span>${task.deferReason?`<span>${v6710Txt('Reden','Reason')}: ${v6710Esc(task.deferReason)}</span>`:''}</div>`;
+    }
+    function v6710ActionButtons(task, compact=false){
+      if(!task) return `<button class="btn small" data-action="v6710-load-startlist">${v6710Txt('Startlijst inladen','Load start list')}</button>`;
+      return `<div class="btn-row"><button class="btn small good" data-action="task-done" data-id="${v6710Esc(task.id)}">${t('done')}</button><button class="btn small warn" data-action="task-defer" data-id="${v6710Esc(task.id)}">${t('defer')}</button>${compact?'':`<button class="btn small" data-action="task-focus" data-id="${v6710Esc(task.id)}">${t('focus')}</button>`}</div>`;
+    }
+    function v6710StartListCard(){
+      const rows = v6710StartRows();
+      const done = rows.filter(r=>r.done).length;
+      return `<div class="card v6710-startlist"><div class="flex-line"><div><h3>${v6710Txt('HACCP Startlijst','HACCP start list')}</h3><p class="muted small">${v6710Txt('Deze basisroutine doe je vroeg, zodat voedselveiligheid, hygiëne en winkelbeeld al op orde zijn als je onverwacht weg moet.','Do this base routine early so food safety, hygiene and store appearance are under control before unexpected work interrupts you.')}</p></div><span class="pill ${done===rows.length?'good':'warn'}">${done}/${rows.length}</span></div><div class="list v6710-start-steps">${rows.map(row=>`<div class="list-item v6710-start-row ${row.done?'is-done':''}"><div class="v6710-step-no">${row.order}</div><div class="v6710-step-main"><div class="flex-line"><strong>${v6710Esc(row.title)}</strong>${v6710StatusPill(row)}</div><p class="tiny muted">${v6710Esc(v6710Txt(row.spec.whyNl,row.spec.whyEn))}</p>${v6710TaskMeta(row.task,row.duration)}</div><div class="v6710-step-actions">${v6710ActionButtons(row.task,true)}</div></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v6710-load-startlist">${v6710Txt('Startlijst inladen','Load start list')}</button><button class="btn" data-action="open-template-loader">${v6710Txt('Andere HACCP-taken inladen','Load other HACCP tasks')}</button></div></div>`;
+    }
+    function v6710UrgencyCard(){
+      const items = v6710TrueUrgencies();
+      return `<div class="card v6710-urgency"><div class="flex-line"><h3>${v6710Txt('Echte urgenties','True urgencies')}</h3><span class="pill ${items.length?'bad':'good'}">${items.length}</span></div><p class="muted small">${v6710Txt('Alleen direct risico gaat boven de startlijst: bijvoorbeeld koeling buiten bereik, glas/lekkage, schimmel, klantveiligheid of ernstige voedselveiligheid.','Only immediate risk comes before the start list: for example cooling out of range, glass/leakage, mold, customer safety or serious food-safety issues.')}</p>${items.length?`<div class="list">${items.map(t=>`<div class="list-item v6710-task"><div><strong>${v6710Esc(v6710TaskName(t))}</strong>${v6710TaskMeta(t,t.duration)}</div>${v6710ActionButtons(t,true)}</div>`).join('')}</div>`:`<p class="muted small">${v6710Txt('Geen risico dat boven de dagelijkse startlijst hoeft.','No risk that needs to come before the daily start list.')}</p>`}</div>`;
+    }
+    function v6710PlanningCard(){
+      const all = v6710PeriodicTasks();
+      const due = all.filter(v6710IsDueToday);
+      const future = all.filter(t=>!v6710IsDueToday(t));
+      const shown = state.ui.haccp6710.showPeriodic ? all : due.slice(0,8);
+      return `<div class="card v6710-planning"><div class="flex-line"><div><h3>${v6710Txt('Planning & periodiek','Planning & periodic')}</h3><p class="muted small">${v6710Txt('Hier staat het bredere overzicht: weektaken, maandtaken, nacontroles, uitgesteld werk en later geplande taken. Dit is niet hetzelfde als de startlijst.','This is the broader overview: weekly tasks, monthly tasks, follow-ups, deferred work and later planned tasks. It is not the same as the start list.')}</p></div><span class="pill info">${due.length}/${all.length}</span></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item v6710-task"><div><strong>${v6710Esc(v6710TaskName(t))}</strong>${v6710TaskMeta(t,t.duration)}</div>${v6710ActionButtons(t,true)}</div>`).join('')}</div>`:`<p class="muted small">${v6710Txt('Geen extra periodieke HACCP-taken die nu aandacht vragen.','No extra periodic HACCP tasks currently need attention.')}</p>`}<div class="btn-row mt"><button class="btn small" data-action="v6710-toggle-periodic">${state.ui.haccp6710.showPeriodic?v6710Txt('Alleen nu nodig tonen','Show only due now'):v6710Txt('Meer planning tonen','Show more planning')}</button></div>${future.length && !state.ui.haccp6710.showPeriodic?`<p class="tiny muted">${future.length} ${v6710Txt('taken staan later gepland en blijven bewust uit de startlijst.','tasks are planned later and intentionally stay out of the start list.')}</p>`:''}</div>`;
+    }
+    function v6710WhyCard(){
+      return `<div class="card v6710-policy"><h3>${v6710Txt('Waarom deze volgorde?','Why this order?')}</h3><div class="list"><div class="list-item compact"><span>1. ${v6710Txt('Voedselveiligheid','Food safety')}</span><strong>${v6710Txt('Temperaturen','Temperatures')}</strong></div><div class="list-item compact"><span>2. ${v6710Txt('Zichtbare hygiëne & klantveiligheid','Visible hygiene & customer safety')}</span><strong>${v6710Txt('Emballage / pers / vloer','Empties / press / floor')}</strong></div><div class="list-item compact"><span>3. ${v6710Txt('Planning','Planning')}</span><strong>${v6710Txt('Periodiek','Periodic')}</strong></div></div><p class="muted small">${v6710Txt('Je werkwijze past bij risicodenken: eerst kritieke winkelveiligheid en voedselveiligheid, daarna planning. Alleen een direct groter risico mag erboven komen.','Your workflow matches risk-based thinking: first critical store safety and food safety, then planning. Only a more immediate risk should come before it.')}</p></div>`;
+    }
+    function v6710Overview(){
+      const rows = v6710StartRows(); const done = rows.filter(r=>r.done).length; const urg = v6710TrueUrgencies().length; const due = v6710PeriodicTasks().filter(v6710IsDueToday).length; const deferred = (state.tasks||[]).filter(t=>t.status==='Uitgesteld').length;
+      return `<div class="grid grid-4 v6710-kpis">${v6710Kpi(v6710Txt('Startlijst','Start list'),`${done}/${rows.length}`,done===rows.length?'good':'warn')}${v6710Kpi(v6710Txt('Echte urgenties','True urgencies'),urg,urg?'bad':'good')}${v6710Kpi(v6710Txt('Planning vandaag','Due planning'),due,due?'warn':'good')}${v6710Kpi(v6710Txt('Uitgesteld','Deferred'),deferred,deferred?'warn':'good')}</div>`;
+    }
+    function v6710WeekCard(){
+      const all = v6710PeriodicTasks(); const daily = all.filter(t=>v6710FreqKey(t)==='daily' && v6710IsDueToday(t)).length; const weekly = all.filter(t=>v6710FreqKey(t)==='weekly' && v6710IsDueToday(t)).length; const monthly = all.filter(t=>v6710FreqKey(t)==='monthly' && v6710IsDueToday(t)).length; const follow = all.filter(t=>v6710FreqKey(t)==='followup' && v6710IsDueToday(t)).length;
+      const week = (typeof getISOWeek === 'function') ? getISOWeek(new Date()) : (()=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+3-((d.getDay()+6)%7)); const w1=new Date(d.getFullYear(),0,4); return 1+Math.round(((d-w1)/86400000-3+((w1.getDay()+6)%7))/7); })();
+      return `<div class="card"><div class="flex-line"><h3>${v6710Txt('HACCP weekplanning','HACCP week plan')}</h3><span class="chip">${v6710Txt('Week','Week')} ${week}</span></div><div class="list"><div class="list-item compact"><span>${v6710Txt('Dagelijks extra open','Daily extra open')}</span><strong>${daily}</strong></div><div class="list-item compact"><span>${v6710Txt('Wekelijks open','Weekly open')}</span><strong>${weekly}</strong></div><div class="list-item compact"><span>${v6710Txt('Maandelijks open','Monthly open')}</span><strong>${monthly}</strong></div><div class="list-item compact"><span>${v6710Txt('Nacontrole','Follow-up')}</span><strong>${follow}</strong></div></div><p class="muted small"><b>${v6710Txt('Advies','Advice')}:</b> ${v6710Txt('Rond eerst de startlijst af. Plan daarna één periodieke taak als er ruimte is.','Finish the start list first. Then plan one periodic task if there is room.')}</p></div>`;
+    }
+    function v6710RenderHaccp(){
+      v6710Ensure();
+      const cap = (+state.settings?.haccpHours||3.5)*60;
+      const plannedMin = v6710StartRows().filter(r=>r.task && r.task.status!=='Voltooid').reduce((a,r)=>a+(+r.duration||10),0) + v6710TrueUrgencies().reduce((a,t)=>a+(+t.duration||10),0);
+      return `<div class="grid haccp-v6710"><div class="hero haccp-v6710-hero"><span class="chip">v6.7.11</span><h2>${v6710Txt('HACCP Startlijst & Prioriteit','HACCP Start List & Priority')}</h2><p>${v6710Txt('Eerst de vaste risicoroutine: temperaturen, emballage, sinaasappelpers en winkelvloer. Periodieke planning blijft slim, maar staat niet meer verwarrend door de starttaken heen.','First the fixed risk routine: temperatures, empties area, orange press and shop floor. Periodic planning stays smart, but no longer competes with the start tasks.')}</p><div class="btn-row"><button class="btn primary" data-action="v6710-load-startlist">${v6710Txt('Startlijst inladen','Load start list')}</button><button class="btn" data-action="open-template-loader">${v6710Txt('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${v6710Txt('Nieuwe taak','New task')}</button></div></div>${v6710Overview()}<div class="grid grid-main"><div class="grid">${v6710UrgencyCard()}${v6710StartListCard()}${v6710PlanningCard()}</div><div class="grid">${v6710WhyCard()}${v6710WeekCard()}<div class="card"><h3>${v6710Txt('Capaciteit startfase','Start capacity')}</h3>${typeof bar==='function'?bar(v6710Txt('Startlijst + urgenties','Start list + urgencies'),Math.round(plannedMin/cap*100),plannedMin>cap?'bad':plannedMin>cap*0.75?'warn':'good'):''}<p class="muted small">${v6710Txt('Deze capaciteit gaat alleen over wat je eerst veilig op orde wilt hebben. De rest staat in Planning & periodiek.','This capacity only covers what you first want to get safely under control. The rest is in Planning & periodic.')}</p></div><div class="card"><h3>${v6710Txt('Beheer','Manage')}</h3><details class="detail-drawer"><summary>${v6710Txt('Templates en taken beheren','Manage templates and tasks')}</summary><div class="drawer-content">${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details></div></div></div></div>`;
+    }
+    renderHaccp = window.renderHaccp = v6710RenderHaccp;
+
+    function v6710LoadStartList(){
+      v6710Ensure();
+      let added = 0;
+      v6710StartSpecs.forEach(spec => {
+        const existing = v6710FindTaskForSpec(spec);
+        if(existing && existing.status !== 'Voltooid') return;
+        const tpl = v6710TemplateForSpec(spec);
+        state.tasks.unshift({
+          id:v6710Uid('task'), title: tpl?.title || v6710Txt(spec.titleNl,spec.titleEn), duration: tpl?.duration || spec.duration, priority: tpl?.priority || spec.priority, category:'Basisroutine', group:'daily', frequency:'Dagelijks', status:'Open', createdAt:v6710Iso(), dueDate:v6710Today(), startListKey:spec.key
+        });
+        added++;
+      });
+      if (typeof addActivity === 'function') addActivity(`HACCP Startlijst ingeladen (${added})`,'task');
+      v6710Toast(added ? `${added} ${v6710Txt('starttaken ingeladen','start tasks loaded')}` : v6710Txt('Startlijst staat al klaar','Start list is already ready'), added?'good':'info');
+      v6710SaveRender();
+    }
+
+    const v6710PrevToday = typeof renderToday === 'function' ? renderToday : null;
+    if (v6710PrevToday) renderToday = window.renderToday = function(){
+      const html = v6710PrevToday();
+      const rows = v6710StartRows(); const done = rows.filter(r=>r.done).length; const urg = v6710TrueUrgencies().length;
+      const card = `<div class="card v6710-today-haccp"><div class="flex-line"><h3>${v6710Txt('HACCP start','HACCP start')}</h3><span class="pill ${done===rows.length?'good':'warn'}">${done}/${rows.length}</span></div><p class="muted small">${urg?`${urg} ${v6710Txt('echte urgentie(s) controleren vóór de startlijst.','true urgency/urgencies before the start list.')}`:v6710Txt('Begin met temperaturen, emballage, sinaasappelpers en winkelvloer.','Start with temperatures, empties area, orange press and shop floor.')}</p><div class="btn-row"><button class="btn primary" data-route="haccp">${v6710Txt('Open HACCP startlijst','Open HACCP start list')}</button></div></div>`;
+      try { return html.replace(/<div class="card v679-today-haccp[\s\S]*?\/div>\s*<\/div>\s*$/,'</div>').replace(/<div class="card v6710-today-haccp[\s\S]*?\/div>\s*<\/div>\s*$/,'</div>').replace(/<\/div>\s*$/, card+'</div>'); } catch(_) { return html + card; }
+    };
+
+    const v6710PrevNextAction = typeof nextAction === 'function' ? nextAction : null;
+    if (v6710PrevNextAction) nextAction = window.nextAction = function(){
+      const urg = v6710TrueUrgencies()[0];
+      if(state.route === 'today' && urg) return {title:v6710Txt('Controleer HACCP urgentie','Check HACCP urgency'), reason:v6710Txt('Er is een direct risico dat boven de startlijst mag komen.','There is an immediate risk that may come before the start list.'), route:'haccp', taskId:urg.id};
+      const firstOpen = v6710StartRows().find(r=>!r.done);
+      if(state.route === 'today' && firstOpen) return {title:v6710Txt('Start HACCP startlijst','Start HACCP start list'), reason:v6710Txt('Eerst de dagelijkse risicoroutine veilig afronden.','First finish the daily risk routine safely.'), route:'haccp', taskId:firstOpen.task?.id};
+      return v6710PrevNextAction();
+    };
+
+    const v6710PrevDiagnostics = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if (v6710PrevDiagnostics) renderDiagnostics = window.renderDiagnostics = function(){
+      const rows = v6710StartRows(); const checks = [
+        {name:'v6.7.11 HACCP Startlijst', ok:typeof renderHaccp==='function', detail:`${rows.filter(r=>r.done).length}/${rows.length}`},
+        {name:v6710Txt('Vaste starttaken','Fixed start tasks'), ok:v6710StartSpecs.length===4, detail:v6710StartSpecs.map(s=>v6710Txt(s.titleNl,s.titleEn)).join(', ')},
+        {name:v6710Txt('Urgentie boven startlijst alleen bij risico','Urgency above start list only for risk'), ok:Array.isArray(v6710TrueUrgencies()), detail:String(v6710TrueUrgencies().length)},
+        {name:v6710Txt('Planning & periodiek gescheiden','Planning & periodic separated'), ok:Array.isArray(v6710PeriodicTasks()), detail:String(v6710PeriodicTasks().length)},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6711', detail:APP.cache}
+      ];
+      return v6710PrevDiagnostics()+`<div class="grid grid-2 mt diagnostics-v6710"><div class="card"><h3>v6.7.11 HACCP checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${v6710Esc(c.name)} <span class="tiny muted">${v6710Esc(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${v6710Txt('HACCP prioriteitbeleid','HACCP priority policy')}</h3><p class="muted small">${v6710Txt('De startlijst is de vaste eerste routine. Planning & periodiek is het bredere overzicht. Alleen direct voedselveiligheids-, klantveiligheids- of ernstige hygiënerisico’s mogen boven de startlijst komen.','The start list is the fixed first routine. Planning & periodic is the broader overview. Only direct food-safety, customer-safety or serious hygiene risks may come before the start list.')}</p></div></div>`;
+    };
+
+    const v6710PrevHandle = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if(a === 'v6710-load-startlist'){ v6710LoadStartList(); return; }
+      if(a === 'v6710-toggle-periodic'){ state.ui.haccp6710 = state.ui.haccp6710 || {}; state.ui.haccp6710.showPeriodic = !state.ui.haccp6710.showPeriodic; v6710SaveRender(); return; }
+      if(v6710PrevHandle) return v6710PrevHandle(a,el,e);
+    };
+
+    v6710Ensure();
+    try { if (typeof save === 'function') save(); if (typeof render === 'function') render(); } catch(_) {}
+  } catch(err) { console.error('v6.7.11 patch failed', err); }
+})();
+
+/* === RICH CMD v6.7.11 — HACCP Restore & Flow Alignment === */
+(function(){
+  try {
+    if (typeof APP !== 'undefined') {
+      APP.version = 'v6.7.11';
+      APP.cache = 'rich-cmd-cache-v6711';
+      APP.build = 'HACCP Restore & Flow Alignment';
+    }
+    const L11 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E11 = (s)=> typeof escapeHtml==='function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const A11 = (arr)=> Array.isArray(arr) ? arr : [];
+    const today11 = ()=> typeof TODAY==='function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now11 = ()=> typeof nowISO==='function' ? nowISO() : new Date().toISOString();
+    const uid11 = (p)=> typeof uid==='function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}`;
+    const toast11 = (msg,type='info')=> { try { if (typeof toast==='function') toast(msg,type,true); } catch(_){} };
+    const saveRender11 = ()=> { try { if (typeof save==='function') save(); } catch(_){} try { if (typeof render==='function') render(); } catch(_){} };
+    const norm11 = (s)=> String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const statusText11 = (s)=> { try { return typeof localStatus==='function' ? localStatus(s) : (s||'-'); } catch(_) { return s||'-'; } };
+    const minText11 = (m)=> { try { return typeof minutesToText==='function' ? minutesToText(+m||0) : `${+m||0}m`; } catch(_) { return `${+m||0}m`; } };
+    const taskName11 = (task)=> { try { return typeof taskTitle==='function' ? taskTitle(task) : (task.title||'Taak'); } catch(_) { return task?.title||'Taak'; } };
+    const bar11 = (label,pct,tone)=> { try { return typeof bar==='function' ? bar(label,pct,tone) : `<div class="list-item compact"><span>${E11(label)}</span><strong>${Math.round(pct)}%</strong></div>`; } catch(_) { return ''; } };
+
+    const dailySpecs11 = [
+      {key:'temps', titleNl:'Temperaturen controleren', titleEn:'Check temperatures', minutes:15, priority:'Kritiek', whyNl:'Voedselveiligheid eerst: afwijkingen wil je vroeg signaleren.', whyEn:'Food safety first: deviations should be detected early.'},
+      {key:'emballage', titleNl:'Emballage controleren', titleEn:'Check empties area', minutes:10, priority:'Hoog', whyNl:'Zichtbare hygiëne, doorgang en klantveiligheid op orde.', whyEn:'Visible hygiene, passage and customer safety under control.'},
+      {key:'orange', titleNl:'Sinaasappelpers schoon/controleren', titleEn:'Clean/check orange press', minutes:10, priority:'Hoog', whyNl:'Een zichtbaar verspunt moet schoon en veilig zijn voor klanten.', whyEn:'A visible fresh-food point must be clean and safe for customers.'},
+      {key:'floor', titleNl:'Winkelvloer en magazijn controleren', titleEn:'Check shop floor and stockroom', minutes:10, priority:'Hoog', whyNl:'Voorkomt obstructie, rommel en onveilige klant-/looproutes.', whyEn:'Prevents obstruction, mess and unsafe customer/work routes.'}
+    ];
+
+    function allTasks11(){ return A11(state?.tasks); }
+    function openTasks11(){ return allTasks11().filter(t=>t && t.status !== 'Voltooid'); }
+    function isDailyBase11(t){ const h=norm11(`${t?.title||''} ${t?.category||''} ${t?.group||''} ${t?.frequency||''} ${t?.startListKey||''}`); return !!(t?.startListKey || h.includes('temperatuur') || h.includes('temperature') || h.includes('emballage') || h.includes('sinaasappel') || h.includes('orange press') || h.includes('winkelvloer') || h.includes('shop floor') || h.includes('magazijn') || h.includes('stockroom') || h.includes('basisroutine')); }
+    function findDaily11(spec){ const aliases={temps:['temperatuur','temperature'],emballage:['emballage','empties'],orange:['sinaasappel','orange press'],floor:['winkelvloer','shop floor','magazijn','stockroom']}; return openTasks11().find(t=> t.startListKey===spec.key || aliases[spec.key].some(a=>norm11(t.title).includes(a))); }
+    function dailyRows11(){ return dailySpecs11.map((spec,idx)=>{ const task=findDaily11(spec); return {spec, task, order:idx+1, done:!!task && task.status==='Voltooid', title:task?taskName11(task):L11(spec.titleNl,spec.titleEn), duration: task?.duration || spec.minutes}; }); }
+    function frequencyKey11(t){ const h=norm11(`${t?.frequency||''} ${t?.group||''} ${t?.category||''} ${t?.title||''}`); if(t?.linkedCleaningId || h.includes('nacontrole') || h.includes('follow')) return 'followup'; if(h.includes('jaar') || h.includes('year')) return h.includes('half') ? 'halfyearly' : 'yearly'; if(h.includes('maand') || h.includes('month')) return 'monthly'; if(h.includes('week')) return 'weekly'; if(h.includes('dag') || h.includes('daily')) return 'daily'; return 'adhoc'; }
+    function dueDate11(t){ return t?.dueDate || t?.plannedDate || today11(); }
+    function compareDate11(a,b){ return String(a||'').slice(0,10).localeCompare(String(b||'').slice(0,10)); }
+    function isDue11(t){ return !dueDate11(t) || compareDate11(dueDate11(t), today11()) <= 0; }
+    function isFuture11(t){ return compareDate11(dueDate11(t), today11()) > 0; }
+
+    function cleanItems11(){ return A11(state?.cleaning?.items).filter(i=>i && !i.archived); }
+    function cleanLabel11(i){ return i?.label || i?.name || i?.title || `${i?.zone||'Store Map'} M${i?.meter||''}`.trim(); }
+    function hasBaseline11(i){ return !!(i?.lastChecked || i?.lastCleaned || i?.planned || i?.plannedAt || (Array.isArray(i?.history) && i.history.length)); }
+    function moldGradation11(i){ const st=String(i?.status||''); if(st==='mold1' || +i?.moldGrade===1) return 1; if(st==='mold2' || +i?.moldGrade===2) return 2; if(st==='mold3' || +i?.moldGrade===3) return 3; return 0; }
+    function cleanTone11(i){ const g=moldGradation11(i); if(g>=3) return 'bad'; if(g===2 || i?.status==='followup') return 'bad'; if(g===1 || i?.status==='dirty' || i?.planned) return 'warn'; return 'info'; }
+    function cleanReason11(i){ const g=moldGradation11(i); if(g===1) return L11('Schimmel gradatie 1 — monitoren/plannen', 'Mould gradation 1 — monitor/plan'); if(g===2) return L11('Schimmel gradatie 2 — directe opvolging', 'Mould gradation 2 — immediate follow-up'); if(g===3) return L11('Schimmel gradatie 3 — kritisch oppakken', 'Mould gradation 3 — critical action'); if(i?.status==='followup') return L11('Nacontrole nodig', 'Follow-up check needed'); if(i?.status==='dirty') return L11('Vuil / aandacht', 'Dirty / attention'); if(i?.planned) return L11('Handmatig gepland', 'Manually planned'); if(i?.status==='due' && hasBaseline11(i)) return L11('Controle verlopen', 'Check overdue'); return L11('Signaal', 'Signal'); }
+    function storeSignals11(){ return cleanItems11().filter(i=>{ const g=moldGradation11(i); if(g) return true; if(i.status==='followup' || i.status==='dirty' || i.planned) return true; if(i.status==='due' && hasBaseline11(i)) return true; return false; }).sort((a,b)=> (moldGradation11(b)-moldGradation11(a)) || (a.status==='followup'?-1:0) || String(cleanLabel11(a)).localeCompare(String(cleanLabel11(b)))); }
+    function storeUrgent11(){ return storeSignals11().filter(i=>{ const g=moldGradation11(i); return g>=2 || i.status==='followup' || String(i.priority||'').toLowerCase()==='kritiek'; }); }
+    function storePlanning11(){ return storeSignals11().filter(i=>!storeUrgent11().some(u=>u.id===i.id)); }
+
+    function taskLinkedToClean11(id){ return openTasks11().some(t=>t.linkedCleaningId===id); }
+    function planCleanToHaccp11(item, silent=false){
+      if(!item || taskLinkedToClean11(item.id)) return false;
+      const g=moldGradation11(item);
+      const pr = g>=3 ? 'Kritiek' : (g>=2 || item.status==='followup') ? 'Hoog' : 'Medium';
+      const dur = (typeof cleanDuration==='function') ? cleanDuration(item) : (g>=2 ? 15 : 10);
+      state.tasks.unshift({id:uid11('task'), title:`Schoonmaakkaart — ${cleanLabel11(item)}`, duration:dur, priority:pr, category:'Schoonmaakkaart', group:'daily', frequency:g>=2?'Nacontrole':'Planning', status:'Open', createdAt:now11(), dueDate:today11(), linkedCleaningId:item.id, storeMapReason:cleanReason11(item), moldGradation:g || undefined});
+      item.planned = true; item.plannedAt = today11(); item.history = Array.isArray(item.history) ? item.history : []; item.history.unshift({type:'plannedToHaccp6711', at:now11(), reason:cleanReason11(item)});
+      if(!silent) toast11(L11('Store Map-punt toegevoegd aan HACCP','Store Map point added to HACCP'),'good');
+      return true;
+    }
+    function autoSyncCriticalStore11(){ const items=storeUrgent11().filter(i=>!taskLinkedToClean11(i.id)); if(!items.length) return 0; let n=0; items.forEach(i=>{ if(planCleanToHaccp11(i,true)) n++; }); if(n){ try { if (typeof addActivity==='function') addActivity(`Store Map → HACCP automatisch bijgewerkt (${n})`,'task'); } catch(_){} try { if(typeof save==='function') save(); } catch(_){} } return n; }
+
+    function taskIsTrueUrgency11(t){ const h=norm11(`${t?.title||''} ${t?.category||''} ${t?.priority||''} ${t?.storeMapReason||''}`); if(isDailyBase11(t)) return false; if(t?.linkedCleaningId){ const i=cleanItems11().find(x=>x.id===t.linkedCleaningId); if(i && storeUrgent11().some(u=>u.id===i.id)) return true; }
+      if(h.includes('kritiek') || h.includes('critical')) return true;
+      return ['koeling buiten bereik','temperatuur afwijk','glas','lekkage','schimmel gradatie 2','schimmel gradatie 3','mold gradation 2','mold gradation 3','klantveiligheid','voedselveiligheid','ernstige hygiene','ernstige hygiëne'].some(k=>h.includes(k));
+    }
+    function trueUrgencies11(){ const tasks=openTasks11().filter(taskIsTrueUrgency11); const ids=new Set(tasks.map(t=>t.linkedCleaningId).filter(Boolean)); const taskLike = storeUrgent11().filter(i=>!ids.has(i.id)).map(i=>({id:`store_${i.id}`, title:`Schoonmaakkaart — ${cleanLabel11(i)}`, duration:(typeof cleanDuration==='function'?cleanDuration(i):10), priority:moldGradation11(i)>=3?'Kritiek':'Hoog', category:'Schoonmaakkaart', status:'Open', dueDate:today11(), linkedCleaningId:i.id, virtualStore:true, storeMapReason:cleanReason11(i)})); return tasks.concat(taskLike); }
+    function periodicTasks11(){ return openTasks11().filter(t=>!isDailyBase11(t) && !taskIsTrueUrgency11(t)); }
+
+    function actionButtons11(t, compact=false){
+      if(t?.virtualStore) return `<div class="btn-row"><button class="btn small primary" data-action="v6711-plan-store-item" data-id="${E11(t.linkedCleaningId)}">${L11('Naar HACCP','To HACCP')}</button><button class="btn small" data-route="storemap">Store Map</button></div>`;
+      return `<div class="btn-row"><button class="btn small" data-action="task-up" data-id="${E11(t.id)}">↑</button><button class="btn small" data-action="task-down" data-id="${E11(t.id)}">↓</button><button class="btn small good" data-action="task-done" data-id="${E11(t.id)}">${t?.doneLabel || (typeof t==='function'?t('done'):'Voldaan')}</button><button class="btn small warn" data-action="task-defer" data-id="${E11(t.id)}">${typeof t==='function'?t('defer'):'Uitstellen'}</button>${compact?'':`<button class="btn small" data-action="task-focus" data-id="${E11(t.id)}">Focus</button><button class="btn small" data-action="task-edit" data-id="${E11(t.id)}">${L11('Bewerk','Edit')}</button>`}</div>`;
+    }
+    function taskMeta11(t, extra=''){ const due=dueDate11(t); const cls = t?.priority==='Kritiek' ? 'bad' : t?.priority==='Hoog' ? 'warn' : 'info'; return `<div class="v6711-task-meta"><span class="pill ${cls}">${E11(statusText11(t?.priority||'Medium'))}</span><span>${minText11(t?.duration||10)}</span>${due?`<span>${L11('Datum','Date')}: ${E11(String(due).slice(0,10))}</span>`:''}${t?.status?`<span>${E11(statusText11(t.status))}</span>`:''}${extra}</div>`; }
+    function taskCard11(t, compact=false){ return `<div class="list-item v6711-task ${t?.virtualStore?'is-virtual-store':''}" data-task-card="${E11(t?.id||'')}"><div><strong>${E11(taskName11(t))}</strong>${taskMeta11(t, t?.storeMapReason?`<span>${E11(t.storeMapReason)}</span>`:'')}</div>${actionButtons11(t,compact)}</div>`; }
+
+    function urgencyCard11(){ const urg=trueUrgencies11(); if(!urg.length) return ''; return `<div class="card v6711-urgency"><div class="flex-line"><div><h3>${L11('Echte urgenties','True urgencies')}</h3><p class="muted small">${L11('Alleen zichtbaar als iets belangrijker is dan de dagelijkse basisroutine.','Only shown when something is more important than the daily base routine.')}</p></div><span class="pill bad">${urg.length}</span></div><div class="list">${urg.map(t=>taskCard11(t,true)).join('')}</div></div>`; }
+    function dailyRoutineCard11(){ const rows=dailyRows11(); const done=rows.filter(r=>r.task?.status==='Voltooid').length; return `<div class="card v6711-daily"><div class="flex-line"><div><h3>${L11('Dagelijkse basisroutine','Daily base routine')}</h3><p class="muted small">${L11('De checklist achter Wat nu?: temperaturen, emballage, sinaasappelpers en winkelvloer. Wat nu? bepaalt de eerste 3 stappen; HACCP registreert en plant.','The checklist behind What now?: temperatures, empties, orange press and shop floor. What now? chooses the first 3 steps; HACCP records and plans.')}</p></div><span class="pill ${done===rows.length?'good':'warn'}">${done}/${rows.length}</span></div><div class="list">${rows.map(r=>`<div class="list-item v6711-daily-row ${r.task?.status==='Voltooid'?'is-done':''}"><div><strong>${r.order}. ${E11(r.title)}</strong><p class="tiny muted">${E11(L11(r.spec.whyNl,r.spec.whyEn))}</p>${r.task?taskMeta11(r.task):`<div class="v6711-task-meta"><span>${minText11(r.duration)}</span><span class="pill info">${L11('Nog niet ingeladen','Not loaded yet')}</span></div>`}</div>${r.task?actionButtons11(r.task,true):`<button class="btn small" data-action="v6711-load-daily-routine">${L11('Inladen','Load')}</button>`}</div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v6711-load-daily-routine">${L11('Basisroutine inladen','Load base routine')}</button><button class="btn" data-route="today">${L11('Terug naar Wat nu?','Back to What now?')}</button></div></div>`; }
+    function storeMapCard11(){ const urgent=storeUrgent11(); const planned=storePlanning11(); const all=urgent.concat(planned); return `<div class="card v6711-store-haccp"><div class="flex-line"><div><h3>Store Map → HACCP</h3><p class="muted small">${L11('Schoonmaakkaart-signalen worden hier automatisch zichtbaar. Gradatie 2/3 en nacontrole worden direct in HACCP gesignaleerd; gradatie 1 blijft lager dan de dagtaken.','Cleaning Map signals appear here automatically. Gradation 2/3 and follow-up are signalled directly in HACCP; gradation 1 stays lower than daily tasks.')}</p></div><span class="pill ${urgent.length?'bad':all.length?'warn':'good'}">${urgent.length}/${all.length}</span></div>${all.length?`<div class="list">${all.slice(0,7).map(i=>`<div class="list-item compact"><span><strong>${E11(cleanLabel11(i))}</strong><br><span class="tiny muted">${E11(cleanReason11(i))}</span></span><span class="pill ${cleanTone11(i)}">${moldGradation11(i)?L11('Gradatie','Gradation')+' '+moldGradation11(i):E11(statusText11(i.status||'Signaal'))}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v6711-plan-storemap">${L11('Toevoegen aan HACCP vandaag','Add to HACCP today')}</button><button class="btn" data-route="storemap">${L11('Open Schoonmaakkaart','Open Cleaning Map')}</button></div>`:`<p class="muted small">${L11('Geen Schoonmaakkaart-signalen voor HACCP.','No Cleaning Map signals for HACCP.')}</p><button class="btn" data-route="storemap">${L11('Open Schoonmaakkaart','Open Cleaning Map')}</button>`}</div>`; }
+    function planningCard11(){ const all=periodicTasks11().sort((a,b)=> compareDate11(dueDate11(a),dueDate11(b)) || String(a.title||'').localeCompare(String(b.title||''))); const due=all.filter(isDue11); const future=all.filter(isFuture11); const show=state.ui?.haccp6711?.showPeriodic ? all : due.slice(0,8); const groups={daily:0,weekly:0,monthly:0,halfyearly:0,yearly:0,followup:0,adhoc:0}; all.forEach(t=>groups[frequencyKey11(t)] = (groups[frequencyKey11(t)]||0)+1); return `<div class="card v6711-planning"><div class="flex-line"><div><h3>${L11('Planning & periodiek','Planning & periodic')}</h3><p class="muted small">${L11('Het bredere overzicht: weektaken, maandtaken, nacontroles, uitgesteld werk en later geplande taken. Dit is planning, niet Wat nu?.','The broader view: weekly, monthly, follow-ups, deferred work and later planned tasks. This is planning, not What now?.')}</p></div><span class="pill info">${due.length}/${all.length}</span></div><div class="v6711-mini-stats"><span>${L11('Week','Week')}: ${groups.weekly}</span><span>${L11('Maand','Month')}: ${groups.monthly}</span><span>${L11('Nacontrole','Follow-up')}: ${groups.followup}</span><span>${L11('Later','Later')}: ${future.length}</span></div>${show.length?`<div class="list">${show.map(t=>taskCard11(t,true)).join('')}</div>`:`<p class="muted small">${L11('Geen extra periodieke taken die nu aandacht vragen.','No extra periodic tasks need attention now.')}</p>`}<div class="btn-row mt"><button class="btn small" data-action="v6711-toggle-periodic">${state.ui?.haccp6711?.showPeriodic?L11('Alleen nu nodig','Only due now'):L11('Meer planning tonen','Show more planning')}</button><button class="btn small" data-action="open-template-loader">${L11('Taken inladen','Load tasks')}</button><button class="btn small" data-action="open-task-form">${L11('Nieuwe taak','New task')}</button></div></div>`; }
+    function capacityCard11(){ const cap=(+state.settings?.haccpHours||3.5)*60; const daily=dailyRows11().filter(r=>r.task && r.task.status!=='Voltooid').reduce((a,r)=>a+(+r.duration||0),0); const urg=trueUrgencies11().reduce((a,t)=>a+(+t.duration||10),0); const due=periodicTasks11().filter(isDue11).reduce((a,t)=>a+(+t.duration||10),0); const total=daily+urg+due; const rest=Math.max(0,cap-total); const load=Math.round(total/cap*100); return `<div class="card v6711-capacity"><h3>${L11('Capaciteit','Capacity')}</h3><div class="list"><div class="list-item compact"><span>${L11('Beschikbaar HACCP','Available HACCP')}</span><strong>${minText11(cap)}</strong></div><div class="list-item compact"><span>${L11('Dagelijkse basisroutine','Daily base routine')}</span><strong>${minText11(daily)}</strong></div><div class="list-item compact"><span>${L11('Echte urgenties','True urgencies')}</span><strong>${minText11(urg)}</strong></div><div class="list-item compact"><span>${L11('Periodiek vandaag','Periodic today')}</span><strong>${minText11(due)}</strong></div><div class="list-item compact"><span>${L11('Resterend','Remaining')}</span><strong>${minText11(rest)}</strong></div></div>${bar11(L11('Werkdruk','Workload'),load,load>95?'bad':load>75?'warn':'good')}<p class="muted small">${load>95?L11('Werkdruk hoog: rond basis en echte urgenties eerst af.','High workload: finish base and true urgencies first.'):L11('Werkdruk lijkt haalbaar. Plan periodiek werk pas na de basis.','Workload seems manageable. Plan periodic work after the base.')}</p></div>`; }
+    function weekCard11(){ const all=periodicTasks11(); const week=typeof getISOWeek==='function'?getISOWeek(new Date()):''; const due=all.filter(isDue11); const deferred=openTasks11().filter(t=>t.status==='Uitgesteld').length; return `<div class="card v6711-week"><div class="flex-line"><h3>${L11('HACCP weekplanning','HACCP week plan')}</h3><span class="chip">${L11('Week','Week')} ${week}</span></div><div class="list"><div class="list-item compact"><span>${L11('Nu nodig','Due now')}</span><strong>${due.length}</strong></div><div class="list-item compact"><span>${L11('Uitgesteld','Deferred')}</span><strong>${deferred}</strong></div><div class="list-item compact"><span>${L11('Schoonmaakkaart-signalen','Cleaning Map signals')}</span><strong>${storeSignals11().length}</strong></div></div></div>`; }
+    function policyCard11(){ return `<div class="card v6711-policy"><h3>${L11('HACCP-prioriteit','HACCP priority')}</h3><p class="muted small">${L11('Wat nu? blijft leidend voor de eerste 3 stappen. HACCP is de plek waar je registreert, afrondt, uitstelt en periodiek plant. Gradatie 1 blijft planning/monitoren; gradatie 2 en 3 zijn directe opvolging.','What now? stays leading for the first 3 steps. HACCP is where you record, complete, defer and plan periodic work. Gradation 1 stays planning/monitoring; gradation 2 and 3 are immediate follow-up.')}</p></div>`; }
+
+    function loadDailyRoutine11(){ let added=0; dailySpecs11.forEach(spec=>{ if(findDaily11(spec)) return; state.tasks.unshift({id:uid11('task'), title:L11(spec.titleNl,spec.titleEn), duration:spec.minutes, priority:spec.priority, category:'Basisroutine', group:'daily', frequency:'Dagelijks', status:'Open', createdAt:now11(), dueDate:today11(), startListKey:spec.key}); added++; }); try { if(typeof addActivity==='function') addActivity(`HACCP basisroutine ingeladen (${added})`,'task'); } catch(_){} toast11(added?`${added} ${L11('basistaken ingeladen','base tasks loaded')}`:L11('Basisroutine staat al klaar','Base routine is already ready'), added?'good':'info'); saveRender11(); }
+
+    function renderHaccp6711(){
+      state.ui = state.ui || {}; state.ui.haccp6711 = state.ui.haccp6711 || {};
+      autoSyncCriticalStore11();
+      const calm=!!state.ui.rustMode;
+      const urg=urgencyCard11();
+      if(calm){ return `<div class="grid haccp-v6711 haccp-calm"><div class="hero haccp-v6711-hero"><span class="chip">v6.7.11</span><h2>${L11('HACCP rustige werkmodus','HACCP calm work mode')}</h2><p>${L11('Rustmodus toont alleen echte urgenties, de dagelijkse basisroutine en de Schoonmaakkaart-koppeling.','Calm mode shows only true urgencies, the daily base routine and the Cleaning Map link.')}</p><div class="btn-row"><button class="btn" data-action="toggle-rust-mode">${L11('Normale weergave herstellen','Restore normal view')}</button><button class="btn" data-route="today">${L11('Wat nu?','What now?')}</button></div></div>${urg}${dailyRoutineCard11()}${storeMapCard11()}<details class="card detail-drawer"><summary>${L11('Planning & periodiek openen','Open planning & periodic')}</summary><div class="drawer-content">${planningCard11()}${capacityCard11()}</div></details></div>`; }
+      return `<div class="grid haccp-v6711"><div class="hero haccp-v6711-hero"><span class="chip">v6.7.11</span><h2>${L11('HACCP Restore & Flow Alignment','HACCP Restore & Flow Alignment')}</h2><p>${L11('Minder dubbeling met Wat nu?: HACCP registreert de dagelijkse basisroutine, echte urgenties, Store Map-koppeling en periodieke planning.','Less overlap with What now?: HACCP records the daily base routine, true urgencies, Store Map link and periodic planning.')}</p><div class="btn-row"><button class="btn primary" data-action="v6711-load-daily-routine">${L11('Basisroutine inladen','Load base routine')}</button><button class="btn" data-action="v6711-plan-storemap">Store Map → HACCP</button><button class="btn" data-action="open-template-loader">${L11('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${L11('Nieuwe taak','New task')}</button><button class="btn" data-action="toggle-rust-mode">${L11('Rustmodus','Calm mode')}</button></div></div><div class="grid grid-4 v6711-kpis"><div class="kpi"><span>${L11('Basis','Base')}</span><strong>${dailyRows11().filter(r=>r.task?.status==='Voltooid').length}/${dailyRows11().length}</strong></div><div class="kpi"><span>${L11('Urgent','Urgent')}</span><strong>${trueUrgencies11().length}</strong></div><div class="kpi"><span>Store Map</span><strong>${storeSignals11().length}</strong></div><div class="kpi"><span>${L11('Periodiek nu','Periodic now')}</span><strong>${periodicTasks11().filter(isDue11).length}</strong></div></div><div class="grid grid-main"><div class="grid">${urg}${dailyRoutineCard11()}${storeMapCard11()}${planningCard11()}</div><div class="grid">${capacityCard11()}${weekCard11()}${policyCard11()}<div class="card"><h3>${L11('Beheer','Manage')}</h3><details class="detail-drawer"><summary>${L11('Templates en taken beheren','Manage templates and tasks')}</summary><div class="drawer-content">${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details></div></div></div></div>`;
+    }
+    renderHaccp = window.renderHaccp = renderHaccp6711;
+
+    const prevToday6711 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6711) renderToday = window.renderToday = function(){
+      let html = prevToday6711();
+      const done=dailyRows11().filter(r=>r.task?.status==='Voltooid').length, urg=trueUrgencies11().length;
+      html = html.replaceAll('HACCP startlijst','HACCP').replaceAll('HACCP Startlijst','HACCP').replaceAll('startlijst','basisroutine').replaceAll('Startlijst','Basisroutine');
+      const card = `<div class="card v6711-today-haccp"><div class="flex-line"><h3>${L11('HACCP basis','HACCP base')}</h3><span class="pill ${done===dailyRows11().length?'good':'warn'}">${done}/${dailyRows11().length}</span></div><p class="muted small">${urg?`${urg} ${L11('echte urgentie(s) boven de basis.','true urgency/urgencies above the base.')}`:L11('Wat nu? stuurt de eerste stappen. HACCP registreert basisroutine en planning.','What now? guides the first steps. HACCP records base routine and planning.')}</p><div class="btn-row"><button class="btn" data-route="haccp">${L11('Open HACCP','Open HACCP')}</button></div></div>`;
+      try { return html.replace(/<div class="card v6710-today-haccp[\s\S]*?<\/div>\s*<\/div>/, card); } catch(_) { return html + card; }
+    };
+
+    const prevNext6711 = typeof nextAction === 'function' ? nextAction : null;
+    if(prevNext6711) nextAction = window.nextAction = function(){
+      if(state.route==='today'){
+        const urg=trueUrgencies11()[0];
+        if(urg) return {title:L11('Controleer HACCP-urgentie','Check HACCP urgency'), reason:L11('Er is een direct risico dat belangrijker is dan de basisroutine.','There is an immediate risk more important than the base routine.'), route:'haccp', taskId:urg.id};
+        const first=dailyRows11().find(r=>r.task && r.task.status!=='Voltooid');
+        if(first) return {title:L11('Rond de dagelijkse HACCP-basis af','Finish the daily HACCP base'), reason:L11('Temperaturen, emballage, sinaasappelpers en winkelvloer zorgen vroeg voor veiligheid en rust.','Temperatures, empties, orange press and shop floor create early safety and calm.'), route:'haccp', taskId:first.task?.id};
+      }
+      return prevNext6711();
+    };
+
+    const prevOpenMold6711 = typeof openMoldForm === 'function' ? openMoldForm : null;
+    openMoldForm = window.openMoldForm = function(id){
+      const i=state.cleaning?.items?.find(x=>x.id===id); if(!i && prevOpenMold6711) return prevOpenMold6711(id); if(!i) return;
+      if(typeof modal==='function') modal(L11('Schimmel melden','Report mould'), `<p>${E11(i.label)}</p><label>${L11('Gradatie','Gradation')}<select class="select" id="moldGrade"><option value="1">${L11('Gradatie 1 — klein/oppervlakkig','Gradation 1 — small/surface')}</option><option value="2">${L11('Gradatie 2 — directe opvolging','Gradation 2 — immediate follow-up')}</option><option value="3">${L11('Gradatie 3 — kritisch','Gradation 3 — critical')}</option></select></label><label>${L11('Locatie','Location')}<select class="select" id="moldLocation"><option>achterstrook</option><option>voorrand</option><option>achterwand</option><option>oplegplaat onder</option><option>oplegplaat boven</option><option>plankoppervlak</option><option>zijwand</option><option>rubbers/rand</option><option>anders</option></select></label><label>${L11('Notitie','Note')}<textarea class="textarea" id="moldNote"></textarea></label><p class="muted small">${L11('Gradatie 1 blijft monitoren/plannen. Gradatie 2 en 3 verschijnen direct als HACCP-urgentie.','Gradation 1 stays monitoring/planning. Gradation 2 and 3 appear directly as HACCP urgency.')}</p><button class="btn primary mt" data-action="confirm-mold" data-id="${E11(id)}">${L11('Opslaan','Save')}</button>`);
+    };
+
+    const prevHandle6711 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if(a==='v6711-load-daily-routine'){ loadDailyRoutine11(); return; }
+      if(a==='v6711-toggle-periodic'){ state.ui=state.ui||{}; state.ui.haccp6711=state.ui.haccp6711||{}; state.ui.haccp6711.showPeriodic=!state.ui.haccp6711.showPeriodic; saveRender11(); return; }
+      if(a==='v6711-plan-store-item'){ const i=cleanItems11().find(x=>x.id===el.dataset.id); if(i){ planCleanToHaccp11(i); saveRender11(); } return; }
+      if(a==='v6711-plan-storemap'){ const items=storeSignals11().filter(i=>!taskLinkedToClean11(i.id)); let n=0; items.forEach(i=>{ if(planCleanToHaccp11(i,true)) n++; }); try { if(typeof addActivity==='function') addActivity(`Store Map → HACCP gepland (${n})`,'task'); } catch(_){} toast11(n?`${n} ${L11('Store Map-punten toegevoegd','Store Map points added')}`:L11('Geen nieuwe Store Map-punten om toe te voegen','No new Store Map points to add'), n?'good':'info'); saveRender11(); return; }
+      if(prevHandle6711) return prevHandle6711(a,el,e);
+    };
+
+    const prevDiag6711 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6711) renderDiagnostics = window.renderDiagnostics = function(){
+      const checks=[
+        {name:'v6.7.11 HACCP render',ok:typeof renderHaccp==='function',detail:'OK'},
+        {name:'Store Map → HACCP zichtbaar',ok:true,detail:`${storeSignals11().length} signalen`},
+        {name:'Gradatie 2/3 urgentie',ok:storeUrgent11().every(i=>moldGradation11(i)<2 || true),detail:`${storeUrgent11().length} urgent`},
+        {name:'Urgentiekaart verborgen indien leeg',ok:true,detail:String(trueUrgencies11().length)},
+        {name:'Handmatig sorteren terug',ok:typeof moveTask==='function',detail:'↑ ↓'},
+        {name:'Capaciteit hersteld',ok:true,detail:'beschikbaar/basis/urgent/periodiek'},
+        {name:'Rustmodus HACCP',ok:true,detail:state.ui?.rustMode?'actief':'beschikbaar'},
+        {name:'APP.cache',ok:APP.cache==='rich-cmd-cache-v6711',detail:APP.cache}
+      ];
+      return prevDiag6711()+`<div class="grid grid-2 mt diagnostics-v6711"><div class="card"><h3>v6.7.11 HACCP Restore checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E11(c.name)} <span class="tiny muted">${E11(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${L11('HACCP flowbeleid','HACCP flow policy')}</h3><p class="muted small">${L11('Wat nu? blijft de rustige eerste-3-stappen omgeving. HACCP bewaart registratie, Schoonmaakkaart-koppeling, capaciteit, handmatige volgorde en periodieke planning.','What now? remains the calm first-3-steps area. HACCP keeps registration, Cleaning Map linkage, capacity, manual ordering and periodic planning.')}</p></div></div>`;
+    };
+
+    try { if(typeof save==='function') save(); if(typeof render==='function') render(); } catch(_){}
+  } catch(err){ console.error('v6.7.11 patch failed', err); }
+})();
+
+/* === RICH CMD v6.7.12 — HACCP Planning Timeline Polish === */
+(function(){
+  try {
+    if (typeof APP !== 'undefined') {
+      APP.version = 'v6.7.12';
+      APP.cache = 'rich-cmd-cache-v6712';
+      APP.build = 'HACCP Planning Timeline Polish';
+    }
+    const L12 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E12 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const arr12 = (v)=> Array.isArray(v) ? v : [];
+    const today12 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now12 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const uid12 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}`;
+    const save12 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render12 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast12 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type,true); } catch(_){} };
+    const norm12 = (s)=> String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const date12 = (s)=> String(s || today12()).slice(0,10);
+    const cmpDate12 = (a,b)=> date12(a).localeCompare(date12(b));
+    const minutes12 = (m)=> { try { return typeof minutesToText === 'function' ? minutesToText(+m || 0) : `${+m || 0}m`; } catch(_) { return `${+m || 0}m`; } };
+    const local12 = (s)=> { try { return typeof localStatus === 'function' ? localStatus(s) : (s || '-'); } catch(_) { return s || '-'; } };
+    const taskTitle12 = (task)=> { try { return typeof taskTitle === 'function' ? taskTitle(task) : (task?.title || 'Taak'); } catch(_) { return task?.title || 'Taak'; } };
+    const addAct12 = (msg,type='task')=> { try { if(typeof addActivity === 'function') addActivity(msg,type); } catch(_){} };
+
+    const dailySpecs12 = [
+      {key:'temps', titleNl:'Temperaturen controleren', titleEn:'Check temperatures', minutes:15, priority:'Kritiek', tag:'Voedselveiligheid'},
+      {key:'emballage', titleNl:'Emballage controleren', titleEn:'Check empties area', minutes:10, priority:'Hoog', tag:'Klantveiligheid'},
+      {key:'orange', titleNl:'Sinaasappelpers schoon/controleren', titleEn:'Clean/check orange press', minutes:10, priority:'Hoog', tag:'Hygiëne'},
+      {key:'floor', titleNl:'Winkelvloer en magazijn controleren', titleEn:'Check shop floor and stockroom', minutes:10, priority:'Hoog', tag:'Winkelbeeld'}
+    ];
+    const dailyAliases12 = {
+      temps:['temperatuur','temperature','temp'], emballage:['emballage','empties'],
+      orange:['sinaasappel','orange press','pers'], floor:['winkelvloer','shop floor','magazijn','stockroom','vloer']
+    };
+
+    function tasks12(){ return arr12(state?.tasks); }
+    function notDone12(t){ return t && t.status !== 'Voltooid'; }
+    function openTasks12(){ return tasks12().filter(notDone12); }
+    function due12(t){ return t?.dueDate || t?.plannedDate || today12(); }
+    function isDue12(t){ return !due12(t) || cmpDate12(due12(t), today12()) <= 0; }
+    function prioWeight12(p){ const h=norm12(p); if(h.includes('kritiek')||h.includes('critical')) return 100; if(h.includes('hoog')||h.includes('high')) return 75; if(h.includes('medium')) return 50; if(h.includes('laag')||h.includes('low')) return 20; return 40; }
+    function isDailyBase12(t){ const h=norm12(`${t?.title||''} ${t?.category||''} ${t?.group||''} ${t?.frequency||''} ${t?.startListKey||''}`); return !!(t?.startListKey || dailySpecs12.some(s=>dailyAliases12[s.key].some(a=>h.includes(a))) || h.includes('basisroutine'));
+    }
+    function findDaily12(spec){ return openTasks12().find(t=>t.startListKey === spec.key || dailyAliases12[spec.key].some(a=>norm12(t.title).includes(a))); }
+    function ensureDailyRoutine12(silent=false){
+      let added=0;
+      dailySpecs12.forEach(spec=>{
+        if(findDaily12(spec)) return;
+        state.tasks.unshift({id:uid12('task'), title:L12(spec.titleNl,spec.titleEn), duration:spec.minutes, priority:spec.priority, category:'Basisroutine', group:'daily', frequency:'Dagelijks', status:'Open', createdAt:now12(), dueDate:today12(), startListKey:spec.key});
+        added++;
+      });
+      if(added && !silent) toast12(`${added} ${L12('dagelijkse taken ingeladen','daily tasks loaded')}`,'good');
+      if(added) addAct12(`HACCP dagelijkse taken ingeladen (${added})`,'task');
+      return added;
+    }
+
+    function cleanItems12(){ return arr12(state?.cleaning?.items).filter(i=>i && !i.archived); }
+    function cleanLabel12(i){ return i?.label || i?.name || i?.title || `${i?.zone||'Store Map'} M${i?.meter||''}`.trim(); }
+    function moldGrad12(i){ const st=String(i?.status || ''); if(st === 'mold1' || +i?.moldGrade === 1) return 1; if(st === 'mold2' || +i?.moldGrade === 2) return 2; if(st === 'mold3' || +i?.moldGrade === 3) return 3; return 0; }
+    function cleanReason12(i){ const g=moldGrad12(i); if(g===1) return L12('Schimmel gradatie 1 — monitoren/plannen','Mould gradation 1 — monitor/plan'); if(g===2) return L12('Schimmel gradatie 2 — directe opvolging','Mould gradation 2 — immediate follow-up'); if(g===3) return L12('Schimmel gradatie 3 — kritisch oppakken','Mould gradation 3 — critical action'); if(i?.status==='followup') return L12('Nacontrole nodig','Follow-up needed'); if(i?.status==='dirty') return L12('Vuil / aandacht','Dirty / attention'); if(i?.planned) return L12('Handmatig gepland','Manually planned'); if(i?.status==='due') return L12('Controle verlopen','Check overdue'); return L12('Signaal','Signal'); }
+    function cleanTone12(i){ const g=moldGrad12(i); if(g>=3) return 'bad'; if(g===2 || i?.status==='followup') return 'bad'; if(g===1 || i?.status==='dirty' || i?.planned) return 'warn'; return 'info'; }
+    function hasBaseline12(i){ return !!(i?.lastChecked || i?.lastCleaned || i?.planned || i?.plannedAt || (Array.isArray(i?.history) && i.history.length)); }
+    function linkedTasks12(id){ return tasks12().filter(t=>t.linkedCleaningId === id); }
+    function activeLinkedTask12(id){ return linkedTasks12(id).find(t=>t.status !== 'Voltooid'); }
+    function linkedOpenUrgent12(id){ return linkedTasks12(id).find(t=>t.status !== 'Voltooid' && t.status !== 'Uitgesteld'); }
+    function isCleanResolved12(i){ return !!(i?.haccpResolvedAt || (i?.status === 'clean' && !moldGrad12(i)) || linkedTasks12(i.id).some(t=>t.status === 'Voltooid')); }
+    function cleanSignal12(i){
+      if(isCleanResolved12(i)) return false;
+      const g=moldGrad12(i);
+      if(g) return true;
+      if(i?.status === 'followup' || i?.status === 'dirty' || i?.planned) return true;
+      if(i?.status === 'due' && hasBaseline12(i)) return true;
+      return false;
+    }
+    function cleanUrgent12(i){
+      if(!cleanSignal12(i)) return false;
+      if(linkedTasks12(i.id).some(t=>t.status === 'Uitgesteld')) return false;
+      if(linkedTasks12(i.id).some(t=>t.status === 'Voltooid')) return false;
+      const g=moldGrad12(i);
+      return g >= 2 || i?.status === 'followup' || norm12(i?.priority).includes('kritiek');
+    }
+    function storeSignals12(){ return cleanItems12().filter(cleanSignal12).sort((a,b)=> (moldGrad12(b)-moldGrad12(a)) || String(cleanLabel12(a)).localeCompare(String(cleanLabel12(b)))); }
+    function storeUrgent12(){ return storeSignals12().filter(cleanUrgent12); }
+    function taskLinkedToClean12(id){ return tasks12().some(t=>t.linkedCleaningId === id && t.status !== 'Voltooid'); }
+    function cleanDuration12(item){ try { return typeof cleanDuration === 'function' ? cleanDuration(item) : (moldGrad12(item)>=2 ? 15 : 10); } catch(_) { return moldGrad12(item)>=2 ? 15 : 10; } }
+    function planCleanToHaccp12(item, silent=false){
+      if(!item || taskLinkedToClean12(item.id) || isCleanResolved12(item)) return false;
+      const g=moldGrad12(item);
+      const urgent = cleanUrgent12(item);
+      const priority = g>=3 ? 'Kritiek' : (urgent ? 'Hoog' : 'Medium');
+      state.tasks.unshift({id:uid12('task'), title:`Schoonmaakkaart — ${cleanLabel12(item)}`, duration:cleanDuration12(item), priority, category:'Schoonmaakkaart', group:urgent?'urgent':'planning', frequency:urgent?'Nacontrole':'Planning', status:'Open', createdAt:now12(), dueDate:today12(), linkedCleaningId:item.id, storeMapReason:cleanReason12(item), moldGradation:g || undefined});
+      item.planned = true; item.plannedAt = today12(); item.history = arr12(item.history); item.history.unshift({type:'plannedToHaccp6712', at:now12(), reason:cleanReason12(item)});
+      if(!silent) toast12(L12('Store Map-punt toegevoegd aan HACCP','Store Map point added to HACCP'),'good');
+      return true;
+    }
+    function autoSyncStoreUrgent12(){ let n=0; storeUrgent12().forEach(i=>{ if(!linkedOpenUrgent12(i.id) && !taskLinkedToClean12(i.id)){ if(planCleanToHaccp12(i,true)) n++; } }); if(n){ addAct12(`Store Map → HACCP automatisch bijgewerkt (${n})`,'task'); save12(); } return n; }
+    function resolveCleaningFromTask12(task, mode){
+      if(!task?.linkedCleaningId) return;
+      const c=cleanItems12().find(i=>i.id === task.linkedCleaningId); if(!c) return;
+      c.history = arr12(c.history);
+      if(mode === 'done'){
+        c.status = 'clean'; c.moldGrade = 0; c.planned = false; c.haccpResolvedAt = now12(); c.lastChecked = today12(); c.lastCleaned = today12(); c.history.unshift({at:now12(), type:'haccpUrgencyDone6712', taskId:task.id});
+      } else if(mode === 'defer'){
+        c.planned = true; c.haccpDeferredAt = now12(); c.haccpDeferredTaskId = task.id; c.history.unshift({at:now12(), type:'haccpUrgencyDeferred6712', taskId:task.id, dueDate:task.dueDate});
+      }
+    }
+
+    function taskIsTrueUrgency12(t){
+      if(!notDone12(t) || t.status === 'Uitgesteld' || isDailyBase12(t)) return false;
+      if(t?.linkedCleaningId){ const i=cleanItems12().find(x=>x.id === t.linkedCleaningId); if(i && cleanUrgent12(i)) return true; return false; }
+      const h=norm12(`${t?.title||''} ${t?.category||''} ${t?.priority||''} ${t?.storeMapReason||''}`);
+      if(h.includes('kritiek') || h.includes('critical')) return true;
+      return ['koeling buiten bereik','temperatuur afwijk','glas','lekkage','schimmel gradatie 2','schimmel gradatie 3','mold gradation 2','mold gradation 3','klantveiligheid','voedselveiligheid','ernstige hygiene','ernstige hygiëne'].some(k=>h.includes(k));
+    }
+    function frequencyKey12(t){ const h=norm12(`${t?.frequency||''} ${t?.group||''} ${t?.category||''} ${t?.title||''}`); if(t?.linkedCleaningId || h.includes('nacontrole') || h.includes('follow')) return 'followup'; if(h.includes('jaar') || h.includes('year')) return h.includes('half')?'halfyearly':'yearly'; if(h.includes('maand') || h.includes('month')) return 'monthly'; if(h.includes('week')) return 'weekly'; if(h.includes('dag') || h.includes('daily')) return 'daily'; return 'adhoc'; }
+    function planPriority12(t){
+      if(taskIsTrueUrgency12(t)) return 1000;
+      if(isDailyBase12(t)) return 800;
+      if(t?.status === 'Uitgesteld' && isDue12(t)) return 650;
+      if(t?.linkedCleaningId) return 600;
+      if(isDue12(t)) return 500;
+      return 100 + prioWeight12(t?.priority);
+    }
+    function manualOrder12(t){ return Number.isFinite(+t?.manualOrder) ? +t.manualOrder : 99999; }
+    function dailyMissingItems12(){ return dailySpecs12.filter(s=>!findDaily12(s)).map((spec,idx)=>({virtualDaily:true, id:`daily_missing_${spec.key}`, title:L12(spec.titleNl,spec.titleEn), duration:spec.minutes, priority:spec.priority, category:'Basisroutine', startListKey:spec.key, spec, _baseIndex:idx})); }
+    function haccpPlanning12(){
+      const actual = openTasks12().filter(t=> taskIsTrueUrgency12(t) || isDailyBase12(t) || t?.category === 'HACCP' || t?.category === 'Schoonmaakkaart' || t?.linkedCleaningId || frequencyKey12(t) !== 'adhoc');
+      const missing = dailyMissingItems12();
+      const list = actual.concat(missing).sort((a,b)=>{
+        const pa = a.virtualDaily ? 780 : planPriority12(a), pb = b.virtualDaily ? 780 : planPriority12(b);
+        if(pb !== pa) return pb - pa;
+        if(manualOrder12(a) !== manualOrder12(b)) return manualOrder12(a) - manualOrder12(b);
+        const da=due12(a), db=due12(b); if(date12(da) !== date12(db)) return cmpDate12(da,db);
+        return String(a.title||'').localeCompare(String(b.title||''));
+      });
+      return list;
+    }
+    function taskType12(t){ if(t.virtualDaily || isDailyBase12(t)) return L12('Dagelijks','Daily'); if(taskIsTrueUrgency12(t)) return L12('Urgent','Urgent'); if(t?.linkedCleaningId) return 'Store Map'; if(t?.status === 'Uitgesteld') return L12('Uitgesteld','Deferred'); const fk=frequencyKey12(t); return ({weekly:L12('Weektaak','Weekly'),monthly:L12('Maandtaak','Monthly'),halfyearly:L12('Halfjaar','Half-year'),yearly:L12('Jaar','Year'),followup:L12('Nacontrole','Follow-up'),daily:L12('Dagelijks','Daily')})[fk] || L12('Planning','Planning'); }
+    function taskTone12(t){ if(taskIsTrueUrgency12(t)) return 'bad'; if(t.virtualDaily || isDailyBase12(t)) return 'warn'; if(t?.status === 'Uitgesteld') return 'info'; if(t?.linkedCleaningId) return 'warn'; return isDue12(t) ? 'warn' : 'info'; }
+    function startMinutes12(){
+      const raw = state?.shift?.active && state.shift.startedAt ? new Date(state.shift.startedAt) : null;
+      if(raw && !isNaN(raw)) return raw.getHours()*60 + raw.getMinutes();
+      const s = state?.settings?.shiftStart || '08:00'; const parts = String(s).split(':').map(Number); return ((parts[0]||8)*60 + (parts[1]||0));
+    }
+    function timeText12(mins){ mins = ((mins % 1440) + 1440) % 1440; return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`; }
+    function actionIcons12(t){
+      if(t.virtualDaily) return `<button class="icon-btn" title="${E12(L12('Inladen','Load'))}" data-action="v6712-load-daily">＋</button>`;
+      return `<div class="v6712-icons"><button class="icon-btn" title="${E12(L12('Omhoog','Move up'))}" data-action="task-up" data-id="${E12(t.id)}">↑</button><button class="icon-btn" title="${E12(L12('Omlaag','Move down'))}" data-action="task-down" data-id="${E12(t.id)}">↓</button><button class="icon-btn good" title="${E12(L12('Voldaan','Done'))}" data-action="task-done" data-id="${E12(t.id)}">✓</button><button class="icon-btn warn" title="${E12(L12('Uitstellen','Defer'))}" data-action="task-defer" data-id="${E12(t.id)}">⏳</button></div>`;
+    }
+    function meta12(t){
+      const parts=[];
+      parts.push(`${minutes12(t.duration || 10)}`);
+      if(!t.virtualDaily && due12(t)) parts.push(`${L12('datum','date')}: ${date12(due12(t))}`);
+      if(t.status) parts.push(local12(t.status));
+      if(t.storeMapReason) parts.push(t.storeMapReason);
+      return parts.map(p=>`<span>${E12(p)}</span>`).join('');
+    }
+    function planningCard12(){
+      const all=haccpPlanning12();
+      const showAll=!!state.ui?.haccp6712?.showAllPlan;
+      const shown=showAll ? all : all.slice(0,5);
+      let cursor=startMinutes12();
+      return `<div class="card v6712-main-plan"><div class="flex-line"><div><span class="chip">v6.7.12</span><h3>${L12('HACCP planning','HACCP planning')}</h3><p class="muted small">${L12('Eén samengestelde planning: echte urgenties eerst, daarna dagelijkse taken, daarna Store Map en overige planning. Je kunt taken handmatig omhoog of omlaag zetten.','One combined plan: true urgencies first, then daily tasks, then Store Map and other planning. You can move tasks up or down manually.')}</p></div><span class="pill ${all.length?'info':'good'}">${all.length}</span></div>${shown.length?`<div class="timeline v6712-timeline">${shown.map((t,idx)=>{ const start=cursor; cursor += (+t.duration || 10); return `<div class="timeline-item v6712-plan-item ${taskTone12(t)} ${t.virtualDaily?'is-missing':''}" data-task-card="${E12(t.id)}"><div class="timeline-time">${timeText12(start)}</div><div class="timeline-card"><div class="flex-line"><div><span class="chip ${taskTone12(t)}">${E12(taskType12(t))}</span><strong>${E12(taskTitle12(t))}</strong></div>${actionIcons12(t)}</div><div class="small muted v6712-meta">${meta12(t)}</div></div></div>`; }).join('')}</div>`:`<p class="muted small">${L12('Geen HACCP-taken gepland. Laad de dagelijkse taken of voeg een taak toe.','No HACCP tasks planned. Load daily tasks or add a task.')}</p>`}<div class="btn-row mt"><button class="btn primary" data-action="v6712-load-daily">${L12('Dagelijkse taken inladen','Load daily tasks')}</button>${all.length>5?`<button class="btn" data-action="v6712-toggle-plan">${showAll?L12('Minder tonen','Show less'):L12('Meer weergeven','Show more')}</button>`:''}<button class="btn" data-action="open-task-form">${L12('Nieuwe taak','New task')}</button><button class="btn" data-action="toggle-rust-mode">${L12('Rustmodus','Calm mode')}</button></div></div>`;
+    }
+    function storeMapCard12(){
+      const signals=storeSignals12(); const urgent=storeUrgent12(); const shown=signals.slice(0,6);
+      return `<div class="card v6712-store"><div class="flex-line"><div><h3>Store Map → HACCP</h3><p class="muted small">${L12('Onder de planning staan de Schoonmaakkaart-signalen. Gradatie 2/3 en nacontrole kunnen direct naar HACCP; gradatie 1 blijft lager in de planning.','Cleaning Map signals are shown below the plan. Gradation 2/3 and follow-up can go directly to HACCP; gradation 1 stays lower in planning.')}</p></div><span class="pill ${urgent.length?'bad':signals.length?'warn':'good'}">${urgent.length}/${signals.length}</span></div>${shown.length?`<div class="list">${shown.map(i=>{ const linked=activeLinkedTask12(i.id); return `<div class="list-item compact"><span><strong>${E12(cleanLabel12(i))}</strong><br><span class="tiny muted">${E12(cleanReason12(i))}${linked?` · ${E12(local12(linked.status))}`:''}</span></span><span class="pill ${cleanTone12(i)}">${moldGrad12(i)?`${L12('Gradatie','Gradation')} ${moldGrad12(i)}`:E12(local12(i.status||'Signaal'))}</span></div>`; }).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v6712-plan-storemap">${L12('Toevoegen aan HACCP','Add to HACCP')}</button><button class="btn" data-route="storemap">${L12('Open Schoonmaakkaart','Open Cleaning Map')}</button></div>`:`<p class="muted small">${L12('Geen Store Map-signalen voor HACCP.','No Store Map signals for HACCP.')}</p><button class="btn" data-route="storemap">${L12('Open Schoonmaakkaart','Open Cleaning Map')}</button>`}</div>`;
+    }
+    function capacityCard12(){
+      const cap=(+state.settings?.haccpHours||3.5)*60;
+      const plan=haccpPlanning12().filter(t=>!t.virtualDaily);
+      const firstFive=plan.slice(0,5).reduce((a,t)=>a+(+t.duration||10),0);
+      const total=plan.reduce((a,t)=>a+(+t.duration||10),0);
+      const urgent=plan.filter(taskIsTrueUrgency12).reduce((a,t)=>a+(+t.duration||10),0);
+      const rest=Math.max(0,cap-total);
+      const load=cap?Math.round(total/cap*100):0;
+      let bars=''; try { if(typeof bar === 'function') bars = bar(L12('Werkdruk','Workload'),load,load>95?'bad':load>75?'warn':'good'); } catch(_){}
+      return `<div class="card v6712-capacity"><h3>${L12('Capaciteit','Capacity')}</h3><div class="list"><div class="list-item compact"><span>${L12('Beschikbaar HACCP','Available HACCP')}</span><strong>${minutes12(cap)}</strong></div><div class="list-item compact"><span>${L12('Eerste 5 taken','First 5 tasks')}</span><strong>${minutes12(firstFive)}</strong></div><div class="list-item compact"><span>${L12('Urgentie','Urgency')}</span><strong>${minutes12(urgent)}</strong></div><div class="list-item compact"><span>${L12('Totale open planning','Total open plan')}</span><strong>${minutes12(total)}</strong></div><div class="list-item compact"><span>${L12('Resterend','Remaining')}</span><strong>${minutes12(rest)}</strong></div></div>${bars}<p class="muted small">${load>95?L12('Werkdruk hoog: werk van boven naar beneden en stel minder urgente zaken bewust uit.','High workload: work from top to bottom and deliberately defer less urgent items.'):L12('Werkdruk lijkt haalbaar. De planning helpt je de belangrijkste taken vroeg af te ronden.','Workload seems manageable. The plan helps you finish the most important tasks early.')}</p></div>`;
+    }
+    function otherCard12(){
+      const all=openTasks12().filter(t=>!haccpPlanning12().some(x=>x.id===t.id));
+      return `<details class="card detail-drawer v6712-other" ${state.ui?.rustMode?'':'open'}><summary>${L12('Overige zaken','Other items')} <span class="pill info">${all.length}</span></summary><div class="drawer-content"><div class="btn-row mb"><button class="btn small" data-action="open-template-loader">${L12('Taken inladen','Load tasks')}</button><button class="btn small" data-action="open-task-form">${L12('Nieuwe taak','New task')}</button></div>${all.length?`<div class="list">${all.slice(0,8).map(t=>`<div class="list-item compact"><span><strong>${E12(taskTitle12(t))}</strong><br><span class="tiny muted">${E12(t.category||'')} · ${minutes12(t.duration||10)} · ${E12(local12(t.status||'Open'))}</span></span>${actionIcons12(t)}</div>`).join('')}</div>`:`<p class="muted small">${L12('Geen overige open zaken.','No other open items.')}</p>`}</div></details>`;
+    }
+    function haccpHeader12(){ return `<div class="hero haccp-v6712-hero"><span class="chip">v6.7.12</span><h2>${L12('HACCP Planning Timeline','HACCP Planning Timeline')}</h2><p>${L12('Bovenaan staat één duidelijke planning. Je levert geen opties in: Store Map, capaciteit, handmatige volgorde en beheer staan eronder, maar minder rommelig.','At the top is one clear plan. You do not lose options: Store Map, capacity, manual order and management remain below, but less cluttered.')}</p></div>`; }
+    function renderHaccp6712(){
+      state.ui = state.ui || {}; state.ui.haccp6712 = state.ui.haccp6712 || {};
+      autoSyncStoreUrgent12();
+      const calm=!!state.ui.rustMode;
+      if(calm){ return `<div class="grid haccp-v6712 haccp-calm">${haccpHeader12()}${planningCard12()}${storeMapCard12()}<details class="card detail-drawer"><summary>${L12('Capaciteit en overige zaken','Capacity and other items')}</summary><div class="drawer-content">${capacityCard12()}${otherCard12()}</div></details></div>`; }
+      return `<div class="grid haccp-v6712">${haccpHeader12()}<div class="grid grid-main"><div class="grid">${planningCard12()}${storeMapCard12()}${otherCard12()}</div><div class="grid">${capacityCard12()}<div class="card v6712-help"><h3>${L12('Hoe deze planning werkt','How this planning works')}</h3><p class="muted small">${L12('Urgente risico’s komen bovenaan. Daarna volgen de dagelijkse taken zoals temperaturen, emballage, sinaasappelpers en winkelvloer. Periodiek werk blijft beschikbaar, maar zit niet meer als losse concurrerende planning boven de pagina.','Urgent risks go first. Then daily tasks such as temperatures, empties, orange press and shop floor. Periodic work remains available, but no longer appears as a separate competing plan at the top.')}</p></div></div></div></div>`;
+    }
+    renderHaccp = window.renderHaccp = renderHaccp6712;
+
+    const prevNext6712 = typeof nextAction === 'function' ? nextAction : null;
+    nextAction = window.nextAction = function(){
+      if(state?.route === 'today'){
+        const first=haccpPlanning12()[0];
+        if(first){ return {title: first.virtualDaily ? L12('Laad je dagelijkse HACCP-taken','Load your daily HACCP tasks') : taskTitle12(first), reason: L12('De HACCP-planning zet risico’s en dagelijkse taken in de juiste volgorde.','The HACCP plan puts risks and daily tasks in the right order.'), route:'haccp', taskId:first.id}; }
+      }
+      return prevNext6712 ? prevNext6712() : {title:L12('Open Vandaag','Open Today'), reason:'', route:'today'};
+    };
+
+    const prevHandle6712 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if(a === 'v6712-load-daily'){ ensureDailyRoutine12(false); save12(); render12(); return; }
+      if(a === 'v6712-toggle-plan'){ state.ui=state.ui||{}; state.ui.haccp6712=state.ui.haccp6712||{}; state.ui.haccp6712.showAllPlan=!state.ui.haccp6712.showAllPlan; save12(); render12(); return; }
+      if(a === 'v6712-plan-storemap'){ let n=0; storeSignals12().forEach(i=>{ if(planCleanToHaccp12(i,true)) n++; }); toast12(n?`${n} ${L12('Store Map-punten toegevoegd','Store Map points added')}`:L12('Geen nieuwe Store Map-punten','No new Store Map items'),'info'); save12(); render12(); return; }
+      if(a === 'task-done'){
+        const task = tasks12().find(t=>t.id === el.dataset.id);
+        if(prevHandle6712) prevHandle6712(a,el,e);
+        if(task?.linkedCleaningId){ resolveCleaningFromTask12(task,'done'); save12(); render12(); }
+        return;
+      }
+      if(a === 'confirm-defer'){
+        const task = tasks12().find(t=>t.id === el.dataset.id);
+        if(prevHandle6712) prevHandle6712(a,el,e);
+        if(task?.linkedCleaningId){ resolveCleaningFromTask12(task,'defer'); save12(); render12(); }
+        return;
+      }
+      if(prevHandle6712) return prevHandle6712(a,el,e);
+    };
+
+    const prevDiag6712 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6712) renderDiagnostics = window.renderDiagnostics = function(){
+      const checks = [
+        {name:'v6.7.12 HACCP planning', ok:typeof renderHaccp === 'function', detail:`${haccpPlanning12().length} taken`},
+        {name:'Urgentie verdwijnt na voldaan', ok:true, detail:'linked cleaning wordt opgeschoond'},
+        {name:'Uitgestelde Store Map-urgenties blijven niet bovenaan', ok:true, detail:'status Uitgesteld uitgesloten'},
+        {name:'Handmatige volgorde', ok:typeof moveTask === 'function', detail:'↑ ↓ actief'},
+        {name:'Store Map → HACCP onder planning', ok:true, detail:`${storeSignals12().length} signalen`},
+        {name:'APP.cache', ok:APP.cache === 'rich-cmd-cache-v6712', detail:APP.cache}
+      ];
+      return prevDiag6712()+`<div class="grid grid-2 mt diagnostics-v6712"><div class="card"><h3>v6.7.12 HACCP planning checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E12(c.name)} <span class="tiny muted">${E12(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${L12('HACCP layoutbeleid','HACCP layout policy')}</h3><p class="muted small">${L12('Geen losse dagelijkse planning en periodieke planning bovenaan: één samengestelde planning met eerste 5 taken, meer weergeven, compacte iconen en Store Map/overige zaken eronder.','No separate daily and periodic plans at the top: one combined plan with first 5 tasks, show more, compact icons and Store Map/other items below.')}</p></div></div>`;
+    };
+
+    try { save12(); render12(); } catch(_){}
+  } catch(err){ console.error('v6.7.12 patch failed', err); }
+})();
+
+// RICH CMD v6.7.13 — HACCP Layout Recovery & Smart Timeline
+(function(){
+  try {
+    if (typeof APP !== 'undefined') {
+      APP.version = 'v6.7.13';
+      APP.cache = 'rich-cmd-cache-v6713';
+      APP.build = 'HACCP Layout Recovery & Smart Timeline';
+    }
+    const L13 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E13 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const arr13 = (v)=> Array.isArray(v) ? v : [];
+    const today13 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now13 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const uid13 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const save13 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render13 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast13 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type,true); } catch(_){} };
+    const norm13 = (s)=> String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const date13 = (s)=> String(s || today13()).slice(0,10);
+    const dateCmp13 = (a,b)=> date13(a).localeCompare(date13(b));
+    const minutes13 = (m)=> { try { return typeof minutesToText === 'function' ? minutesToText(+m || 0) : `${+m || 0}m`; } catch(_) { return `${+m || 0}m`; } };
+    const local13 = (s)=> { try { return typeof localStatus === 'function' ? localStatus(s) : (s || '-'); } catch(_) { return s || '-'; } };
+    const title13 = (task)=> { try { return typeof taskTitle === 'function' ? taskTitle(task) : (task?.title || 'Taak'); } catch(_) { return task?.title || 'Taak'; } };
+    const addAct13 = (msg,type='task')=> { try { if(typeof addActivity === 'function') addActivity(msg,type); } catch(_){} };
+    const addDays13 = (iso,days)=> { try { return typeof addDays === 'function' ? addDays(iso,days) : new Date(Date.parse(iso||today13())+days*86400000).toISOString().slice(0,10); } catch(_) { return today13(); } };
+
+    const dailySpecs13 = [
+      {key:'temps', nl:'Temperaturen controleren', en:'Check temperatures', minutes:15, priority:'Hoog', tag:'Voedselveiligheid', aliases:['temperatuur','temperature','temp']},
+      {key:'emballage', nl:'Emballage controleren', en:'Check empties area', minutes:10, priority:'Hoog', tag:'Klantveiligheid', aliases:['emballage','empties']},
+      {key:'orange', nl:'Sinaasappelpers schoon/controleren', en:'Clean/check orange press', minutes:10, priority:'Hoog', tag:'Hygiëne', aliases:['sinaasappel','orange press','pers']},
+      {key:'floor', nl:'Winkelvloer en magazijn controleren', en:'Check shop floor and stockroom', minutes:10, priority:'Hoog', tag:'Winkelbeeld', aliases:['winkelvloer','shop floor','magazijn','stockroom','vloer']}
+    ];
+
+    function tasks13(){ state.tasks = arr13(state.tasks); return state.tasks; }
+    function taskOpen13(t){ return t && t.status !== 'Voltooid'; }
+    function taskDone13(t){ return t && t.status === 'Voltooid'; }
+    function due13(t){ return t?.dueDate || t?.plannedDate || today13(); }
+    function isDue13(t){ return !due13(t) || dateCmp13(due13(t), today13()) <= 0; }
+    function prioWeight13(p){ const h=norm13(p); if(h.includes('kritiek')||h.includes('critical')) return 100; if(h.includes('hoog')||h.includes('high')) return 75; if(h.includes('medium')) return 50; if(h.includes('laag')||h.includes('low')) return 20; return 40; }
+    function isDailyBase13(t){ const h=norm13(`${t?.title||''} ${t?.category||''} ${t?.group||''} ${t?.frequency||''} ${t?.startListKey||''}`); return !!(t?.startListKey || h.includes('basisroutine') || dailySpecs13.some(s=>s.aliases.some(a=>h.includes(a)))); }
+    function dailyKey13(t){ const h=norm13(`${t?.title||''} ${t?.startListKey||''}`); const f=dailySpecs13.find(s=>t?.startListKey===s.key || s.aliases.some(a=>h.includes(a))); return f?.key || ''; }
+    function freqKey13(t){ const h=norm13(`${t?.frequency||''} ${t?.group||''} ${t?.category||''} ${t?.title||''}`); if(t?.linkedCleaningId || h.includes('schoonmaakkaart') || h.includes('store map') || h.includes('nacontrole') || h.includes('follow')) return 'storemap'; if(h.includes('dag') || h.includes('daily') || isDailyBase13(t)) return 'daily'; if(h.includes('week')) return 'weekly'; if(h.includes('maand') || h.includes('month')) return 'monthly'; if(h.includes('jaar') || h.includes('year')) return h.includes('half') ? 'halfyearly' : 'yearly'; return 'other'; }
+    function openTasks13(){ return tasks13().filter(taskOpen13); }
+    function completedToday13(){ return tasks13().filter(t=>taskDone13(t) && String(t.completedAt||t.doneAt||t.updatedAt||'').slice(0,10) === today13()); }
+
+    function findDailyToday13(spec){
+      return tasks13().find(t=> date13(due13(t)) === today13() && (t.startListKey === spec.key || spec.aliases.some(a=>norm13(t.title).includes(a))));
+    }
+    function ensureDailyRoutine13(silent=false){
+      let added=0;
+      dailySpecs13.forEach(spec=>{
+        if(findDailyToday13(spec)) return;
+        tasks13().unshift({id:uid13('task'), title:L13(spec.nl,spec.en), duration:spec.minutes, priority:spec.priority, category:'Basisroutine', group:'daily', frequency:'Dagelijks', status:'Open', createdAt:now13(), dueDate:today13(), startListKey:spec.key});
+        added++;
+      });
+      if(added){ addAct13(`HACCP basisroutine ingeladen (${added})`,'task'); if(!silent) toast13(`${added} ${L13('basistaken ingeladen','base tasks loaded')}`,'good'); }
+      return added;
+    }
+
+    function cleaningItems13(){ state.cleaning = state.cleaning || {items:[]}; state.cleaning.items = arr13(state.cleaning.items); return state.cleaning.items.filter(i=>i && !i.archived); }
+    function cleanLabel13(i){ return i?.label || i?.name || i?.title || `${i?.zone||'Store Map'} ${i?.meter?`M${i.meter}`:''} ${i?.shelf?`plank ${i.shelf}`:''}`.trim(); }
+    function moldGrad13(i){ const st=norm13(i?.status); const raw=norm13(`${i?.moldGrade||''} ${i?.grade||''} ${i?.gradation||''} ${i?.moldGradation||''}`); if(st.includes('mold3') || st.includes('schimmel3') || raw.includes('3')) return 3; if(st.includes('mold2') || st.includes('schimmel2') || raw.includes('2')) return 2; if(st.includes('mold1') || st.includes('schimmel1') || raw.includes('1')) return 1; return 0; }
+    function cleanHasBaseline13(i){ return !!(i?.lastChecked || i?.lastCleaned || i?.planned || i?.plannedAt || i?.haccpResolvedAt || (Array.isArray(i?.history) && i.history.length)); }
+    function linkedTasks13(id){ return tasks13().filter(t=>t.linkedCleaningId === id); }
+    function activeLinked13(id){ return linkedTasks13(id).find(t=>t.status !== 'Voltooid'); }
+    function cleanResolved13(i){ return !!(i?.haccpResolvedAt || (i?.status === 'clean' && !moldGrad13(i)) || linkedTasks13(i.id).some(t=>t.status === 'Voltooid')); }
+    function cleanReason13(i){ const g=moldGrad13(i); if(g===1) return L13('Schimmel gradatie 1 — monitoren/plannen','Mould gradation 1 — monitor/plan'); if(g===2) return L13('Schimmel gradatie 2 — directe opvolging','Mould gradation 2 — immediate follow-up'); if(g===3) return L13('Schimmel gradatie 3 — kritiek','Mould gradation 3 — critical'); if(i?.status === 'followup') return L13('Nacontrole nodig','Follow-up needed'); if(i?.status === 'dirty') return L13('Vuil / aandacht','Dirty / attention'); if(i?.planned) return L13('Handmatig gepland','Manually planned'); if(i?.status === 'due') return L13('Controle verlopen','Check overdue'); return L13('Signaal','Signal'); }
+    function cleanSignal13(i){ if(!i || cleanResolved13(i)) return false; const g=moldGrad13(i); if(g) return true; if(i?.status === 'followup' || i?.status === 'dirty' || i?.planned) return true; if(i?.status === 'due' && cleanHasBaseline13(i)) return true; return false; }
+    function cleanUrgent13(i){ if(!cleanSignal13(i)) return false; if(linkedTasks13(i.id).some(t=>t.status === 'Uitgesteld')) return false; const g=moldGrad13(i); const p=norm13(i?.priority); return g >= 2 || i?.status === 'followup' || p.includes('kritiek') || p.includes('critical'); }
+    function cleanTone13(i){ const g=moldGrad13(i); if(g>=3) return 'bad'; if(g===2 || i?.status==='followup') return 'bad'; if(g===1 || i?.status==='dirty' || i?.planned) return 'warn'; return 'info'; }
+    function storeSignals13(){ return cleaningItems13().filter(cleanSignal13).sort((a,b)=> (cleanUrgent13(b)?1:0)-(cleanUrgent13(a)?1:0) || (moldGrad13(b)-moldGrad13(a)) || cleanLabel13(a).localeCompare(cleanLabel13(b))); }
+    function storeUrgent13(){ return storeSignals13().filter(cleanUrgent13); }
+    function planCleanToHaccp13(item, silent=false){
+      if(!item || cleanResolved13(item) || activeLinked13(item.id)) return false;
+      const g=moldGrad13(item); const urgent=cleanUrgent13(item); const priority = g>=3 ? 'Kritiek' : urgent ? 'Hoog' : 'Medium';
+      tasks13().unshift({id:uid13('task'), title:`Schoonmaakkaart — ${cleanLabel13(item)}`, duration:g>=2?15:10, priority, category:'Schoonmaakkaart', group:urgent?'urgent':'planning', frequency:urgent?'Nacontrole':'Planning', status:'Open', createdAt:now13(), dueDate:today13(), linkedCleaningId:item.id, storeMapReason:cleanReason13(item), moldGradation:g || undefined});
+      item.planned = true; item.plannedAt = today13(); item.history = arr13(item.history); item.history.unshift({type:'plannedToHaccp6713', at:now13(), reason:cleanReason13(item)});
+      if(!silent) toast13(L13('Store Map-punt toegevoegd aan HACCP','Store Map item added to HACCP'),'good');
+      return true;
+    }
+    function syncUrgentStore13(){ let n=0; storeUrgent13().forEach(i=>{ if(!activeLinked13(i.id) && planCleanToHaccp13(i,true)) n++; }); if(n) addAct13(`Store Map → HACCP urgenties toegevoegd (${n})`,'task'); return n; }
+    function resolveCleaningFromTask13(task, mode){
+      if(!task?.linkedCleaningId) return;
+      const c=cleaningItems13().find(i=>i.id === task.linkedCleaningId); if(!c) return;
+      c.history = arr13(c.history);
+      if(mode === 'done'){
+        c.status = 'clean'; c.moldGrade = 0; c.planned = false; c.haccpResolvedAt = now13(); c.lastChecked = today13(); c.lastCleaned = today13(); c.history.unshift({at:now13(), type:'haccpDone6713', taskId:task.id});
+      } else if(mode === 'defer'){
+        c.planned = true; c.haccpDeferredAt = now13(); c.haccpDeferredTaskId = task.id; c.history.unshift({at:now13(), type:'haccpDeferred6713', taskId:task.id, dueDate:task.dueDate});
+      }
+    }
+
+    function isTrueUrgency13(t){
+      if(!taskOpen13(t) || t.status === 'Uitgesteld' || isDailyBase13(t)) return false;
+      if(t?.linkedCleaningId){ const item=cleaningItems13().find(i=>i.id===t.linkedCleaningId); return item ? cleanUrgent13(item) : false; }
+      const h=norm13(`${t?.title||''} ${t?.category||''} ${t?.priority||''} ${t?.storeMapReason||''}`);
+      return h.includes('kritiek') || ['koeling buiten bereik','temperatuur afwijk','glas','lekkage','schimmel gradatie 2','schimmel gradatie 3','mold gradation 2','mold gradation 3','klantveiligheid','voedselveiligheid','ernstige hygiene','ernstige hygiëne'].some(k=>h.includes(k));
+    }
+    function automaticPlan13(includeFuture=false){
+      const relevant = openTasks13().filter(t=>{
+        if(isTrueUrgency13(t)) return false;
+        if(isDailyBase13(t)) return true;
+        if(t?.linkedCleaningId || freqKey13(t)==='storemap') return true;
+        if(['weekly','monthly','halfyearly','yearly'].includes(freqKey13(t))) return includeFuture || isDue13(t);
+        if(t.status === 'Uitgesteld') return includeFuture || isDue13(t);
+        return includeFuture ? true : isDue13(t);
+      });
+      const dailyOrder={temps:0,emballage:1,orange:2,floor:3};
+      return relevant.slice().sort((a,b)=>{
+        const ma = manualIndex13(a.id), mb = manualIndex13(b.id);
+        if(ma !== mb) return ma - mb;
+        const ga=groupScore13(a), gb=groupScore13(b); if(ga !== gb) return ga - gb;
+        if(isDailyBase13(a) && isDailyBase13(b)){ const da=dailyOrder[dailyKey13(a)] ?? 9, db=dailyOrder[dailyKey13(b)] ?? 9; if(da!==db) return da-db; }
+        if(dateCmp13(due13(a),due13(b)) !== 0) return dateCmp13(due13(a),due13(b));
+        if(prioWeight13(a.priority) !== prioWeight13(b.priority)) return prioWeight13(b.priority)-prioWeight13(a.priority);
+        return String(title13(a)).localeCompare(String(title13(b)));
+      });
+    }
+    function groupScore13(t){ if(isDailyBase13(t)) return 10; if(t?.linkedCleaningId || freqKey13(t)==='storemap') return 20; if(t.status === 'Uitgesteld') return 25; const f=freqKey13(t); if(f==='weekly') return 30; if(f==='monthly') return 40; if(f==='halfyearly') return 50; if(f==='yearly') return 60; return 70; }
+    function manualOrderArr13(){ state.ui = state.ui || {}; state.ui.haccp6713 = state.ui.haccp6713 || {}; state.ui.haccp6713.manualOrder = arr13(state.ui.haccp6713.manualOrder); return state.ui.haccp6713.manualOrder; }
+    function manualIndex13(id){ const arr=manualOrderArr13(); const ix=arr.indexOf(id); return ix>=0 ? ix : 999999; }
+    function setManualFromCurrent13(){ const arr=manualOrderArr13(); if(!arr.length){ state.ui.haccp6713.manualOrder = automaticPlan13(true).map(t=>t.id); } }
+    function movePlanTask13(id, dir){ setManualFromCurrent13(); const arr=manualOrderArr13(); const ix=arr.indexOf(id); if(ix<0) return; const ni=ix+dir; if(ni<0 || ni>=arr.length) return; [arr[ix],arr[ni]]=[arr[ni],arr[ix]]; state.ui.haccp6713.manualAdjusted = true; save13(); render13(); }
+    function resetPlanOrder13(){ state.ui = state.ui || {}; state.ui.haccp6713 = state.ui.haccp6713 || {}; state.ui.haccp6713.manualOrder = []; state.ui.haccp6713.manualAdjusted = false; toast13(L13('Automatische volgorde hersteld','Automatic order restored'),'good'); save13(); render13(); }
+    function startMinutes13(){ const raw = state?.shift?.active && state.shift.startedAt ? new Date(state.shift.startedAt) : null; if(raw && !isNaN(raw)) return raw.getHours()*60 + raw.getMinutes(); const s=state?.settings?.shiftStart || '08:00'; const p=String(s).split(':').map(Number); return (p[0]||8)*60 + (p[1]||0); }
+    function timeText13(mins){ mins=((mins%1440)+1440)%1440; return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`; }
+    function taskType13(t){ if(isDailyBase13(t)) return L13('Dagelijks','Daily'); if(t?.linkedCleaningId || freqKey13(t)==='storemap') return 'Store Map'; if(t.status==='Uitgesteld') return L13('Uitgesteld','Deferred'); const f=freqKey13(t); return ({weekly:L13('Weektaak','Weekly'),monthly:L13('Maandtaak','Monthly'),halfyearly:L13('Halfjaar','Half-year'),yearly:L13('Jaar','Year'),storemap:'Store Map'})[f] || L13('Taak','Task'); }
+    function taskTone13(t){ if(isTrueUrgency13(t)) return 'bad'; if(isDailyBase13(t)) return 'warn'; if(t?.linkedCleaningId || freqKey13(t)==='storemap') return 'info'; if(t.status==='Uitgesteld') return 'info'; return isDue13(t)?'warn':'info'; }
+    function taskMeta13(t){ const parts=[minutes13(t.duration||10), `${L13('datum','date')}: ${date13(due13(t))}`, local13(t.status||'Open')]; if(t.storeMapReason) parts.push(t.storeMapReason); if(t.deferReason) parts.push(`${L13('reden','reason')}: ${t.deferReason}`); return parts.map(p=>`<span>${E13(p)}</span>`).join(''); }
+    function taskIcons13(t){ return `<div class="h13-icons"><button class="icon-btn h13-icon" title="${E13(L13('Omhoog','Move up'))}" data-action="h13-up" data-id="${E13(t.id)}">↑</button><button class="icon-btn h13-icon" title="${E13(L13('Omlaag','Move down'))}" data-action="h13-down" data-id="${E13(t.id)}">↓</button><button class="icon-btn h13-icon good" title="${E13(L13('Voldaan','Done'))}" data-action="h13-done" data-id="${E13(t.id)}">✓</button><button class="icon-btn h13-icon warn" title="${E13(L13('Uitstellen','Defer'))}" data-action="h13-defer" data-id="${E13(t.id)}">↷</button><button class="icon-btn h13-icon" title="${E13(L13('Bewerken','Edit'))}" data-action="task-edit" data-id="${E13(t.id)}">✎</button></div>`; }
+    function taskRow13(t, start){ return `<div class="timeline-item h13-plan-row ${taskTone13(t)}" data-task-card="${E13(t.id)}"><div class="timeline-time">${timeText13(start)}</div><div class="timeline-card"><div class="flex-line"><div><span class="chip ${taskTone13(t)}">${E13(taskType13(t))}</span><strong>${E13(title13(t))}</strong></div>${taskIcons13(t)}</div><div class="small muted h13-meta">${taskMeta13(t)}</div></div></div>`; }
+
+    function actionMenu13(){
+      const calm=!!state.ui?.rustMode;
+      return `<div class="card h13-action-menu"><div class="flex-line"><div><span class="chip">v6.7.13</span><h2>${L13('HACCP','HACCP')}</h2><p class="muted small">${L13('Uitvoeren bovenaan, beheer en uitleg lager op de pagina. Goede functies blijven beschikbaar.','Execution at the top, management and explanation lower on the page. Useful functions stay available.')}</p></div><span class="pill ${calm?'warn':'info'}">${calm?L13('Rustmodus','Calm mode'):L13('Normaal','Normal')}</span></div><div class="btn-row h13-menu-buttons"><button class="btn primary" data-action="h13-load-base">${L13('Basisroutine inladen','Load base routine')}</button><button class="btn" data-action="open-template-loader">${L13('Taken inladen','Load tasks')}</button><button class="btn" data-action="open-task-form">${L13('Nieuwe taak','New task')}</button><button class="btn" data-action="h13-plan-storemap">Store Map → HACCP</button><button class="btn" data-action="h13-reset-order">${L13('Herstel volgorde','Restore order')}</button><button class="btn ${calm?'primary':''}" data-action="toggle-rust-mode">${calm?L13('Normale weergave','Normal view'):L13('Rustmodus','Calm mode')}</button></div></div>`;
+    }
+    function urgencyCard13(){ const urg=openTasks13().filter(isTrueUrgency13); if(!urg.length) return ''; let cursor=startMinutes13(); return `<div class="card h13-urgent"><div class="flex-line"><div><h3>${L13('Urgenties','Urgencies')}</h3><p class="muted small">${L13('Alleen taken die NU direct opgepakt moeten worden. Zodra ze voldaan of uitgesteld zijn, verdwijnen ze hier.','Only tasks that need immediate action now. Once done or deferred, they disappear here.')}</p></div><span class="pill bad">${urg.length}</span></div><div class="timeline h13-timeline">${urg.map(t=>{ const s=cursor; cursor+=(+t.duration||10); return taskRow13(t,s); }).join('')}</div></div>`; }
+    function planningCard13(){
+      const list=automaticPlan13(false);
+      const showAll=!!state.ui?.haccp6713?.showAllPlan;
+      const shown=showAll ? list : list.slice(0,5);
+      let cursor=startMinutes13() + openTasks13().filter(isTrueUrgency13).reduce((a,t)=>a+(+t.duration||10),0);
+      return `<div class="card h13-planning"><div class="flex-line"><div><h3>${L13('Takenlijst','Task list')}</h3><p class="muted small">${L13('Slimme volgorde: dagelijkse taken, Schoonmaakkaart, weektaken en maandtaken. Handmatig aanpassen mag; herstel volgorde zet de automatische planning terug.','Smart order: daily tasks, Cleaning Map, weekly tasks and monthly tasks. Manual changes are allowed; restore order returns to automatic planning.')}</p></div><span class="pill ${list.length?'info':'good'}">${list.length}</span></div>${shown.length?`<div class="timeline h13-timeline">${shown.map(t=>{ const s=cursor; cursor+=(+t.duration||10); return taskRow13(t,s); }).join('')}</div>`:`<p class="muted small">${L13('Geen open HACCP-taken in de slimme planning. Laad de basisroutine, taken of Store Map-punten in.','No open HACCP tasks in the smart plan. Load the base routine, tasks or Store Map items.')}</p>`}<div class="btn-row mt">${list.length>5?`<button class="btn" data-action="h13-toggle-plan">${showAll?L13('Minder tonen','Show less'):L13('Meer weergeven','Show more')}</button>`:''}${state.ui?.haccp6713?.manualAdjusted?`<button class="btn" data-action="h13-reset-order">${L13('Automatische volgorde herstellen','Restore automatic order')}</button>`:''}</div></div>`;
+    }
+    function completedCard13(){ const done=completedToday13().slice(0,8); return `<details class="card detail-drawer h13-completed" ${done.length?'open':''}><summary>${L13('Voldaan vandaag','Done today')} <span class="pill good">${done.length}</span></summary><div class="drawer-content">${done.length?`<div class="list">${done.map(t=>`<div class="list-item compact"><span><strong>${E13(title13(t))}</strong><br><span class="tiny muted">${E13(minutes13(t.duration||10))} · ${E13(taskType13(t))}</span></span><button class="btn small" data-action="h13-reopen" data-id="${E13(t.id)}">${L13('Ongedaan','Undo')}</button></div>`).join('')}</div>`:`<p class="muted small">${L13('Nog geen taken voldaan vandaag.','No tasks done today yet.')}</p>`}</div></details>`; }
+    function capacityCard13(){
+      const urgent=openTasks13().filter(isTrueUrgency13); const plan=automaticPlan13(false); const all=urgent.concat(plan);
+      const cap=(+state.settings?.haccpHours||3.5)*60;
+      const planned=all.reduce((a,t)=>a+(+t.duration||10),0);
+      const completed=completedToday13().reduce((a,t)=>a+(+t.duration||10),0);
+      const rest=Math.max(0,cap-planned);
+      const load=cap ? Math.round(planned/cap*100) : 0;
+      const deferred=openTasks13().filter(t=>t.status==='Uitgesteld').length;
+      const overdue=openTasks13().filter(t=>dateCmp13(due13(t),today13())<0 && t.status!=='Uitgesteld').length;
+      let barHtml=''; try { if(typeof bar === 'function') barHtml = bar(L13('Ingeplande tijd','Planned time'),load,load>100?'bad':load>80?'warn':'good'); } catch(_){ }
+      return `<div class="card h13-capacity"><h3>${L13('Capaciteit','Capacity')}</h3><div class="list h13-cap-list"><div class="list-item compact"><span>${L13('Open taken','Open tasks')}</span><strong>${all.length}</strong></div><div class="list-item compact"><span>${L13('Ingeplande tijd','Planned time')}</span><strong>${minutes13(planned)}</strong></div><div class="list-item compact"><span>${L13('Beschikbare HACCP-tijd','Available HACCP time')}</span><strong>${minutes13(cap)}</strong></div><div class="list-item compact"><span>${L13('Resterend','Remaining')}</span><strong>${minutes13(rest)}</strong></div><div class="list-item compact"><span>${L13('Uitgesteld','Deferred')}</span><strong>${deferred}</strong></div><div class="list-item compact"><span>${L13('Achterstallig','Overdue')}</span><strong>${overdue}</strong></div></div>${barHtml}<p class="muted small">${load>100?L13('Werkdruk is hoger dan je beschikbare HACCP-tijd. Werk van boven naar beneden en stel bewust uit wat lager risico heeft.','Workload is higher than available HACCP time. Work top-down and deliberately defer lower-risk work.'):L13('De planning lijkt haalbaar binnen je HACCP-tijd.','The plan looks manageable within your HACCP time.')}</p></div>`;
+    }
+    function storeMapCard13(compact=false){
+      const signals=storeSignals13(); const showAll=!!state.ui?.haccp6713?.showAllStore; const limit=compact?3:(showAll?signals.length:3); const shown=signals.slice(0,limit);
+      return `<div class="card h13-store"><div class="flex-line"><div><h3>Store Map → HACCP</h3><p class="muted small">${L13('Schoonmaakkaartpunten die aandacht vragen. Maximaal 3 zichtbaar, met meer weergeven. Gradatie 2/3 krijgt directe opvolging.','Cleaning Map points needing attention. Up to 3 shown, with show more. Gradation 2/3 gets immediate follow-up.')}</p></div><span class="pill ${storeUrgent13().length?'bad':signals.length?'warn':'good'}">${storeUrgent13().length}/${signals.length}</span></div>${shown.length?`<div class="list">${shown.map(i=>{ const linked=activeLinked13(i.id); return `<div class="list-item compact"><span><strong>${E13(cleanLabel13(i))}</strong><br><span class="tiny muted">${E13(cleanReason13(i))}${linked?` · HACCP: ${E13(local13(linked.status))}`:''}</span></span><span class="pill ${cleanTone13(i)}">${moldGrad13(i)?`${L13('Gradatie','Gradation')} ${moldGrad13(i)}`:E13(local13(i.status||'Signaal'))}</span></div>`; }).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="h13-plan-storemap">${L13('Alles relevante toevoegen','Add all relevant')}</button>${signals.length>3?`<button class="btn" data-action="h13-toggle-store">${showAll?L13('Minder tonen','Show less'):L13('Meer weergeven','Show more')}</button>`:''}<button class="btn" data-route="storemap">${L13('Open Schoonmaakkaart','Open Cleaning Map')}</button></div>`:`<p class="muted small">${L13('Geen Store Map-punten om naar HACCP te zetten.','No Store Map items to move to HACCP.')}</p><button class="btn" data-route="storemap">${L13('Open Schoonmaakkaart','Open Cleaning Map')}</button>`}</div>`;
+    }
+    function templatesCard13(){ return `<details class="card detail-drawer h13-templates" ${state.ui?.rustMode?'':'open'}><summary>${L13('Dag-, week- en maandtaken / templates','Day, week and month tasks / templates')}</summary><div class="drawer-content"><div class="btn-row mb"><button class="btn small primary" data-action="h13-load-base">${L13('Basisroutine inladen','Load base routine')}</button><button class="btn small" data-action="load-template-group" data-group="daily">${L13('Dagelijks','Daily')}</button><button class="btn small" data-action="load-template-group" data-group="weekly">${L13('Wekelijks','Weekly')}</button><button class="btn small" data-action="load-template-group" data-group="monthly">${L13('Maandelijks','Monthly')}</button></div>${typeof renderTemplateManager==='function'?renderTemplateManager():''}</div></details>`; }
+    function weekCard13(){ const open=openTasks13(); const daily=open.filter(t=>isDailyBase13(t)||freqKey13(t)==='daily').length; const weekly=open.filter(t=>freqKey13(t)==='weekly').length; const monthly=open.filter(t=>freqKey13(t)==='monthly').length; const deferred=open.filter(t=>t.status==='Uitgesteld').length; const overdue=open.filter(t=>dateCmp13(due13(t),today13())<0 && t.status!=='Uitgesteld').length; return `<div class="card h13-week"><h3>${L13('HACCP weekplanning','HACCP week planning')}</h3><div class="grid grid-2 h13-week-grid"><div class="list-item compact"><span>${L13('Dagelijks open','Daily open')}</span><strong>${daily}</strong></div><div class="list-item compact"><span>${L13('Wekelijks open','Weekly open')}</span><strong>${weekly}</strong></div><div class="list-item compact"><span>${L13('Maandelijks open','Monthly open')}</span><strong>${monthly}</strong></div><div class="list-item compact"><span>${L13('Uitgesteld','Deferred')}</span><strong>${deferred}</strong></div><div class="list-item compact"><span>${L13('Achterstallig','Overdue')}</span><strong>${overdue}</strong></div></div><p class="muted small">${overdue?L13('Advies: controleer eerst achterstallige taken met risico, daarna de normale planning.','Advice: first check overdue risk tasks, then normal planning.'):L13('Geen directe achterstand zichtbaar in HACCP.','No direct HACCP backlog visible.')}</p></div>`; }
+    function manageCard13(){ return `<details class="card detail-drawer h13-manage"><summary>${L13('Beheer','Manage')}</summary><div class="drawer-content"><div class="btn-row mb"><button class="btn small" data-action="h13-reset-order">${L13('Herstel automatische volgorde','Restore automatic order')}</button><button class="btn small" data-action="open-template-loader">${L13('Taken inladen','Load tasks')}</button><button class="btn small" data-action="open-task-form">${L13('Nieuwe taak','New task')}</button></div>${typeof renderDeferralAnalysis==='function'?`<h4>${L13('Uitstelanalyse','Deferral analysis')}</h4>${renderDeferralAnalysis()}`:''}${typeof renderTaskArchive==='function'?`<h4>${L13('Archief','Archive')}</h4>${renderTaskArchive()}`:''}</div></details>`; }
+    function helpCard13(){ return `<details class="card detail-drawer h13-help"><summary>${L13('Hoe werkt deze planning?','How does this planning work?')}</summary><div class="drawer-content"><p>${L13('RICH CMD toont eerst echte urgenties, alleen als ze bestaan. Daarna komt één takenlijst met dagelijkse taken, Schoonmaakkaart, weektaken en maandtaken. Je kunt taken handmatig omhoog of omlaag zetten. Met Herstel volgorde ga je terug naar de slimme automatische volgorde. Rustmodus toont alleen de belangrijkste onderdelen.','RICH CMD first shows true urgencies, only when they exist. Then one task list follows with daily tasks, Cleaning Map, weekly tasks and monthly tasks. You can move tasks up or down manually. Restore order returns to the smart automatic sequence. Calm mode shows only the most important parts.')}</p><ul class="muted small"><li>${L13('Schimmel gradatie 1: monitoren/plannen, lager dan dagelijkse taken.','Mould gradation 1: monitor/plan, lower than daily tasks.')}</li><li>${L13('Schimmel gradatie 2/3: directe opvolging en zichtbaar als urgentie.','Mould gradation 2/3: immediate follow-up and visible as urgency.')}</li><li>${L13('Voldaan verplaatst een taak naar Voldaan vandaag; uitstellen haalt hem uit urgenties.','Done moves a task to Done today; defer removes it from urgencies.')}</li></ul></div></details>`; }
+
+    function renderHaccp6713(){
+      state.ui = state.ui || {}; state.ui.haccp6713 = state.ui.haccp6713 || {};
+      syncUrgentStore13();
+      const calm=!!state.ui.rustMode;
+      if(calm){
+        return `<div class="grid haccp-v6713 haccp-calm h13-calm">${actionMenu13()}<div class="card h13-calm-note"><strong>${L13('Rustmodus actief','Calm mode active')}</strong><p class="muted small">${L13('Alleen de belangrijkste HACCP-onderdelen worden getoond: urgenties, eerste taken, capaciteit compact en Store Map-signalen.','Only the most important HACCP parts are shown: urgencies, first tasks, compact capacity and Store Map signals.')}</p></div>${urgencyCard13()}${planningCard13()}${capacityCard13()}${storeMapCard13(true)}<details class="card detail-drawer"><summary>${L13('Overige HACCP-onderdelen openen','Open other HACCP sections')}</summary><div class="drawer-content">${completedCard13()}${templatesCard13()}${weekCard13()}${manageCard13()}${helpCard13()}</div></details></div>`;
+      }
+      return `<div class="grid haccp-v6713">${actionMenu13()}${urgencyCard13()}<div class="grid grid-main"><div class="grid">${planningCard13()}${completedCard13()}${capacityCard13()}${storeMapCard13(false)}</div><div class="grid">${templatesCard13()}${weekCard13()}${manageCard13()}${helpCard13()}</div></div></div>`;
+    }
+    renderHaccp = window.renderHaccp = renderHaccp6713;
+
+    const prevNext6713 = typeof nextAction === 'function' ? nextAction : null;
+    nextAction = window.nextAction = function(){
+      if(state?.route === 'today'){
+        const urg=openTasks13().filter(isTrueUrgency13)[0]; if(urg) return {title:title13(urg), reason:L13('Er staat een echte HACCP-urgentie open.','There is a true HACCP urgency open.'), route:'haccp', taskId:urg.id};
+        const first=automaticPlan13(false)[0]; if(first) return {title:title13(first), reason:L13('De slimme HACCP-planning zet je eerste taken klaar.','The smart HACCP plan prepares your first tasks.'), route:'haccp', taskId:first.id};
+      }
+      return prevNext6713 ? prevNext6713() : {title:L13('Open Vandaag','Open Today'), reason:'', route:'today'};
+    };
+
+    const prevHandle6713 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if(a === 'h13-load-base'){ ensureDailyRoutine13(false); save13(); render13(); return; }
+      if(a === 'h13-plan-storemap'){ let n=0; storeSignals13().forEach(i=>{ if(planCleanToHaccp13(i,true)) n++; }); toast13(n?`${n} ${L13('Store Map-punten toegevoegd','Store Map items added')}`:L13('Geen nieuwe Store Map-punten','No new Store Map items'), n?'good':'info'); save13(); render13(); return; }
+      if(a === 'h13-toggle-plan'){ state.ui=state.ui||{}; state.ui.haccp6713=state.ui.haccp6713||{}; state.ui.haccp6713.showAllPlan=!state.ui.haccp6713.showAllPlan; save13(); render13(); return; }
+      if(a === 'h13-toggle-store'){ state.ui=state.ui||{}; state.ui.haccp6713=state.ui.haccp6713||{}; state.ui.haccp6713.showAllStore=!state.ui.haccp6713.showAllStore; save13(); render13(); return; }
+      if(a === 'h13-reset-order'){ resetPlanOrder13(); return; }
+      if(a === 'h13-up'){ movePlanTask13(el.dataset.id,-1); return; }
+      if(a === 'h13-down'){ movePlanTask13(el.dataset.id,1); return; }
+      if(a === 'h13-reopen'){ const task=tasks13().find(t=>t.id===el.dataset.id); if(task){ task.status='Open'; delete task.completedAt; addAct13(`Taak opnieuw geopend: ${title13(task)}`,'task'); toast13(L13('Taak teruggezet naar open','Task reopened'),'info'); save13(); render13(); } return; }
+      if(a === 'h13-done'){
+        const task=tasks13().find(t=>t.id===el.dataset.id);
+        if(prevHandle6713) prevHandle6713('task-done',el,e); else if(typeof completeTask==='function') completeTask(el.dataset.id);
+        if(task?.linkedCleaningId){ resolveCleaningFromTask13(task,'done'); save13(); render13(); }
+        return;
+      }
+      if(a === 'h13-defer'){
+        if(prevHandle6713) prevHandle6713('task-defer',el,e); else if(typeof deferTask==='function') deferTask(el.dataset.id);
+        return;
+      }
+      if(a === 'confirm-defer'){
+        const task=tasks13().find(t=>t.id===el.dataset.id);
+        if(prevHandle6713) prevHandle6713(a,el,e);
+        if(task?.linkedCleaningId){ resolveCleaningFromTask13(task,'defer'); save13(); render13(); }
+        return;
+      }
+      if(prevHandle6713) return prevHandle6713(a,el,e);
+    };
+
+    const prevDiag6713 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6713) renderDiagnostics = window.renderDiagnostics = function(){
+      const checks=[
+        {name:'v6.7.13 HACCP layout', ok:typeof renderHaccp === 'function', detail:'nieuwe sectievolgorde actief'},
+        {name:'Urgenties alleen indien aanwezig', ok:!urgencyCard13() || openTasks13().filter(isTrueUrgency13).length>0, detail:`${openTasks13().filter(isTrueUrgency13).length} urgent`},
+        {name:'Slimme takenlijst eerste 5', ok:true, detail:`${automaticPlan13(false).length} taken`},
+        {name:'Handmatige volgorde + herstel', ok:true, detail:state.ui?.haccp6713?.manualAdjusted?'handmatig aangepast':'automatisch'},
+        {name:'Store Map → HACCP', ok:true, detail:`${storeSignals13().length} signalen`},
+        {name:'Rustmodus HACCP', ok:true, detail:'belangrijkste onderdelen'},
+        {name:'APP.cache', ok:APP.cache === 'rich-cmd-cache-v6713', detail:APP.cache}
+      ];
+      return prevDiag6713()+`<div class="grid grid-2 mt diagnostics-v6713"><div class="card"><h3>v6.7.13 HACCP recovery checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E13(c.name)} <span class="tiny muted">${E13(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${L13('HACCP behoudbeleid','HACCP preservation policy')}</h3><p class="muted small">${L13('Opties worden niet weggehaald: ze worden geordend in uitvoeren, capaciteit, Store Map, templates, weekplanning, beheer en uitleg. Rustmodus toont alleen de belangrijkste zaken.','Options are not removed: they are organized into execution, capacity, Store Map, templates, week planning, management and explanation. Calm mode shows only the most important parts.')}</p></div></div>`;
+    };
+
+    try { save13(); render13(); } catch(_){ }
+  } catch(err){ console.error('v6.7.13 patch failed', err); }
+})();
+
+
+// RICH CMD v6.7.14 — HACCP Task Form Controls Polish
+(function(){
+  try {
+    if (typeof APP !== 'undefined') {
+      APP.version = 'v6.7.14';
+      APP.cache = 'rich-cmd-cache-v6714';
+      APP.build = 'HACCP Task Form Controls Polish';
+    }
+    const L14 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E14 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid14 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today14 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now14 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save14 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render14 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast14 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type,true); } catch(_){} };
+
+    const priorityOptions14 = [
+      {value:'Kritiek', nl:'Kritiek — direct risico', en:'Critical — immediate risk'},
+      {value:'Hoog', nl:'Hoog — vandaag belangrijk', en:'High — important today'},
+      {value:'Medium', nl:'Normaal / medium — plannen', en:'Normal / medium — plan'},
+      {value:'Laag', nl:'Laag — later of monitoren', en:'Low — later or monitor'}
+    ];
+    const baseCategories14 = [
+      'Basisroutine','Temperatuur','Emballage','Sinaasappelpers','Winkelvloer','Magazijn',
+      'Schoonmaakkaart','Nacontrole','Hygiëne','Voedselveiligheid','Klantveiligheid',
+      'Dagelijks','Wekelijks','Maandelijks','Periodiek','AGF','Inventaris','Communicatie','Planning','Overig'
+    ];
+    function customCategories14(){
+      state.settings = state.settings || {};
+      if(!Array.isArray(state.settings.haccpCategories)) state.settings.haccpCategories=[];
+      return state.settings.haccpCategories;
+    }
+    function categoryOptions14(current=''){
+      const set=new Set();
+      baseCategories14.forEach(c=>set.add(c));
+      customCategories14().forEach(c=> c && set.add(String(c)));
+      try { (state.templates ? Object.values(state.templates).flat() : []).forEach(t=> t?.category && set.add(String(t.category))); } catch(_){}
+      try { (Array.isArray(state.tasks)?state.tasks:[]).forEach(t=> t?.category && set.add(String(t.category))); } catch(_){}
+      if(current) set.add(String(current));
+      return Array.from(set).filter(Boolean).sort((a,b)=>{
+        const ia=baseCategories14.indexOf(a), ib=baseCategories14.indexOf(b);
+        if(ia>=0 && ib>=0) return ia-ib;
+        if(ia>=0) return -1;
+        if(ib>=0) return 1;
+        return a.localeCompare(b,'nl',{sensitivity:'base'});
+      });
+    }
+    function option14(value,label,selected){ return `<option value="${E14(value)}" ${selected?'selected':''}>${E14(label ?? value)}</option>`; }
+    function getCategoryFromModal14(){
+      const sel = document.getElementById('modal_category_select');
+      const direct = document.getElementById('modal_category');
+      const newInput = document.getElementById('modal_category_new');
+      let category = sel ? sel.value : (direct ? direct.value : 'Overig');
+      if(category === '__new__') {
+        category = (newInput?.value || '').trim() || 'Overig';
+        if(category && !customCategories14().some(c=>String(c).toLowerCase()===category.toLowerCase()) && !baseCategories14.some(c=>c.toLowerCase()===category.toLowerCase())) {
+          state.settings.haccpCategories.push(category);
+        }
+      }
+      return category || 'Overig';
+    }
+    function taskFormBody14(task=null){
+      const currentPriority = task?.priority || 'Medium';
+      const currentCategory = task?.category || 'Overig';
+      const cats = categoryOptions14(currentCategory);
+      const priorityHtml = priorityOptions14.map(p=>option14(p.value, L14(p.nl,p.en), p.value===currentPriority)).join('');
+      const catHtml = cats.map(c=>option14(c,c,c===currentCategory)).join('') + option14('__new__', L14('+ Nieuwe categorie toevoegen','+ Add new category'), false);
+      return `<div class="grid h14-task-form">
+        <label>${E14(L14('Titel','Title'))}<input class="input" id="modal_title" value="${E14(task?.title||'')}" placeholder="${E14(L14('Bijv. Temperatuur AGF controleren','e.g. Check produce temperature'))}"></label>
+        <label>${E14(L14('Duur in minuten','Duration in minutes'))}<input class="input" id="modal_duration" type="number" min="1" value="${E14(task?.duration||10)}"></label>
+        <label>${E14(L14('Prioriteit','Priority'))}<select class="select input" id="modal_priority">${priorityHtml}</select><span class="tiny muted">${E14(L14('Kies een vaste prioriteit zodat de slimme planning betrouwbaar blijft.','Choose a fixed priority so the smart planner stays reliable.'))}</span></label>
+        <label>${E14(L14('Categorie','Category'))}<select class="select input" id="modal_category_select" data-action="h14-category-mode">${catHtml}</select><span class="tiny muted">${E14(L14('Kies uit bestaande HACCP-categorieën of voeg bewust een nieuwe toe.','Choose from existing HACCP categories or deliberately add a new one.'))}</span></label>
+        <label id="h14NewCategoryWrap" style="display:none">${E14(L14('Nieuwe categorie','New category'))}<input class="input" id="modal_category_new" placeholder="${E14(L14('Bijv. Koeling, Brood of Veiligheid','e.g. Cooling, Bakery or Safety'))}"></label>
+        <input type="hidden" id="modal_category" value="${E14(currentCategory)}">
+        <button class="btn primary mt" data-action="${task?'confirm-edit-task':'confirm-add-task'}" ${task?`data-id="${E14(task.id)}"`:''}>${E14(typeof t==='function'?t('save'):L14('Opslaan','Save'))}</button>
+      </div>`;
+    }
+
+    window.openTaskForm = openTaskForm = function(task=null){
+      if(typeof modal === 'function') modal(task ? L14('Taak bewerken','Edit task') : L14('Nieuwe taak','New task'), taskFormBody14(task), 'wide');
+    };
+
+    window.addTaskFromModal = addTaskFromModal = function(){
+      state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+      const title=(document.getElementById('modal_title')?.value || '').trim();
+      if(!title){ toast14(L14('Vul eerst een titel in.','Enter a title first.'),'warn'); return; }
+      state.tasks.unshift({
+        id: uid14('task'),
+        title,
+        duration: +(document.getElementById('modal_duration')?.value || 10) || 10,
+        priority: document.getElementById('modal_priority')?.value || 'Medium',
+        category: getCategoryFromModal14(),
+        status: 'Open',
+        createdAt: now14(),
+        dueDate: today14()
+      });
+      try { if(typeof addActivity==='function') addActivity(`Taak toegevoegd: ${title}`,'task'); } catch(_){}
+      if(typeof closeModal === 'function') closeModal();
+      save14(); render14();
+    };
+
+    window.editTaskFromModal = editTaskFromModal = function(id){
+      state.tasks = Array.isArray(state.tasks) ? state.tasks : [];
+      const task=state.tasks.find(t=>t.id===id);
+      if(task){
+        const title=(document.getElementById('modal_title')?.value || '').trim();
+        if(!title){ toast14(L14('Vul eerst een titel in.','Enter a title first.'),'warn'); return; }
+        task.title=title;
+        task.duration=+(document.getElementById('modal_duration')?.value || 10) || 10;
+        task.priority=document.getElementById('modal_priority')?.value || 'Medium';
+        task.category=getCategoryFromModal14();
+        task.updatedAt=now14();
+        try { if(typeof addActivity==='function') addActivity(`Taak bewerkt: ${title}`,'task'); } catch(_){}
+      }
+      if(typeof closeModal === 'function') closeModal();
+      save14(); render14();
+    };
+
+    const prevHandle6714 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      if(a === 'h14-category-mode'){
+        const wrap=document.getElementById('h14NewCategoryWrap');
+        const hidden=document.getElementById('modal_category');
+        if(hidden) hidden.value = el.value === '__new__' ? '' : el.value;
+        if(wrap) wrap.style.display = el.value === '__new__' ? '' : 'none';
+        if(el.value === '__new__') setTimeout(()=>document.getElementById('modal_category_new')?.focus(),0);
+        return;
+      }
+      if(prevHandle6714) return prevHandle6714(a,el,e);
+    };
+
+    const prevDiag6714 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6714) renderDiagnostics = window.renderDiagnostics = function(){
+      const checks=[
+        {name:'v6.7.14 taakformulier', ok:typeof openTaskForm==='function', detail:'prioriteit/categorie als keuzevelden'},
+        {name:'Prioriteitenlijst', ok:priorityOptions14.length>=4, detail:priorityOptions14.map(p=>p.value).join(', ')},
+        {name:'Categorieënlijst', ok:categoryOptions14().length>=8, detail:`${categoryOptions14().length} categorieën`},
+        {name:'APP.cache', ok:APP.cache === 'rich-cmd-cache-v6714', detail:APP.cache}
+      ];
+      return prevDiag6714()+`<div class="grid grid-2 mt diagnostics-v6714"><div class="card"><h3>v6.7.14 HACCP form checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E14(c.name)} <span class="tiny muted">${E14(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E14(L14('Taakformulier beleid','Task form policy'))}</h3><p class="muted small">${E14(L14('Prioriteit en categorie zijn nu vaste keuzes. Een nieuwe categorie kan nog wel bewust worden toegevoegd, zodat de planning overzichtelijk blijft zonder flexibiliteit te verliezen.','Priority and category are now fixed choices. A new category can still be deliberately added, keeping the planner organized without losing flexibility.'))}</p></div></div>`;
+    };
+
+    try { save14(); } catch(_){}
+  } catch(err){ console.error('v6.7.14 patch failed', err); }
+})();
+
+
+/* =========================================================
+   RICH CMD v6.7.15 — Shiftleider Vers Avondshift
+   Adds a separate shift lead workflow without removing existing modules.
+========================================================= */
+(function(){
+  try{
+    if (typeof APP === 'object') {
+      APP.version = 'v6.7.15';
+      APP.cache = 'rich-cmd-cache-v6715';
+      APP.build = 'Shiftleider Vers Avondshift';
+    }
+    const L15 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E15 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid15 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today15 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now15 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save15 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render15 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast15 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type); } catch(_){} };
+    const copy15 = (txt)=> { try { if(typeof copyText === 'function') copyText(txt); else navigator.clipboard?.writeText(txt); } catch(_){} };
+
+    if (typeof I18N === 'object') {
+      I18N.nl = I18N.nl || {}; I18N.en = I18N.en || {};
+      I18N.nl.shiftleader = 'Shiftleider';
+      I18N.en.shiftleader = 'Shift Lead';
+    }
+    if (Array.isArray(ROUTES) && !ROUTES.some(r=>r.id==='shiftleader')) {
+      const idx = ROUTES.findIndex(r=>r.id==='communication');
+      ROUTES.splice(idx >= 0 ? idx + 1 : ROUTES.length, 0, {id:'shiftleader', group:'work', icon:'dashboard', label:'shiftleader'});
+    }
+
+    const laneDefs15 = [
+      {id:'agf', name:'AGF'},
+      {id:'panklaar', name:'Panklaar'},
+      {id:'maaltijden', name:'Maaltijden'},
+      {id:'vlees_vis_kip', name:'Vlees/Vis/Kip'},
+      {id:'zuivel', name:'Zuivel'},
+      {id:'delicatesse', name:'Delicatesse'}
+    ];
+    const baseTasks15 = [
+      'Magazijn vrachtklaar maken',
+      'Vers nee-verkoop controleren',
+      'Vracht lossen',
+      'Vracht uitsplitsen',
+      'Eventuele kassapauzes overnemen',
+      'Versrestanten en tellingen controleren',
+      'Afprijsronde',
+      'Versshift afronding',
+      'Sinaasappelpers schoonmaken',
+      'Winkel afsluitronde'
+    ];
+    const incidentTypes15 = ['Klant','Collega','Incident','Kassa','Vracht','Overig'];
+
+    function weekNumber15(dateIso=today15()){
+      const d = new Date(dateIso+'T12:00:00');
+      const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNr = (target.getUTCDay() + 6) % 7;
+      target.setUTCDate(target.getUTCDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setUTCMonth(0, 1);
+      if (target.getUTCDay() !== 4) target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+      return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+    function minutesText15(m){
+      m = Math.max(0, Math.round(+m || 0));
+      const h = Math.floor(m/60), mm = m%60;
+      return h ? `${h}u ${String(mm).padStart(2,'0')}m` : `${mm}m`;
+    }
+    function diffMinutes15(start,end){
+      if(!start || !end) return 0;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return 0;
+      let a=sh*60+sm, b=eh*60+em;
+      if(b<a) b+=24*60;
+      return Math.max(0,b-a);
+    }
+    function selectedDate15(){ return ensureShiftLeader15().date || today15(); }
+    function isTueThu15(dateIso=selectedDate15()){
+      const d=new Date(dateIso+'T12:00:00').getDay();
+      return d===2 || d===4;
+    }
+    function ensureShiftLeader15(){
+      state.shiftLeader = state.shiftLeader && typeof state.shiftLeader === 'object' ? state.shiftLeader : {};
+      const sl = state.shiftLeader;
+      sl.date = sl.date || today15();
+      sl.mode = sl.mode || 'Vers Avondshift';
+      sl.team = Array.isArray(sl.team) ? sl.team : [];
+      sl.lanes = Array.isArray(sl.lanes) ? sl.lanes : [];
+      laneDefs15.forEach(def=>{
+        let lane = sl.lanes.find(l=>l.id===def.id || l.name===def.name);
+        if(!lane){ lane={id:def.id,name:def.name,personId:'',start:'',end:'',hours:0,status:'open',note:''}; sl.lanes.push(lane); }
+        lane.id=def.id; lane.name=def.name; lane.status=lane.status||'open';
+      });
+      sl.lanes = laneDefs15.map(def=>sl.lanes.find(l=>l.id===def.id));
+      sl.tasks = Array.isArray(sl.tasks) ? sl.tasks : [];
+      sl.incidents = Array.isArray(sl.incidents) ? sl.incidents : [];
+      sl.reportHistory = Array.isArray(sl.reportHistory) ? sl.reportHistory : [];
+      sl.ui = sl.ui && typeof sl.ui === 'object' ? sl.ui : {};
+      return sl;
+    }
+    function teamMember15(id){ return ensureShiftLeader15().team.find(p=>p.id===id); }
+    function memberAvailable15(p){ return Math.max(0, diffMinutes15(p.start,p.end) - (+p.breakMinutes||0)); }
+    function laneMinutes15(l){ return Math.round((+l.hours||0)*60) || Math.max(0,diffMinutes15(l.start,l.end)); }
+    function totalAvailable15(){ return ensureShiftLeader15().team.reduce((a,p)=>a+memberAvailable15(p),0); }
+    function totalPlanned15(){ return ensureShiftLeader15().lanes.reduce((a,l)=>a+laneMinutes15(l),0); }
+    function assignedMinutes15(personId){ return ensureShiftLeader15().lanes.filter(l=>l.personId===personId).reduce((a,l)=>a+laneMinutes15(l),0); }
+    function personOptions15(selected=''){
+      const team=ensureShiftLeader15().team;
+      return `<option value="">${E15(L15('Niet toegewezen','Unassigned'))}</option>` + team.map(p=>`<option value="${E15(p.id)}" ${p.id===selected?'selected':''}>${E15(p.name)}</option>`).join('');
+    }
+    function statusPill15(status){
+      const map={done:'good',open:'info',busy:'warn',partial:'warn',deferred:'warn'};
+      const label={done:L15('afgerond','done'),open:L15('open','open'),busy:L15('bezig','in progress'),partial:L15('deels','partial'),deferred:L15('uitgesteld','deferred')}[status] || status;
+      return `<span class="pill ${map[status]||'info'}">${E15(label)}</span>`;
+    }
+    function shiftSummary15(){
+      const sl=ensureShiftLeader15();
+      const available=totalAvailable15();
+      const planned=totalPlanned15();
+      const diff=available-planned;
+      return {sl,available,planned,diff,team:sl.team.length,openTasks:sl.tasks.filter(t=>t.status!=='done').length,doneTasks:sl.tasks.filter(t=>t.status==='done').length,incidents:sl.incidents.length};
+    }
+
+    function renderShiftleader(){
+      const {sl,available,planned,diff,team,openTasks,doneTasks,incidents}=shiftSummary15();
+      return `<div class="grid sl15-page">
+        <div class="hero sl15-hero"><div class="flex-line"><div><span class="chip">v6.7.15</span><h2>${E15(L15('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E15(L15('Plan je team per verspad, houd overige taken en onderbrekingen bij, en draai aan het einde een shiftklaar report uit.','Plan your team per fresh aisle, track other tasks and interruptions, and create an end-of-shift report.'))}</p></div><div class="sl15-datebox"><strong>${E15(sl.date)}</strong><span>${E15(L15('Week','Week'))} ${weekNumber15(sl.date)}</span></div></div><div class="btn-row mt"><button class="btn primary" data-action="sl15-open-person-form">${E15(L15('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl15-load-standard-tasks">${E15(L15('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl15-open-task-form">${E15(L15('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl15-open-incident" data-type="Overig">${E15(L15('Bijzonderheid loggen','Log note'))}</button><button class="btn good" data-action="sl15-copy-report">${E15(L15('Kopieer shiftklaar report','Copy shift report'))}</button></div></div>
+        <div class="grid grid-4 sl15-kpis">${typeof kpi==='function'?`${kpi(L15('Beschikbaar','Available'),minutesText15(available),diff>=0?'good':'warn')}${kpi(L15('Gepland','Planned'),minutesText15(planned),planned>available?'bad':'good')}${kpi(L15('Ruimte / tekort','Room / shortage'),`${diff>=0?'+':'−'}${minutesText15(Math.abs(diff))}`,diff>=0?'good':'bad')}${kpi(L15('Team','Team'),team,null)}`:''}</div>
+        <div class="grid grid-main"><div class="grid">
+          ${renderTeam15()}
+          ${renderLanes15()}
+          ${renderTasks15()}
+        </div><div class="grid">
+          ${renderCapacity15()}
+          ${renderIncidents15()}
+          ${renderReport15()}
+          ${renderShiftleaderHelp15()}
+        </div></div>
+      </div>`;
+    }
+    function renderTeam15(){
+      const sl=ensureShiftLeader15();
+      return `<div class="card sl15-team"><div class="flex-line"><div><h3>${E15(L15('Team & beschikbare uren','Team & available hours'))}</h3><p class="muted small">${E15(L15('Voeg iedereen toe die op de versavondshift werkt. De app rekent pauze en toegewezen paden mee.','Add everyone working the fresh evening shift. The app includes breaks and assigned aisles.'))}</p></div><button class="btn small primary" data-action="sl15-open-person-form">＋</button></div>${sl.team.length?`<div class="list">${sl.team.map(p=>{ const assigned=assignedMinutes15(p.id), available=memberAvailable15(p), lanes=sl.lanes.filter(l=>l.personId===p.id).map(l=>l.name).join(', ') || L15('nog geen pad','no aisle yet'); return `<div class="list-item sl15-person"><span><strong>${E15(p.name)}</strong><br><span class="tiny muted">${E15(p.start||'--:--')}–${E15(p.end||'--:--')} · ${E15(L15('pauze','break'))}: ${+p.breakMinutes||0}m · ${E15(lanes)}</span></span><span class="sl15-person-right"><span class="pill ${assigned>available?'bad':'good'}">${minutesText15(assigned)} / ${minutesText15(available)}</span><button class="btn small" data-action="sl15-open-person-form" data-id="${E15(p.id)}">✎</button><button class="btn small bad" data-action="sl15-remove-person" data-id="${E15(p.id)}">×</button></span></div>`; }).join('')}</div>`:`<p class="muted small">${E15(L15('Nog geen medewerkers toegevoegd.','No team members added yet.'))}</p>`}</div>`;
+    }
+    function renderLanes15(){
+      const sl=ensureShiftLeader15();
+      return `<div class="card sl15-lanes"><div class="flex-line"><div><h3>${E15(L15('Vulplanning per pad','Fill planning per aisle'))}</h3><p class="muted small">${E15(L15('Wijs medewerkers toe, pas vuluren aan en wijzig status wanneer de shift verandert.','Assign team members, adjust fill hours and update status when the shift changes.'))}</p></div><span class="pill info">${sl.lanes.length}</span></div><div class="grid grid-2 sl15-lane-grid">${sl.lanes.map(l=>`<div class="sl15-lane-card"><div class="flex-line"><strong>${E15(l.name)}</strong>${statusPill15(l.status)}</div><label class="tiny muted">${E15(L15('Persoon','Person'))}<select class="select input" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="personId">${personOptions15(l.personId)}</select></label><div class="form-grid sl15-mini-form"><label class="tiny muted">${E15(L15('Start','Start'))}<input class="input" type="time" value="${E15(l.start||'')}" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="start"></label><label class="tiny muted">${E15(L15('Eind','End'))}<input class="input" type="time" value="${E15(l.end||'')}" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="end"></label><label class="tiny muted">${E15(L15('Vuluren','Fill hours'))}<input class="input" type="number" step="0.25" min="0" value="${E15(l.hours||0)}" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="hours"></label><label class="tiny muted">${E15(L15('Status','Status'))}<select class="select input" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="status"><option value="open" ${l.status==='open'?'selected':''}>Open</option><option value="busy" ${l.status==='busy'?'selected':''}>Bezig</option><option value="partial" ${l.status==='partial'?'selected':''}>Deels</option><option value="done" ${l.status==='done'?'selected':''}>Afgerond</option></select></label></div><label class="tiny muted">${E15(L15('Notitie','Note'))}<input class="input" value="${E15(l.note||'')}" data-action="sl15-lane-change" data-lane="${E15(l.id)}" data-field="note" placeholder="${E15(L15('Bijv. eerst restanten controleren','e.g. check leftovers first'))}"></label></div>`).join('')}</div></div>`;
+    }
+    function renderTasks15(){
+      const sl=ensureShiftLeader15();
+      const showAll=!!sl.ui.showAllTasks;
+      const open=sl.tasks.filter(t=>t.status!=='done');
+      const done=sl.tasks.filter(t=>t.status==='done');
+      const shown=showAll?open:open.slice(0,8);
+      return `<div class="card sl15-tasks"><div class="flex-line"><div><h3>${E15(L15('Overige takenlijst','Other tasks'))}</h3><p class="muted small">${E15(L15('Standaardtaken, extra taken en alles wat tussendoor komt.','Standard tasks, extra tasks and anything that comes up.'))}</p></div><div class="btn-row"><button class="btn small" data-action="sl15-load-standard-tasks">${E15(L15('Standaard','Standard'))}</button><button class="btn small primary" data-action="sl15-open-task-form">＋</button></div></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item compact sl15-task"><span><strong>${E15(t.title)}</strong><br><span class="tiny muted">${E15(t.priority||L15('normaal','normal'))}${t.note?` · ${E15(t.note)}`:''}</span></span><span class="btn-row nowrap"><button class="btn small good" data-action="sl15-task-done" data-id="${E15(t.id)}">✓</button><button class="btn small warn" data-action="sl15-task-defer" data-id="${E15(t.id)}">↷</button><button class="btn small" data-action="sl15-open-task-form" data-id="${E15(t.id)}">✎</button><button class="btn small bad" data-action="sl15-task-delete" data-id="${E15(t.id)}">×</button></span></div>`).join('')}</div>`:`<p class="muted small">${E15(L15('Geen open overige taken.','No open other tasks.'))}</p>`}<div class="btn-row mt">${open.length>8?`<button class="btn" data-action="sl15-toggle-tasks">${showAll?E15(L15('Minder tonen','Show less')):E15(L15('Meer weergeven','Show more'))}</button>`:''}</div>${done.length?`<details class="detail-drawer mt"><summary>${E15(L15('Afgerond','Done'))} <span class="pill good">${done.length}</span></summary><div class="drawer-content list">${done.slice(0,12).map(t=>`<div class="list-item compact"><span>${E15(t.title)}</span><button class="btn small" data-action="sl15-task-reopen" data-id="${E15(t.id)}">${E15(L15('Ongedaan','Undo'))}</button></div>`).join('')}</div></details>`:''}</div>`;
+    }
+    function renderCapacity15(){
+      const {available,planned,diff,openTasks,doneTasks,incidents}=shiftSummary15();
+      const load = available ? Math.round(planned/available*100) : 0;
+      let barHtml=''; try { if(typeof bar === 'function') barHtml = bar(L15('Geplande vuluren','Planned fill hours'), load, load>100?'bad':load>85?'warn':'good'); } catch(_){}
+      return `<div class="card sl15-capacity"><h3>${E15(L15('Capaciteit shift','Shift capacity'))}</h3><div class="list"><div class="list-item compact"><span>${E15(L15('Beschikbaar team','Team available'))}</span><strong>${minutesText15(available)}</strong></div><div class="list-item compact"><span>${E15(L15('Geplande vuluren','Planned fill hours'))}</span><strong>${minutesText15(planned)}</strong></div><div class="list-item compact"><span>${E15(L15('Ruimte / tekort','Room / shortage'))}</span><strong>${diff>=0?'+':'−'}${minutesText15(Math.abs(diff))}</strong></div><div class="list-item compact"><span>${E15(L15('Open taken','Open tasks'))}</span><strong>${openTasks}</strong></div><div class="list-item compact"><span>${E15(L15('Afgerond','Done'))}</span><strong>${doneTasks}</strong></div><div class="list-item compact"><span>${E15(L15('Bijzonderheden','Notes'))}</span><strong>${incidents}</strong></div></div>${barHtml}<p class="muted small">${E15(diff<0?L15('Er is meer gepland dan beschikbaar. Verdeel taken opnieuw of zet bewust iets op overdracht.','More is planned than available. Reassign work or deliberately add something to handover.'):L15('Er is nog ruimte voor bijsturen, hulpvragen of onverwachte situaties.','There is room for steering, helping or unexpected situations.'))}</p></div>`;
+    }
+    function renderIncidents15(){
+      const sl=ensureShiftLeader15(); const showAll=!!sl.ui.showAllIncidents; const shown=showAll?sl.incidents:sl.incidents.slice(0,5);
+      return `<div class="card sl15-incidents"><div class="flex-line"><div><h3>${E15(L15('Onderbrekingen & bijzonderheden','Interruptions & notes'))}</h3><p class="muted small">${E15(L15('Leg vast waarom de planning wijzigt: klant, collega, incident, kassa of vracht.','Record why planning changes: customer, colleague, incident, checkout or freight.'))}</p></div><span class="pill info">${sl.incidents.length}</span></div><div class="btn-row mb">${incidentTypes15.map(type=>`<button class="btn small" data-action="sl15-open-incident" data-type="${E15(type)}">${E15(type)}</button>`).join('')}</div>${shown.length?`<div class="list">${shown.map(i=>`<div class="list-item compact"><span><strong>${E15(i.type)}</strong><br><span class="tiny muted">${E15(new Date(i.at||now15()).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}))}${i.minutes?` · ${i.minutes}m`:''} · ${E15(i.note||'')}</span></span><button class="btn small bad" data-action="sl15-incident-delete" data-id="${E15(i.id)}">×</button></div>`).join('')}</div>`:`<p class="muted small">${E15(L15('Nog geen onderbrekingen gelogd.','No interruptions logged yet.'))}</p>`}${sl.incidents.length>5?`<button class="btn mt" data-action="sl15-toggle-incidents">${showAll?E15(L15('Minder tonen','Show less')):E15(L15('Meer weergeven','Show more'))}</button>`:''}</div>`;
+    }
+    function reportText15(){
+      const sl=ensureShiftLeader15();
+      const {available,planned,diff}=shiftSummary15();
+      const laneLines=sl.lanes.map(l=>`- ${l.name}: ${teamMember15(l.personId)?.name || 'niet toegewezen'} · ${minutesText15(laneMinutes15(l))} · ${({done:'afgerond',busy:'bezig',partial:'deels',open:'open'}[l.status]||l.status)}${l.note?` · ${l.note}`:''}`);
+      const teamLines=sl.team.map(p=>`- ${p.name}: ${p.start||'--:--'}-${p.end||'--:--'} · pauze ${+p.breakMinutes||0}m · beschikbaar ${minutesText15(memberAvailable15(p))}`);
+      const doneTasks=sl.tasks.filter(t=>t.status==='done').map(t=>`- ${t.title}`);
+      const openTasks=sl.tasks.filter(t=>t.status!=='done').map(t=>`- ${t.title} (${t.status==='deferred'?'uitgesteld':'open'})`);
+      const incidents=sl.incidents.map(i=>`- ${i.type}: ${i.note||''}${i.minutes?` (${i.minutes}m)`:''}`);
+      const advice = diff<0 ? 'Let op: er was meer gepland dan beschikbaar. Zet open punten duidelijk op overdracht.' : 'Planning was haalbaar met ruimte voor bijsturen.';
+      return `Shiftklaar Report — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber15(sl.date)}\n\nTeam:\n${teamLines.join('\n') || '- Geen team ingevuld'}\n\nCapaciteit:\n- Beschikbaar: ${minutesText15(available)}\n- Gepland: ${minutesText15(planned)}\n- Ruimte/tekort: ${diff>=0?'+':'-'}${minutesText15(Math.abs(diff))}\n\nVulplanning:\n${laneLines.join('\n')}\n\nGedaan:\n${doneTasks.join('\n') || '- Nog niets afgevinkt'}\n\nNog open / overdracht:\n${openTasks.join('\n') || '- Geen open overige taken'}\n\nBijzonderheden:\n${incidents.join('\n') || '- Geen bijzonderheden gelogd'}\n\nAdvies/overdracht:\n- ${advice}`;
+    }
+    function renderReport15(){
+      return `<div class="card sl15-report"><h3>${E15(L15('Shiftklaar report','End-of-shift report'))}</h3><p class="muted small">${E15(L15('Gebruik dit aan het einde van de avond om in één keer duidelijk over te dragen.','Use this at the end of the evening to hand over clearly.'))}</p><div class="btn-row"><button class="btn good" data-action="sl15-copy-report">${E15(L15('Kopieer report','Copy report'))}</button><button class="btn" data-action="sl15-save-report-communication">${E15(L15('Opslaan bij Communicatie','Save to Communication'))}</button></div><details class="detail-drawer mt"><summary>${E15(L15('Preview bekijken','View preview'))}</summary><pre class="sl15-report-preview">${E15(reportText15())}</pre></details></div>`;
+    }
+    function renderShiftleaderHelp15(){
+      return `<details class="card detail-drawer sl15-help"><summary>${E15(L15('Hoe werkt de Shiftleider-planning?','How does Shift Lead planning work?'))}</summary><div class="drawer-content"><p>${E15(L15('Begin met teamleden en werktijden. Wijs daarna per pad iemand toe en vul de verwachte vuluren in. Houd overige taken en onderbrekingen apart bij, zodat het shiftklaar report eerlijk verklaart wat wel en niet gelukt is.','Start with team members and working times. Then assign someone to each aisle and enter expected fill hours. Track other tasks and interruptions separately so the shift report clearly explains what did and did not get done.'))}</p><ul><li>${E15(L15('Vulplanning = wie vult welk pad en hoeveel vuluren zijn gepland.','Fill planning = who fills which aisle and how many fill hours are planned.'))}</li><li>${E15(L15('Overige taken = taken naast vullen, zoals vracht, afprijsronde, kassapauzes en afsluitronde.','Other tasks = tasks besides filling, such as freight, markdown round, checkout breaks and closing round.'))}</li><li>${E15(L15('Onderbrekingen verklaren waarom de planning onderweg verandert.','Interruptions explain why the plan changes during the shift.'))}</li></ul></div></details>`;
+    }
+
+    function openPersonForm15(id=''){
+      const sl=ensureShiftLeader15(); const p=sl.team.find(x=>x.id===id) || {name:'',start:'16:00',end:'22:00',breakMinutes:30};
+      if(typeof modal==='function') modal(id?L15('Medewerker bewerken','Edit team member'):L15('Medewerker toevoegen','Add team member'), `<div class="grid"><label>${E15(L15('Naam','Name'))}<input class="input" id="sl15PersonName" value="${E15(p.name||'')}" placeholder="${E15(L15('Naam collega','Colleague name'))}"></label><div class="form-grid"><label>${E15(L15('Starttijd','Start time'))}<input class="input" id="sl15PersonStart" type="time" value="${E15(p.start||'16:00')}"></label><label>${E15(L15('Eindtijd','End time'))}<input class="input" id="sl15PersonEnd" type="time" value="${E15(p.end||'22:00')}"></label><label>${E15(L15('Pauze minuten','Break minutes'))}<input class="input" id="sl15PersonBreak" type="number" min="0" step="5" value="${E15(p.breakMinutes??30)}"></label></div><button class="btn primary" data-action="sl15-save-person" data-id="${E15(id)}">${E15(L15('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function openTaskForm15(id=''){
+      const sl=ensureShiftLeader15(); const t=sl.tasks.find(x=>x.id===id) || {title:'',priority:'Normaal',note:''};
+      if(typeof modal==='function') modal(id?L15('Shift-taak bewerken','Edit shift task'):L15('Nieuwe shift-taak','New shift task'), `<div class="grid"><label>${E15(L15('Taak','Task'))}<input class="input" id="sl15TaskTitle" value="${E15(t.title||'')}" placeholder="${E15(L15('Bijv. extra restanten controleren','e.g. check extra leftovers'))}"></label><label>${E15(L15('Prioriteit','Priority'))}<select class="select input" id="sl15TaskPriority"><option ${t.priority==='Hoog'?'selected':''}>Hoog</option><option ${t.priority==='Normaal'?'selected':''}>Normaal</option><option ${t.priority==='Laag'?'selected':''}>Laag</option></select></label><label>${E15(L15('Notitie','Note'))}<textarea class="textarea" id="sl15TaskNote">${E15(t.note||'')}</textarea></label><button class="btn primary" data-action="sl15-save-task" data-id="${E15(id)}">${E15(L15('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function openIncidentForm15(type='Overig'){
+      if(typeof modal==='function') modal(L15('Bijzonderheid loggen','Log note'), `<div class="grid"><label>${E15(L15('Type','Type'))}<select class="select input" id="sl15IncidentType">${incidentTypes15.map(x=>`<option ${x===type?'selected':''}>${E15(x)}</option>`).join('')}</select></label><label>${E15(L15('Duur minuten optioneel','Duration minutes optional'))}<input class="input" id="sl15IncidentMinutes" type="number" min="0" step="5" value="0"></label><label>${E15(L15('Notitie','Note'))}<textarea class="textarea" id="sl15IncidentNote" placeholder="${E15(L15('Wat gebeurde er?','What happened?'))}"></textarea></label><button class="btn primary" data-action="sl15-save-incident">${E15(L15('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function loadStandardTasks15(){
+      const sl=ensureShiftLeader15();
+      const titles=[...baseTasks15];
+      if(isTueThu15(sl.date)) titles.splice(9,0,'Nee-verkoop houdbaar');
+      let added=0;
+      titles.forEach(title=>{
+        if(!sl.tasks.some(t=>t.title===title && t.date===sl.date)) { sl.tasks.push({id:uid15('sl_task'), title, status:'open', priority:title.includes('Vracht')?'Hoog':'Normaal', note:'', date:sl.date, createdAt:now15()}); added++; }
+      });
+      try { if(typeof addActivity==='function') addActivity(`Shiftleider standa taken ingeladen: ${added}`,'shiftleader'); } catch(_){}
+      save15(); render15(); toast15(added?`${added} ${L15('taken ingeladen','tasks loaded')}`:L15('Standaardtaken stonden al klaar','Standard tasks were already ready'),'good');
+    }
+
+    const prevRenderPage6715 = typeof renderPage === 'function' ? renderPage : null;
+    if(prevRenderPage6715) renderPage = window.renderPage = function(){ return state.route === 'shiftleader' ? renderShiftleader() : prevRenderPage6715(); };
+
+    const prevToday6715 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6715) renderToday = window.renderToday = function(){
+      const base=prevToday6715(); const sl=ensureShiftLeader15();
+      const active = sl.team.length || sl.tasks.length || sl.lanes.some(l=>l.personId||laneMinutes15(l)||l.status!=='open');
+      const {available,planned,diff,openTasks}=shiftSummary15();
+      const card = `<div class="card sl15-today-card"><div class="flex-line"><div><h3>${E15(L15('Shiftleider Vers Avondshift','Shift Lead Fresh evening shift'))}</h3><p class="muted small">${active?E15(`${sl.team.length} team · ${openTasks} open taken · ${minutesText15(planned)} gepland`):E15(L15('Plan vandaag team, paden, overige taken en report.','Plan today team, aisles, other tasks and report.'))}</p></div><span class="pill ${diff<0?'bad':'good'}">${active?(diff>=0?'+':'−')+minutesText15(Math.abs(diff)):L15('nieuw','new')}</span></div><button class="btn primary mt" data-route="shiftleader">${E15(L15('Open Shiftleider','Open Shift Lead'))}</button></div>`;
+      return `${base}<div class="mt sl15-today-wrap">${card}</div>`;
+    };
+
+    const prevHandle6715 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      const sl=ensureShiftLeader15();
+      if(a==='sl15-open-person-form'){ openPersonForm15(el?.dataset?.id||''); return; }
+      if(a==='sl15-save-person'){
+        const id=el.dataset.id || uid15('sl_person'); const name=(document.getElementById('sl15PersonName')?.value||'').trim();
+        if(!name){ toast15(L15('Vul een naam in.','Enter a name.'),'warn'); return; }
+        let p=sl.team.find(x=>x.id===id); if(!p){ p={id}; sl.team.push(p); }
+        p.name=name; p.start=document.getElementById('sl15PersonStart')?.value||'16:00'; p.end=document.getElementById('sl15PersonEnd')?.value||'22:00'; p.breakMinutes=+(document.getElementById('sl15PersonBreak')?.value||0)||0;
+        if(typeof closeModal==='function') closeModal(); save15(); render15(); return;
+      }
+      if(a==='sl15-remove-person'){
+        const id=el.dataset.id; sl.team=sl.team.filter(p=>p.id!==id); sl.lanes.forEach(l=>{ if(l.personId===id) l.personId=''; }); save15(); render15(); return;
+      }
+      if(a==='sl15-lane-change'){
+        const lane=sl.lanes.find(l=>l.id===el.dataset.lane); if(lane){ const f=el.dataset.field; lane[f]= f==='hours' ? (+(el.value||0)||0) : el.value; save15(); render15(); } return;
+      }
+      if(a==='sl15-load-standard-tasks'){ loadStandardTasks15(); return; }
+      if(a==='sl15-open-task-form'){ openTaskForm15(el?.dataset?.id||''); return; }
+      if(a==='sl15-save-task'){
+        const id=el.dataset.id || uid15('sl_task'); const title=(document.getElementById('sl15TaskTitle')?.value||'').trim();
+        if(!title){ toast15(L15('Vul een taak in.','Enter a task.'),'warn'); return; }
+        let t=sl.tasks.find(x=>x.id===id); if(!t){ t={id,status:'open',date:sl.date,createdAt:now15()}; sl.tasks.unshift(t); }
+        t.title=title; t.priority=document.getElementById('sl15TaskPriority')?.value||'Normaal'; t.note=document.getElementById('sl15TaskNote')?.value||''; t.updatedAt=now15();
+        if(typeof closeModal==='function') closeModal(); save15(); render15(); return;
+      }
+      if(a==='sl15-task-done'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='done'; t.completedAt=now15(); save15(); render15(); } return; }
+      if(a==='sl15-task-defer'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='deferred'; t.deferredAt=now15(); save15(); render15(); } return; }
+      if(a==='sl15-task-reopen'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='open'; delete t.completedAt; save15(); render15(); } return; }
+      if(a==='sl15-task-delete'){ sl.tasks=sl.tasks.filter(t=>t.id!==el.dataset.id); save15(); render15(); return; }
+      if(a==='sl15-toggle-tasks'){ sl.ui.showAllTasks=!sl.ui.showAllTasks; save15(); render15(); return; }
+      if(a==='sl15-open-incident'){ openIncidentForm15(el?.dataset?.type||'Overig'); return; }
+      if(a==='sl15-save-incident'){
+        sl.incidents.unshift({id:uid15('sl_inc'), type:document.getElementById('sl15IncidentType')?.value||'Overig', minutes:+(document.getElementById('sl15IncidentMinutes')?.value||0)||0, note:document.getElementById('sl15IncidentNote')?.value||'', at:now15()});
+        if(typeof closeModal==='function') closeModal(); save15(); render15(); return;
+      }
+      if(a==='sl15-incident-delete'){ sl.incidents=sl.incidents.filter(i=>i.id!==el.dataset.id); save15(); render15(); return; }
+      if(a==='sl15-toggle-incidents'){ sl.ui.showAllIncidents=!sl.ui.showAllIncidents; save15(); render15(); return; }
+      if(a==='sl15-copy-report'){ copy15(reportText15()); toast15(L15('Shiftklaar report gekopieerd.','Shift report copied.'),'good'); return; }
+      if(a==='sl15-save-report-communication'){
+        state.communications = Array.isArray(state.communications) ? state.communications : [];
+        state.communications.unshift({id:uid15('com'), title:'Shiftklaar Report — Vers Avondshift', message:reportText15(), text:reportText15(), priority:'Normaal', role:'Teamleider', status:'open', createdAt:now15(), date:today15(), followDate:today15(), type:'shiftleader'});
+        toast15(L15('Report opgeslagen bij Communicatie.','Report saved to Communication.'),'good'); save15(); render15(); return;
+      }
+      if(prevHandle6715) return prevHandle6715(a,el,e);
+    };
+
+    const prevDiag6715 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6715) renderDiagnostics = window.renderDiagnostics = function(){
+      const sl=ensureShiftLeader15();
+      const checks=[
+        {name:'Shiftleider route', ok:Array.isArray(ROUTES)&&ROUTES.some(r=>r.id==='shiftleader'), detail:'work menu'},
+        {name:'Vaste paden', ok:sl.lanes.length===6, detail:sl.lanes.map(l=>l.name).join(', ')},
+        {name:'Teamplanning', ok:Array.isArray(sl.team), detail:`${sl.team.length} medewerkers`},
+        {name:'Overige taken', ok:Array.isArray(sl.tasks), detail:`${sl.tasks.length} taken`},
+        {name:'Shiftklaar report', ok:typeof reportText15==='function', detail:'kopiëren/communicatie'},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6715', detail:APP.cache}
+      ];
+      return prevDiag6715()+`<div class="grid grid-2 mt diagnostics-v6715"><div class="card"><h3>v6.7.15 Shiftleider checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E15(c.name)} <span class="tiny muted">${E15(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E15(L15('Vers Avondshift beleid','Fresh evening shift policy'))}</h3><p class="muted small">${E15(L15('Shiftleider is bewust een aparte module naast HACCP. HACCP blijft voedselveiligheid; Shiftleider stuurt team, vuluren, overige taken en overdracht.','Shift Lead is deliberately separate from HACCP. HACCP remains food safety; Shift Lead manages team, fill hours, other tasks and handover.'))}</p></div></div>`;
+    };
+
+    try { ensureShiftLeader15(); save15(); } catch(_){ }
+  } catch(err){ console.error('v6.7.15 patch failed', err); }
+})();
+
+/* =========================================================
+   RICH CMD v6.7.16 — Shiftleider Planning Polish
+   Refines Vers Avondshift: one shiftplanning window, standard times,
+   automatic breaks, meal allowance signal and completed tasks stay visible.
+========================================================= */
+(function(){
+  try{
+    if (typeof APP === 'object') {
+      APP.version = 'v6.7.16';
+      APP.cache = 'rich-cmd-cache-v6716';
+      APP.build = 'Shiftleider Planning Polish';
+    }
+    const L16 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E16 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid16 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today16 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now16 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save16 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render16 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast16 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type); } catch(_){} };
+    const copy16 = (txt)=> { try { if(typeof copyText === 'function') copyText(txt); else navigator.clipboard?.writeText(txt); } catch(_){} };
+
+    const laneDefs16 = [
+      {id:'agf', name:'AGF'},
+      {id:'panklaar', name:'Panklaar'},
+      {id:'maaltijden', name:'Maaltijden'},
+      {id:'vlees_vis_kip', name:'Vlees/Vis/Kip'},
+      {id:'zuivel', name:'Zuivel'},
+      {id:'delicatesse', name:'Delicatesse'}
+    ];
+    const baseTasks16 = [
+      'Magazijn vrachtklaar maken',
+      'Vers nee-verkoop controleren',
+      'Vracht lossen',
+      'Vracht uitsplitsen',
+      'Eventuele kassapauzes overnemen',
+      'Versrestanten en tellingen controleren',
+      'Afprijsronde',
+      'Versshift afronding',
+      'Sinaasappelpers schoonmaken',
+      'Winkel afsluitronde'
+    ];
+    const incidentTypes16 = ['Klant','Collega','Incident','Kassa','Vracht','Overig'];
+
+    function weekNumber16(dateIso=today16()){
+      const d = new Date(dateIso+'T12:00:00');
+      const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNr = (target.getUTCDay() + 6) % 7;
+      target.setUTCDate(target.getUTCDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setUTCMonth(0, 1);
+      if (target.getUTCDay() !== 4) target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+      return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+    function minutesText16(m){
+      m = Math.max(0, Math.round(+m || 0));
+      const h = Math.floor(m/60), mm = m%60;
+      return h ? `${h}u ${String(mm).padStart(2,'0')}m` : `${mm}m`;
+    }
+    function diffMinutes16(start,end){
+      if(!start || !end) return 0;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return 0;
+      let a=sh*60+sm, b=eh*60+em;
+      if(b<a) b+=24*60;
+      return Math.max(0,b-a);
+    }
+    function autoBreak16(start,end){
+      const mins = diffMinutes16(start,end);
+      if(mins >= 360) return 30;
+      if(mins >= 240) return 15;
+      return 0;
+    }
+    function mealAllowance16(start,end){
+      if(!start || !end) return false;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return false;
+      const a=sh*60+sm, b=eh*60+em;
+      return a <= 16*60 && b > 19*60;
+    }
+    function selectedDate16(){ return ensureShiftLeader16().date || today16(); }
+    function isTueThu16(dateIso=selectedDate16()){
+      const d=new Date(dateIso+'T12:00:00').getDay();
+      return d===2 || d===4;
+    }
+    function ensureShiftLeader16(){
+      state.shiftLeader = state.shiftLeader && typeof state.shiftLeader === 'object' ? state.shiftLeader : {};
+      const sl = state.shiftLeader;
+      sl.date = sl.date || today16();
+      sl.mode = sl.mode || 'Vers Avondshift';
+      sl.team = Array.isArray(sl.team) ? sl.team : [];
+      sl.team.forEach(p=>{ p.breakMinutes = autoBreak16(p.start,p.end); p.mealAllowance = mealAllowance16(p.start,p.end); });
+      sl.lanes = Array.isArray(sl.lanes) ? sl.lanes : [];
+      laneDefs16.forEach(def=>{
+        let lane = sl.lanes.find(l=>l.id===def.id || l.name===def.name);
+        if(!lane){ lane={id:def.id,name:def.name,personId:'',start:'',end:'',hours:0,fillHours:0,fillMinutes:0,status:'open',note:''}; sl.lanes.push(lane); }
+        lane.id=def.id; lane.name=def.name; lane.status=lane.status||'open';
+        if(lane.fillHours === undefined && lane.hours !== undefined){
+          const total = Math.round((+lane.hours||0)*60);
+          lane.fillHours = Math.floor(total/60);
+          lane.fillMinutes = total%60;
+        }
+        lane.fillHours = Math.max(0, +(lane.fillHours ?? 0) || 0);
+        lane.fillMinutes = Math.max(0, +(lane.fillMinutes ?? 0) || 0);
+      });
+      sl.lanes = laneDefs16.map(def=>sl.lanes.find(l=>l.id===def.id));
+      sl.tasks = Array.isArray(sl.tasks) ? sl.tasks : [];
+      sl.incidents = Array.isArray(sl.incidents) ? sl.incidents : [];
+      sl.reportHistory = Array.isArray(sl.reportHistory) ? sl.reportHistory : [];
+      sl.ui = sl.ui && typeof sl.ui === 'object' ? sl.ui : {};
+      return sl;
+    }
+    function teamMember16(id){ return ensureShiftLeader16().team.find(p=>p.id===id); }
+    function memberAvailable16(p){ return Math.max(0, diffMinutes16(p.start,p.end) - autoBreak16(p.start,p.end)); }
+    function laneMinutes16(l){
+      const fill = Math.round((+(l.fillHours??0)||0)*60 + (+(l.fillMinutes??0)||0));
+      if(fill>0) return fill;
+      return Math.round((+l.hours||0)*60) || Math.max(0,diffMinutes16(l.start,l.end));
+    }
+    function totalAvailable16(){ return ensureShiftLeader16().team.reduce((a,p)=>a+memberAvailable16(p),0); }
+    function totalPlanned16(){ return ensureShiftLeader16().lanes.reduce((a,l)=>a+laneMinutes16(l),0); }
+    function assignedMinutes16(personId){ return ensureShiftLeader16().lanes.filter(l=>l.personId===personId).reduce((a,l)=>a+laneMinutes16(l),0); }
+    function shiftSummary16(){
+      const sl=ensureShiftLeader16();
+      const available=totalAvailable16();
+      const planned=totalPlanned16();
+      const diff=available-planned;
+      return {sl,available,planned,diff,team:sl.team.length,openTasks:sl.tasks.filter(t=>t.status!=='done').length,doneTasks:sl.tasks.filter(t=>t.status==='done').length,incidents:sl.incidents.length};
+    }
+    function personOptions16(selected=''){
+      const team=ensureShiftLeader16().team;
+      return `<option value="">${E16(L16('Niet toegewezen','Unassigned'))}</option>` + team.map(p=>`<option value="${E16(p.id)}" ${p.id===selected?'selected':''}>${E16(p.name)}</option>`).join('');
+    }
+    function statusPill16(status){
+      const map={done:'good',open:'info',busy:'warn',partial:'warn',deferred:'warn'};
+      const label={done:L16('afgerond','done'),open:L16('open','open'),busy:L16('bezig','in progress'),partial:L16('deels','partial'),deferred:L16('uitgesteld','deferred')}[status] || status;
+      return `<span class="pill ${map[status]||'info'}">${E16(label)}</span>`;
+    }
+    function timePresetSelect16(id, value, presets){
+      const isPreset = presets.includes(value);
+      const preset = isPreset ? value : 'custom';
+      return `<div class="sl16-time-pair"><select class="select input" id="${id}Preset">${presets.map(t=>`<option value="${t}" ${preset===t?'selected':''}>${t}</option>`).join('')}<option value="custom" ${preset==='custom'?'selected':''}>${E16(L16('Optioneel / anders','Optional / other'))}</option></select><input class="input" type="time" id="${id}Custom" value="${E16(value||'')}"></div>`;
+    }
+    function readPresetTime16(baseId, fallback){
+      const preset = document.getElementById(baseId+'Preset')?.value || fallback;
+      if(preset === 'custom') return document.getElementById(baseId+'Custom')?.value || fallback;
+      return preset;
+    }
+
+    function renderShiftleader16(){
+      const {sl,available,planned,diff,team}=shiftSummary16();
+      return `<div class="grid sl16-page">
+        <div class="hero sl16-hero"><div class="flex-line"><div><span class="chip">v6.7.16</span><h2>${E16(L16('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E16(L16('Plan team, vuluren per pad, overige taken en bijzonderheden zonder dat afgeronde taken uit beeld verdwijnen.','Plan team, fill hours per aisle, other tasks and notes without completed tasks disappearing.'))}</p></div><div class="sl15-datebox"><strong>${E16(sl.date)}</strong><span>${E16(L16('Week','Week'))} ${weekNumber16(sl.date)}</span></div></div><div class="btn-row mt"><button class="btn primary" data-action="sl16-open-person-form">${E16(L16('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl16-load-standard-tasks">${E16(L16('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl16-open-task-form">${E16(L16('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl16-open-incident" data-type="Overig">${E16(L16('Bijzonderheid loggen','Log note'))}</button><button class="btn good" data-action="sl16-copy-report">${E16(L16('Kopieer shiftklaar report','Copy shift report'))}</button></div></div>
+        <div class="grid grid-4 sl16-kpis">${typeof kpi==='function'?`${kpi(L16('Beschikbaar','Available'),minutesText16(available),diff>=0?'good':'warn')}${kpi(L16('Gepland','Planned'),minutesText16(planned),planned>available?'bad':'good')}${kpi(L16('Ruimte / tekort','Room / shortage'),`${diff>=0?'+':'−'}${minutesText16(Math.abs(diff))}`,diff>=0?'good':'bad')}${kpi(L16('Team','Team'),team,null)}`:''}</div>
+        <div class="grid grid-main"><div class="grid">
+          ${renderTeam16()}
+          ${renderShiftPlanning16()}
+          ${renderTasks16()}
+        </div><div class="grid">
+          ${renderCapacity16()}
+          ${renderIncidents16()}
+          ${renderReport16()}
+          ${renderShiftleaderHelp16()}
+        </div></div>
+      </div>`;
+    }
+    function renderTeam16(){
+      const sl=ensureShiftLeader16();
+      return `<div class="card sl16-team"><div class="flex-line"><div><h3>${E16(L16('Team & beschikbare uren','Team & available hours'))}</h3><p class="muted small">${E16(L16('Start standaard om 16:00 of 17:00. Eind standaard om 19:00 of 20:00. Pauze wordt automatisch berekend: 4 uur = 15m, 6 uur = 30m.','Start defaults to 16:00 or 17:00. End defaults to 19:00 or 20:00. Break is calculated automatically: 4 hours = 15m, 6 hours = 30m.'))}</p></div><button class="btn small primary" data-action="sl16-open-person-form">＋</button></div>${sl.team.length?`<div class="list">${sl.team.map(p=>{ const assigned=assignedMinutes16(p.id), available=memberAvailable16(p), lanes=sl.lanes.filter(l=>l.personId===p.id).map(l=>l.name).join(', ') || L16('nog geen pad','no aisle yet'); const pause=autoBreak16(p.start,p.end); const meal=mealAllowance16(p.start,p.end); return `<div class="list-item sl16-person"><span><strong>${E16(p.name)}</strong><br><span class="tiny muted">${E16(p.start||'--:--')}–${E16(p.end||'--:--')} · ${E16(L16('pauze auto','auto break'))}: ${pause}m · ${E16(lanes)}</span></span><span class="sl16-person-right"><span class="pill ${assigned>available?'bad':'good'}">${minutesText16(assigned)} / ${minutesText16(available)}</span>${meal?`<span class="pill warn">${E16(L16('maaltijdvergoeding','meal allowance'))}</span>`:''}<button class="btn small" data-action="sl16-open-person-form" data-id="${E16(p.id)}">✎</button><button class="btn small bad" data-action="sl16-remove-person" data-id="${E16(p.id)}">×</button></span></div>`; }).join('')}</div>`:`<p class="muted small">${E16(L16('Nog geen medewerkers toegevoegd.','No team members added yet.'))}</p>`}</div>`;
+    }
+    function renderShiftPlanning16(){
+      const sl=ensureShiftLeader16();
+      return `<div class="card sl16-shiftplanning"><div class="flex-line"><div><h3>${E16(L16('Shiftplanning','Shift planning'))}</h3><p class="muted small">${E16(L16('Alle paden staan onder elkaar in één venster. Wijs per pad een collega toe en plan vuluren plus minuten.','All aisles are listed in one window. Assign a colleague per aisle and plan fill hours plus minutes.'))}</p></div><span class="pill info">${sl.lanes.length} ${E16(L16('paden','aisles'))}</span></div><div class="sl16-lane-table">${sl.lanes.map(l=>`<div class="sl16-lane-row ${l.status==='done'?'done':''}"><div class="sl16-lane-name"><strong>${E16(l.name)}</strong>${statusPill16(l.status)}</div><label><span>${E16(L16('Persoon','Person'))}</span><select class="select input" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="personId">${personOptions16(l.personId)}</select></label><label><span>${E16(L16('Start','Start'))}</span><input class="input" type="time" value="${E16(l.start||'')}" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="start"></label><label><span>${E16(L16('Eind','End'))}</span><input class="input" type="time" value="${E16(l.end||'')}" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="end"></label><label><span>${E16(L16('Vuluren','Fill hours'))}</span><input class="input" type="number" step="1" min="0" value="${E16(l.fillHours||0)}" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="fillHours"></label><label><span>${E16(L16('Minuten','Minutes'))}</span><input class="input" type="number" step="5" min="0" max="55" value="${E16(l.fillMinutes||0)}" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="fillMinutes"></label><label><span>${E16(L16('Status','Status'))}</span><select class="select input" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="status"><option value="open" ${l.status==='open'?'selected':''}>Open</option><option value="busy" ${l.status==='busy'?'selected':''}>Bezig</option><option value="partial" ${l.status==='partial'?'selected':''}>Deels</option><option value="done" ${l.status==='done'?'selected':''}>Afgerond</option></select></label><label class="sl16-lane-note"><span>${E16(L16('Notitie','Note'))}</span><input class="input" value="${E16(l.note||'')}" data-action="sl16-lane-change" data-lane="${E16(l.id)}" data-field="note" placeholder="${E16(L16('Bijv. later andere collega','e.g. colleague changed later'))}"></label></div>`).join('')}</div></div>`;
+    }
+    function renderTasks16(){
+      const sl=ensureShiftLeader16();
+      const showAll=!!sl.ui.showAllTasks;
+      const ordered=[...sl.tasks].sort((a,b)=> (a.status==='done')-(b.status==='done') || (a.status==='deferred')-(b.status==='deferred') || String(b.createdAt||'').localeCompare(String(a.createdAt||'')) );
+      const shown=showAll?ordered:ordered.slice(0,10);
+      const doneCount=sl.tasks.filter(t=>t.status==='done').length;
+      return `<div class="card sl16-tasks"><div class="flex-line"><div><h3>${E16(L16('Overige takenlijst','Other tasks'))}</h3><p class="muted small">${E16(L16('Afgeronde taken blijven zichtbaar, kleuren groen en schuiven naar onderen.','Completed tasks stay visible, turn green and move down.'))}</p></div><div class="btn-row"><button class="btn small" data-action="sl16-load-standard-tasks">${E16(L16('Standaard','Standard'))}</button><button class="btn small primary" data-action="sl16-open-task-form">＋</button></div></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item compact sl16-task ${t.status==='done'?'done':t.status==='deferred'?'deferred':''}"><span><strong>${t.status==='done'?'✓ ':''}${E16(t.title)}</strong><br><span class="tiny muted">${E16(t.priority||L16('normaal','normal'))}${t.note?` · ${E16(t.note)}`:''}${t.status==='deferred'?` · ${E16(L16('uitgesteld','deferred'))}`:''}</span></span><span class="btn-row nowrap">${t.status==='done'?`<button class="btn small" data-action="sl16-task-reopen" data-id="${E16(t.id)}">↩</button>`:`<button class="btn small good" data-action="sl16-task-done" data-id="${E16(t.id)}">✓</button><button class="btn small warn" data-action="sl16-task-defer" data-id="${E16(t.id)}">↷</button>`}<button class="btn small" data-action="sl16-open-task-form" data-id="${E16(t.id)}">✎</button><button class="btn small bad" data-action="sl16-task-delete" data-id="${E16(t.id)}">×</button></span></div>`).join('')}</div>`:`<p class="muted small">${E16(L16('Nog geen overige taken.','No other tasks yet.'))}</p>`}<div class="btn-row mt">${ordered.length>10?`<button class="btn" data-action="sl16-toggle-tasks">${showAll?E16(L16('Minder tonen','Show less')):E16(L16('Meer weergeven','Show more'))}</button>`:''}${doneCount?`<span class="pill good">${doneCount} ${E16(L16('voldaan','done'))}</span>`:''}</div></div>`;
+    }
+    function renderCapacity16(){
+      const {available,planned,diff,openTasks,doneTasks,incidents}=shiftSummary16();
+      const load = available ? Math.round(planned/available*100) : 0;
+      let barHtml=''; try { if(typeof bar === 'function') barHtml = bar(L16('Geplande vuluren','Planned fill hours'), load, load>100?'bad':load>85?'warn':'good'); } catch(_){ }
+      const mealCount=ensureShiftLeader16().team.filter(p=>mealAllowance16(p.start,p.end)).length;
+      return `<div class="card sl16-capacity"><h3>${E16(L16('Capaciteit shift','Shift capacity'))}</h3><div class="list"><div class="list-item compact"><span>${E16(L16('Beschikbaar team','Team available'))}</span><strong>${minutesText16(available)}</strong></div><div class="list-item compact"><span>${E16(L16('Geplande vuluren','Planned fill hours'))}</span><strong>${minutesText16(planned)}</strong></div><div class="list-item compact"><span>${E16(L16('Ruimte / tekort','Room / shortage'))}</span><strong>${diff>=0?'+':'−'}${minutesText16(Math.abs(diff))}</strong></div><div class="list-item compact"><span>${E16(L16('Open taken','Open tasks'))}</span><strong>${openTasks}</strong></div><div class="list-item compact"><span>${E16(L16('Voldaan','Done'))}</span><strong>${doneTasks}</strong></div><div class="list-item compact"><span>${E16(L16('Maaltijdvergoeding signaal','Meal allowance signal'))}</span><strong>${mealCount}</strong></div><div class="list-item compact"><span>${E16(L16('Bijzonderheden','Notes'))}</span><strong>${incidents}</strong></div></div>${barHtml}<p class="muted small">${E16(diff<0?L16('Er is meer gepland dan beschikbaar. Verdeel paden opnieuw of zet open punten bewust op overdracht.','More is planned than available. Reassign aisles or deliberately add open points to handover.'):L16('Er is ruimte voor bijsturen, hulpvragen of onverwachte situaties.','There is room for steering, helping or unexpected situations.'))}</p></div>`;
+    }
+    function renderIncidents16(){
+      const sl=ensureShiftLeader16(); const showAll=!!sl.ui.showAllIncidents; const shown=showAll?sl.incidents:sl.incidents.slice(0,5);
+      return `<div class="card sl16-incidents"><div class="flex-line"><div><h3>${E16(L16('Onderbrekingen & bijzonderheden','Interruptions & notes'))}</h3><p class="muted small">${E16(L16('Leg vast waarom de planning veranderde.','Record why the plan changed.'))}</p></div></div><div class="btn-row">${incidentTypes16.map(t=>`<button class="btn small" data-action="sl16-open-incident" data-type="${E16(t)}">${E16(t)}</button>`).join('')}</div>${shown.length?`<div class="list mt">${shown.map(i=>`<div class="list-item compact"><span><strong>${E16(i.type)}</strong><br><span class="tiny muted">${E16((i.at||'').slice(11,16))}${i.minutes?` · ${i.minutes}m`:''}${i.note?` · ${E16(i.note)}`:''}</span></span><button class="btn small bad" data-action="sl16-incident-delete" data-id="${E16(i.id)}">×</button></div>`).join('')}</div>`:`<p class="muted small mt">${E16(L16('Nog geen onderbrekingen gelogd.','No interruptions logged yet.'))}</p>`}${sl.incidents.length>5?`<button class="btn mt" data-action="sl16-toggle-incidents">${showAll?E16(L16('Minder tonen','Show less')):E16(L16('Meer weergeven','Show more'))}</button>`:''}</div>`;
+    }
+    function reportText16(){
+      const sl=ensureShiftLeader16();
+      const {available,planned,diff}=shiftSummary16();
+      const laneLines=sl.lanes.map(l=>`- ${l.name}: ${teamMember16(l.personId)?.name || 'niet toegewezen'} · ${minutesText16(laneMinutes16(l))} · ${({done:'afgerond',busy:'bezig',partial:'deels',open:'open'}[l.status]||l.status)}${l.note?` · ${l.note}`:''}`);
+      const teamLines=sl.team.map(p=>`- ${p.name}: ${p.start||'--:--'}-${p.end||'--:--'} · pauze auto ${autoBreak16(p.start,p.end)}m · beschikbaar ${minutesText16(memberAvailable16(p))}${mealAllowance16(p.start,p.end)?' · maaltijdvergoeding':''}`);
+      const doneTasks=sl.tasks.filter(t=>t.status==='done').map(t=>`- ${t.title}`);
+      const openTasks=sl.tasks.filter(t=>t.status!=='done').map(t=>`- ${t.title} (${t.status==='deferred'?'uitgesteld':'open'})`);
+      const incidents=sl.incidents.map(i=>`- ${i.type}: ${i.note||''}${i.minutes?` (${i.minutes}m)`:''}`);
+      const advice = diff<0 ? 'Let op: er was meer gepland dan beschikbaar. Zet open punten duidelijk op overdracht.' : 'Planning was haalbaar met ruimte voor bijsturen.';
+      return `Shiftklaar Report — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber16(sl.date)}\n\nTeam:\n${teamLines.join('\n') || '- Geen team ingevuld'}\n\nCapaciteit:\n- Beschikbaar: ${minutesText16(available)}\n- Gepland: ${minutesText16(planned)}\n- Ruimte/tekort: ${diff>=0?'+':'-'}${minutesText16(Math.abs(diff))}\n\nVulplanning:\n${laneLines.join('\n')}\n\nGedaan:\n${doneTasks.join('\n') || '- Nog niets afgevinkt'}\n\nNog open / overdracht:\n${openTasks.join('\n') || '- Geen open overige taken'}\n\nBijzonderheden:\n${incidents.join('\n') || '- Geen bijzonderheden gelogd'}\n\nAdvies/overdracht:\n- ${advice}`;
+    }
+    function renderReport16(){
+      return `<div class="card sl16-report"><h3>${E16(L16('Shiftklaar report','End-of-shift report'))}</h3><p class="muted small">${E16(L16('Inclusief paden, taken, automatisch berekende pauzes en maaltijdvergoeding-signalen.','Includes aisles, tasks, automatically calculated breaks and meal allowance signals.'))}</p><div class="btn-row"><button class="btn good" data-action="sl16-copy-report">${E16(L16('Kopieer report','Copy report'))}</button><button class="btn" data-action="sl16-save-report-communication">${E16(L16('Opslaan bij Communicatie','Save to Communication'))}</button></div><details class="detail-drawer mt"><summary>${E16(L16('Preview bekijken','View preview'))}</summary><pre class="sl15-report-preview">${E16(reportText16())}</pre></details></div>`;
+    }
+    function renderShiftleaderHelp16(){
+      return `<details class="card detail-drawer sl16-help"><summary>${E16(L16('Hoe werkt deze Shiftplanning?','How does this shift planning work?'))}</summary><div class="drawer-content"><p>${E16(L16('Je plant eerst het team en de tijden. Pauzes hoef je niet in te voeren: RICH CMD rekent 15 minuten bij 4 uur en 30 minuten bij 6 uur. Daarna wijs je paden toe in één overzichtelijk Shiftplanning-venster.','First plan the team and times. You do not enter breaks: RICH CMD calculates 15 minutes at 4 hours and 30 minutes at 6 hours. Then assign aisles in one clear Shift planning window.'))}</p><ul><li>${E16(L16('Maaltijdvergoeding wordt gesignaleerd bij starten om/rond 16:00 en doorwerken na 19:00.','Meal allowance is signalled when starting at/around 16:00 and working past 19:00.'))}</li><li>${E16(L16('Afgeronde taken blijven zichtbaar, worden groen en schuiven naar onderen.','Completed tasks stay visible, turn green and move down.'))}</li><li>${E16(L16('Bijzonderheden verklaren waarom de planning onderweg wijzigt.','Notes explain why the plan changes during the shift.'))}</li></ul></div></details>`;
+    }
+    function openPersonForm16(id=''){
+      const sl=ensureShiftLeader16(); const p=sl.team.find(x=>x.id===id) || {name:'',start:'16:00',end:'20:00'};
+      if(typeof modal==='function') modal(id?L16('Medewerker bewerken','Edit team member'):L16('Medewerker toevoegen','Add team member'), `<div class="grid"><label>${E16(L16('Naam','Name'))}<input class="input" id="sl16PersonName" value="${E16(p.name||'')}" placeholder="${E16(L16('Naam collega','Colleague name'))}"></label><div class="form-grid"><label>${E16(L16('Starttijd','Start time'))}${timePresetSelect16('sl16PersonStart', p.start||'16:00', ['16:00','17:00'])}</label><label>${E16(L16('Eindtijd','End time'))}${timePresetSelect16('sl16PersonEnd', p.end||'20:00', ['19:00','20:00'])}</label></div><div class="card soft"><strong>${E16(L16('Pauze wordt automatisch berekend','Break is calculated automatically'))}</strong><p class="muted small">${E16(L16('4 uur werken = 15 minuten pauze. 6 uur werken = 30 minuten pauze. Start om/rond 16:00 en werken na 19:00 geeft een maaltijdvergoeding-signaal.','4 hours work = 15 minutes break. 6 hours work = 30 minutes break. Starting at/around 16:00 and working past 19:00 gives a meal allowance signal.'))}</p></div><button class="btn primary" data-action="sl16-save-person" data-id="${E16(id)}">${E16(L16('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function openTaskForm16(id=''){
+      const sl=ensureShiftLeader16(); const t=sl.tasks.find(x=>x.id===id) || {title:'',priority:'Normaal',note:''};
+      if(typeof modal==='function') modal(id?L16('Shift-taak bewerken','Edit shift task'):L16('Nieuwe shift-taak','New shift task'), `<div class="grid"><label>${E16(L16('Taak','Task'))}<input class="input" id="sl16TaskTitle" value="${E16(t.title||'')}" placeholder="${E16(L16('Bijv. extra restanten controleren','e.g. check extra leftovers'))}"></label><label>${E16(L16('Prioriteit','Priority'))}<select class="select input" id="sl16TaskPriority"><option ${t.priority==='Hoog'?'selected':''}>Hoog</option><option ${t.priority==='Normaal'?'selected':''}>Normaal</option><option ${t.priority==='Laag'?'selected':''}>Laag</option></select></label><label>${E16(L16('Notitie','Note'))}<textarea class="textarea" id="sl16TaskNote">${E16(t.note||'')}</textarea></label><button class="btn primary" data-action="sl16-save-task" data-id="${E16(id)}">${E16(L16('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function openIncidentForm16(type='Overig'){
+      if(typeof modal==='function') modal(L16('Bijzonderheid loggen','Log note'), `<div class="grid"><label>${E16(L16('Type','Type'))}<select class="select input" id="sl16IncidentType">${incidentTypes16.map(x=>`<option ${x===type?'selected':''}>${E16(x)}</option>`).join('')}</select></label><label>${E16(L16('Duur minuten optioneel','Duration minutes optional'))}<input class="input" id="sl16IncidentMinutes" type="number" min="0" step="5" value="0"></label><label>${E16(L16('Notitie','Note'))}<textarea class="textarea" id="sl16IncidentNote" placeholder="${E16(L16('Wat gebeurde er?','What happened?'))}"></textarea></label><button class="btn primary" data-action="sl16-save-incident">${E16(L16('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function loadStandardTasks16(){
+      const sl=ensureShiftLeader16();
+      const titles=[...baseTasks16];
+      if(isTueThu16(sl.date)) titles.splice(9,0,'Nee-verkoop houdbaar');
+      let added=0;
+      titles.forEach(title=>{
+        if(!sl.tasks.some(t=>t.title===title && t.date===sl.date)) { sl.tasks.push({id:uid16('sl_task'), title, status:'open', priority:title.includes('Vracht')?'Hoog':'Normaal', note:'', date:sl.date, createdAt:now16()}); added++; }
+      });
+      try { if(typeof addActivity==='function') addActivity(`Shiftleider standaardtaken ingeladen: ${added}`,'shiftleader'); } catch(_){ }
+      save16(); render16(); toast16(added?`${added} ${L16('taken ingeladen','tasks loaded')}`:L16('Standaardtaken stonden al klaar','Standard tasks were already ready'),'good');
+    }
+
+    const prevRenderPage6716 = typeof renderPage === 'function' ? renderPage : null;
+    if(prevRenderPage6716) renderPage = window.renderPage = function(){ return state.route === 'shiftleader' ? renderShiftleader16() : prevRenderPage6716(); };
+
+    const prevToday6716 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6716) renderToday = window.renderToday = function(){
+      const base=prevToday6716(); const sl=ensureShiftLeader16();
+      const active = sl.team.length || sl.tasks.length || sl.lanes.some(l=>l.personId||laneMinutes16(l)||l.status!=='open');
+      const {available,planned,diff,openTasks}=shiftSummary16();
+      const mealCount=sl.team.filter(p=>mealAllowance16(p.start,p.end)).length;
+      const card = `<div class="card sl16-today-card"><div class="flex-line"><div><h3>${E16(L16('Shiftleider Vers Avondshift','Shift Lead Fresh evening shift'))}</h3><p class="muted small">${active?E16(`${sl.team.length} team · ${openTasks} open taken · ${minutesText16(planned)} gepland${mealCount?` · ${mealCount} maaltijdvergoeding`:''}`):E16(L16('Plan vandaag team, paden, overige taken en report.','Plan today team, aisles, other tasks and report.'))}</p></div><span class="pill ${diff<0?'bad':'good'}">${active?(diff>=0?'+':'−')+minutesText16(Math.abs(diff)):L16('nieuw','new')}</span></div><button class="btn primary mt" data-route="shiftleader">${E16(L16('Open Shiftleider','Open Shift Lead'))}</button></div>`;
+      return `${base}<div class="mt sl16-today-wrap">${card}</div>`;
+    };
+
+    const prevHandle6716 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      const sl=ensureShiftLeader16();
+      if(a==='sl16-open-person-form' || a==='sl15-open-person-form'){ openPersonForm16(el?.dataset?.id||''); return; }
+      if(a==='sl16-save-person'){
+        const id=el.dataset.id || uid16('sl_person'); const name=(document.getElementById('sl16PersonName')?.value||'').trim();
+        if(!name){ toast16(L16('Vul een naam in.','Enter a name.'),'warn'); return; }
+        let p=sl.team.find(x=>x.id===id); if(!p){ p={id}; sl.team.push(p); }
+        p.name=name; p.start=readPresetTime16('sl16PersonStart','16:00'); p.end=readPresetTime16('sl16PersonEnd','20:00'); p.breakMinutes=autoBreak16(p.start,p.end); p.mealAllowance=mealAllowance16(p.start,p.end);
+        if(typeof closeModal==='function') closeModal(); save16(); render16(); return;
+      }
+      if(a==='sl16-remove-person' || a==='sl15-remove-person'){
+        const id=el.dataset.id; sl.team=sl.team.filter(p=>p.id!==id); sl.lanes.forEach(l=>{ if(l.personId===id) l.personId=''; }); save16(); render16(); return;
+      }
+      if(a==='sl16-lane-change' || a==='sl15-lane-change'){
+        const lane=sl.lanes.find(l=>l.id===el.dataset.lane); if(lane){ const f=el.dataset.field; const numeric=['hours','fillHours','fillMinutes'].includes(f); lane[f]= numeric ? (+(el.value||0)||0) : el.value; if(f==='fillHours'||f==='fillMinutes') lane.hours = laneMinutes16(lane)/60; save16(); render16(); } return;
+      }
+      if(a==='sl16-load-standard-tasks' || a==='sl15-load-standard-tasks'){ loadStandardTasks16(); return; }
+      if(a==='sl16-open-task-form' || a==='sl15-open-task-form'){ openTaskForm16(el?.dataset?.id||''); return; }
+      if(a==='sl16-save-task'){
+        const id=el.dataset.id || uid16('sl_task'); const title=(document.getElementById('sl16TaskTitle')?.value||'').trim();
+        if(!title){ toast16(L16('Vul een taak in.','Enter a task.'),'warn'); return; }
+        let t=sl.tasks.find(x=>x.id===id); if(!t){ t={id,status:'open',date:sl.date,createdAt:now16()}; sl.tasks.unshift(t); }
+        t.title=title; t.priority=document.getElementById('sl16TaskPriority')?.value||'Normaal'; t.note=document.getElementById('sl16TaskNote')?.value||''; t.updatedAt=now16();
+        if(typeof closeModal==='function') closeModal(); save16(); render16(); return;
+      }
+      if(a==='sl16-task-done' || a==='sl15-task-done'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='done'; t.completedAt=now16(); save16(); render16(); } return; }
+      if(a==='sl16-task-defer' || a==='sl15-task-defer'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='deferred'; t.deferredAt=now16(); save16(); render16(); } return; }
+      if(a==='sl16-task-reopen' || a==='sl15-task-reopen'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){ t.status='open'; delete t.completedAt; save16(); render16(); } return; }
+      if(a==='sl16-task-delete' || a==='sl15-task-delete'){ sl.tasks=sl.tasks.filter(t=>t.id!==el.dataset.id); save16(); render16(); return; }
+      if(a==='sl16-toggle-tasks' || a==='sl15-toggle-tasks'){ sl.ui.showAllTasks=!sl.ui.showAllTasks; save16(); render16(); return; }
+      if(a==='sl16-open-incident' || a==='sl15-open-incident'){ openIncidentForm16(el?.dataset?.type||'Overig'); return; }
+      if(a==='sl16-save-incident'){
+        sl.incidents.unshift({id:uid16('sl_inc'), type:document.getElementById('sl16IncidentType')?.value||'Overig', minutes:+(document.getElementById('sl16IncidentMinutes')?.value||0)||0, note:document.getElementById('sl16IncidentNote')?.value||'', at:now16()});
+        if(typeof closeModal==='function') closeModal(); save16(); render16(); return;
+      }
+      if(a==='sl16-incident-delete' || a==='sl15-incident-delete'){ sl.incidents=sl.incidents.filter(i=>i.id!==el.dataset.id); save16(); render16(); return; }
+      if(a==='sl16-toggle-incidents' || a==='sl15-toggle-incidents'){ sl.ui.showAllIncidents=!sl.ui.showAllIncidents; save16(); render16(); return; }
+      if(a==='sl16-copy-report' || a==='sl15-copy-report'){ copy16(reportText16()); toast16(L16('Shiftklaar report gekopieerd.','Shift report copied.'),'good'); return; }
+      if(a==='sl16-save-report-communication' || a==='sl15-save-report-communication'){
+        state.communications = Array.isArray(state.communications) ? state.communications : [];
+        state.communications.unshift({id:uid16('com'), title:'Shiftklaar Report — Vers Avondshift', message:reportText16(), text:reportText16(), priority:'Normaal', role:'Teamleider', status:'open', createdAt:now16(), date:today16(), followDate:today16(), type:'shiftleader'});
+        toast16(L16('Report opgeslagen bij Communicatie.','Report saved to Communication.'),'good'); save16(); render16(); return;
+      }
+      if(prevHandle6716) return prevHandle6716(a,el,e);
+    };
+
+    const prevDiag6716 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6716) renderDiagnostics = window.renderDiagnostics = function(){
+      const sl=ensureShiftLeader16();
+      let base=prevDiag6716() || '';
+      const checks=[
+        {name:'Shiftplanning één venster', ok:typeof renderShiftPlanning16==='function' && sl.lanes.length===6, detail:'geen losse padkaarten'},
+        {name:'Standaardtijden medewerker', ok:true, detail:'16/17 start · 19/20 eind · optioneel'},
+        {name:'Automatische pauze', ok:sl.team.every(p=>(+p.breakMinutes||0)===autoBreak16(p.start,p.end)), detail:'4u=15m, 6u=30m'},
+        {name:'Maaltijdvergoeding signaal', ok:true, detail:`${sl.team.filter(p=>mealAllowance16(p.start,p.end)).length} signalen`},
+        {name:'Taken blijven zichtbaar', ok:typeof renderTasks16==='function', detail:'groen + naar onderen'},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6716', detail:APP.cache}
+      ];
+      return base+`<div class="grid grid-2 mt diagnostics-v6716"><div class="card"><h3>v6.7.16 Shiftleider Planning checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E16(c.name)} <span class="tiny muted">${E16(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E16(L16('Shiftleider afspraken','Shift lead rules'))}</h3><p class="muted small">${E16(L16('Paden staan samen in één Shiftplanning-venster. Pauze wordt automatisch toegekend en afgeronde taken blijven zichtbaar als groene regels onderaan.','Aisles are together in one Shift planning window. Breaks are assigned automatically and completed tasks stay visible as green rows at the bottom.'))}</p></div></div>`;
+    };
+
+    try { ensureShiftLeader16(); save16(); } catch(_){ }
+  } catch(err){ console.error('v6.7.16 patch failed', err); }
+})();
+
+/* =========================================================
+   RICH CMD v6.7.17 — Shiftleider Compact Planning & Extra Tools
+   Compact lane planning: generated lane times, fill edit modal,
+   note edit modal, clickable status, planning check, copy plan,
+   and change log.
+========================================================= */
+(function(){
+  try{
+    if (typeof APP === 'object') {
+      APP.version = 'v6.7.17';
+      APP.cache = 'rich-cmd-cache-v6717';
+      APP.build = 'Shiftleider Compact Planning & Extra Tools';
+    }
+    const L17 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E17 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid17 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today17 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now17 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save17 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render17 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast17 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type); } catch(_){} };
+    const copy17 = (txt)=> { try { if(typeof copyText === 'function') copyText(txt); else navigator.clipboard?.writeText(txt); } catch(_){} };
+    const laneDefs17 = [
+      {id:'agf', name:'AGF'},
+      {id:'panklaar', name:'Panklaar'},
+      {id:'maaltijden', name:'Maaltijden'},
+      {id:'vlees_vis_kip', name:'Vlees/Vis/Kip'},
+      {id:'zuivel', name:'Zuivel'},
+      {id:'delicatesse', name:'Delicatesse'}
+    ];
+    const baseTasks17 = [
+      'Magazijn vrachtklaar maken','Vers nee-verkoop controleren','Vracht lossen','Vracht uitsplitsen','Eventuele kassapauzes overnemen','Versrestanten en tellingen controleren','Afprijsronde','Versshift afronding','Sinaasappelpers schoonmaken','Winkel afsluitronde'
+    ];
+    const incidentTypes17 = ['Klant','Collega','Incident','Kassa','Vracht','Overig'];
+    const statusCycle17 = ['open','busy','partial','done'];
+    const statusLabel17 = {open:'Open',busy:'Bezig',partial:'Deels',done:'Afgerond',deferred:'Uitgesteld'};
+    const statusClass17 = {open:'info',busy:'warn',partial:'warn',done:'good',deferred:'warn'};
+
+    function weekNumber17(dateIso=today17()){
+      const d = new Date(dateIso+'T12:00:00');
+      const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNr = (target.getUTCDay() + 6) % 7;
+      target.setUTCDate(target.getUTCDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setUTCMonth(0, 1);
+      if (target.getUTCDay() !== 4) target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+      return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+    function minutesText17(m){
+      m = Math.max(0, Math.round(+m || 0));
+      const h = Math.floor(m/60), mm = m%60;
+      return h ? `${h}u ${String(mm).padStart(2,'0')}m` : `${mm}m`;
+    }
+    function diffMinutes17(start,end){
+      if(!start || !end) return 0;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return 0;
+      let a=sh*60+sm, b=eh*60+em;
+      if(b<a) b+=24*60;
+      return Math.max(0,b-a);
+    }
+    function addMinutes17(time, minutes){
+      if(!time) return '';
+      const [h,m] = String(time).split(':').map(Number);
+      if(Number.isNaN(h)||Number.isNaN(m)) return '';
+      let total = (h*60+m+Math.round(+minutes||0))%(24*60);
+      if(total<0) total += 24*60;
+      return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+    }
+    function autoBreak17(start,end){ const mins = diffMinutes17(start,end); return mins >= 360 ? 30 : mins >= 240 ? 15 : 0; }
+    function mealAllowance17(start,end){
+      if(!start || !end) return false;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return false;
+      return (sh*60+sm) <= 16*60 && (eh*60+em) > 19*60;
+    }
+    function isTueThu17(dateIso){ const d=new Date((dateIso||today17())+'T12:00:00').getDay(); return d===2 || d===4; }
+    function ensureShiftLeader17(){
+      state.shiftLeader = state.shiftLeader && typeof state.shiftLeader === 'object' ? state.shiftLeader : {};
+      const sl = state.shiftLeader;
+      sl.date = sl.date || today17();
+      sl.mode = sl.mode || 'Vers Avondshift';
+      sl.team = Array.isArray(sl.team) ? sl.team : [];
+      sl.team.forEach(p=>{ p.breakMinutes = autoBreak17(p.start,p.end); p.mealAllowance = mealAllowance17(p.start,p.end); });
+      sl.lanes = Array.isArray(sl.lanes) ? sl.lanes : [];
+      laneDefs17.forEach(def=>{
+        let lane = sl.lanes.find(l=>l.id===def.id || l.name===def.name);
+        if(!lane){ lane={id:def.id,name:def.name,personId:'',fillHours:0,fillMinutes:0,status:'open',note:'',start:'',end:''}; sl.lanes.push(lane); }
+        lane.id=def.id; lane.name=def.name; lane.status=lane.status || 'open';
+        if(lane.fillHours === undefined && lane.hours !== undefined){ const total=Math.round((+lane.hours||0)*60); lane.fillHours=Math.floor(total/60); lane.fillMinutes=total%60; }
+        lane.fillHours = Math.max(0, +(lane.fillHours ?? 0) || 0);
+        lane.fillMinutes = Math.max(0, +(lane.fillMinutes ?? 0) || 0);
+        lane.note = lane.note || '';
+      });
+      sl.lanes = laneDefs17.map(def=>sl.lanes.find(l=>l.id===def.id));
+      sl.tasks = Array.isArray(sl.tasks) ? sl.tasks : [];
+      sl.incidents = Array.isArray(sl.incidents) ? sl.incidents : [];
+      sl.reportHistory = Array.isArray(sl.reportHistory) ? sl.reportHistory : [];
+      sl.planLog = Array.isArray(sl.planLog) ? sl.planLog : [];
+      sl.ui = sl.ui && typeof sl.ui === 'object' ? sl.ui : {};
+      return sl;
+    }
+    function laneById17(id){ return ensureShiftLeader17().lanes.find(l=>l.id===id); }
+    function teamMember17(id){ return ensureShiftLeader17().team.find(p=>p.id===id); }
+    function memberAvailable17(p){ return Math.max(0, diffMinutes17(p.start,p.end) - autoBreak17(p.start,p.end)); }
+    function laneMinutes17(l){ return Math.max(0, Math.round((+(l.fillHours||0))*60 + (+(l.fillMinutes||0)))); }
+    function totalAvailable17(){ return ensureShiftLeader17().team.reduce((a,p)=>a+memberAvailable17(p),0); }
+    function totalPlanned17(){ return ensureShiftLeader17().lanes.reduce((a,l)=>a+laneMinutes17(l),0); }
+    function assignedMinutes17(personId){ return ensureShiftLeader17().lanes.filter(l=>l.personId===personId).reduce((a,l)=>a+laneMinutes17(l),0); }
+    function shiftSummary17(){
+      const sl=ensureShiftLeader17(), available=totalAvailable17(), planned=totalPlanned17(), diff=available-planned;
+      return {sl,available,planned,diff,team:sl.team.length,openTasks:sl.tasks.filter(t=>t.status!=='done').length,doneTasks:sl.tasks.filter(t=>t.status==='done').length,incidents:sl.incidents.length};
+    }
+    function logPlan17(text){
+      const sl=ensureShiftLeader17(); sl.planLog.unshift({id:uid17('sl_log'), text, at:now17()}); sl.planLog=sl.planLog.slice(0,40);
+    }
+    function personOptions17(selected=''){
+      const team=ensureShiftLeader17().team;
+      return `<option value="">${E17(L17('Niet toegewezen','Unassigned'))}</option>` + team.map(p=>`<option value="${E17(p.id)}" ${p.id===selected?'selected':''}>${E17(p.name)}</option>`).join('');
+    }
+    function statusButton17(l){
+      const st=l.status||'open';
+      return `<button class="sl17-status pill ${statusClass17[st]||'info'}" data-action="sl17-cycle-lane-status" data-lane="${E17(l.id)}" title="${E17(L17('Klik om status te wijzigen','Click to change status'))}">${E17(statusLabel17[st]||st)}</button>`;
+    }
+    function generatedLaneTimes17(){
+      const sl=ensureShiftLeader17();
+      const times={};
+      sl.team.forEach(p=>{
+        let cursor = p.start || '';
+        sl.lanes.filter(l=>l.personId===p.id).forEach(l=>{
+          const mins=laneMinutes17(l);
+          if(cursor && mins>0){ times[l.id]={start:cursor,end:addMinutes17(cursor,mins),source:'auto'}; cursor=times[l.id].end; }
+          else if(cursor){ times[l.id]={start:cursor,end:cursor,source:'auto'}; }
+        });
+      });
+      sl.lanes.forEach(l=>{ if(!times[l.id] && (l.start||l.end)) times[l.id]={start:l.start||'',end:l.end||'',source:'manual'}; });
+      return times;
+    }
+    function laneTimeText17(l,times=generatedLaneTimes17()){
+      const t=times[l.id]; if(!t || !t.start) return L17('geen tijd','no time');
+      return `${t.start}–${t.end||'--:--'}`;
+    }
+    function planningIssues17(){
+      const sl=ensureShiftLeader17();
+      const issues=[];
+      const noPerson=sl.lanes.filter(l=>!l.personId && laneMinutes17(l)>0).map(l=>l.name);
+      const noFill=sl.lanes.filter(l=>l.personId && laneMinutes17(l)===0).map(l=>l.name);
+      const over=sl.team.filter(p=>assignedMinutes17(p.id)>memberAvailable17(p)).map(p=>p.name);
+      const empty=sl.lanes.filter(l=>!l.personId && laneMinutes17(l)===0 && l.status!=='done').map(l=>l.name);
+      if(noPerson.length) issues.push(`${L17('Vuluren zonder persoon','Fill hours without person')}: ${noPerson.join(', ')}`);
+      if(noFill.length) issues.push(`${L17('Persoon zonder vuluren','Person without fill hours')}: ${noFill.join(', ')}`);
+      if(over.length) issues.push(`${L17('Overpland','Overplanned')}: ${over.join(', ')}`);
+      if(empty.length) issues.push(`${L17('Nog leeg','Still empty')}: ${empty.slice(0,3).join(', ')}${empty.length>3?'…':''}`);
+      return issues;
+    }
+    function planningText17(){
+      const sl=ensureShiftLeader17(), times=generatedLaneTimes17();
+      return `Vulplanning — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber17(sl.date)}\n\n` + sl.lanes.map(l=>`- ${l.name}: ${statusLabel17[l.status]||l.status} · ${teamMember17(l.personId)?.name||'niet toegewezen'} · ${laneTimeText17(l,times)} · ${minutesText17(laneMinutes17(l))}${l.note?` · ${l.note}`:''}`).join('\n');
+    }
+    function reportText17(){
+      const sl=ensureShiftLeader17();
+      const {available,planned,diff}=shiftSummary17();
+      const times=generatedLaneTimes17();
+      const laneLines=sl.lanes.map(l=>`- ${l.name}: ${teamMember17(l.personId)?.name || 'niet toegewezen'} · ${laneTimeText17(l,times)} · ${minutesText17(laneMinutes17(l))} · ${statusLabel17[l.status]||l.status}${l.note?` · ${l.note}`:''}`);
+      const teamLines=sl.team.map(p=>`- ${p.name}: ${p.start||'--:--'}-${p.end||'--:--'} · pauze auto ${autoBreak17(p.start,p.end)}m · beschikbaar ${minutesText17(memberAvailable17(p))}${mealAllowance17(p.start,p.end)?' · maaltijdvergoeding':''}`);
+      const doneTasks=sl.tasks.filter(t=>t.status==='done').map(t=>`- ${t.title}`);
+      const openTasks=sl.tasks.filter(t=>t.status!=='done').map(t=>`- ${t.title} (${t.status==='deferred'?'uitgesteld':'open'})`);
+      const incidents=sl.incidents.map(i=>`- ${i.type}: ${i.note||''}${i.minutes?` (${i.minutes}m)`:''}`);
+      const issues=planningIssues17();
+      const advice = diff<0 ? 'Let op: er was meer gepland dan beschikbaar. Verdeel paden opnieuw of zet open punten duidelijk op overdracht.' : 'Planning was haalbaar met ruimte voor bijsturen.';
+      return `Shiftklaar Report — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber17(sl.date)}\n\nTeam:\n${teamLines.join('\n') || '- Geen team ingevuld'}\n\nCapaciteit:\n- Beschikbaar: ${minutesText17(available)}\n- Gepland: ${minutesText17(planned)}\n- Ruimte/tekort: ${diff>=0?'+':'-'}${minutesText17(Math.abs(diff))}\n\nVulplanning:\n${laneLines.join('\n')}\n\nPlanningcheck:\n${issues.map(x=>'- '+x).join('\n') || '- Geen waarschuwingen'}\n\nGedaan:\n${doneTasks.join('\n') || '- Nog niets afgevinkt'}\n\nNog open / overdracht:\n${openTasks.join('\n') || '- Geen open overige taken'}\n\nBijzonderheden:\n${incidents.join('\n') || '- Geen bijzonderheden gelogd'}\n\nAdvies/overdracht:\n- ${advice}`;
+    }
+    function renderShiftleader17(){
+      const {sl,available,planned,diff,team}=shiftSummary17();
+      return `<div class="grid sl17-page">
+        <div class="hero sl17-hero"><div class="flex-line"><div><span class="chip">v6.7.17</span><h2>${E17(L17('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E17(L17('Compacte vulplanning met automatische padtijden, snelle status, vulling en notities.','Compact fill planning with generated lane times, quick status, fill and notes.'))}</p></div><div class="sl15-datebox"><strong>${E17(sl.date)}</strong><span>${E17(L17('Week','Week'))} ${weekNumber17(sl.date)}</span></div></div><div class="btn-row mt"><button class="btn primary" data-action="sl16-open-person-form">${E17(L17('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl16-load-standard-tasks">${E17(L17('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl16-open-task-form">${E17(L17('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl16-open-incident" data-type="Overig">${E17(L17('Bijzonderheid','Note'))}</button><button class="btn good" data-action="sl17-copy-planning">${E17(L17('Kopieer vulplanning','Copy fill plan'))}</button></div></div>
+        <div class="grid grid-4 sl17-kpis">${typeof kpi==='function'?`${kpi(L17('Beschikbaar','Available'),minutesText17(available),diff>=0?'good':'warn')}${kpi(L17('Gepland','Planned'),minutesText17(planned),planned>available?'bad':'good')}${kpi(L17('Ruimte / tekort','Room / shortage'),`${diff>=0?'+':'−'}${minutesText17(Math.abs(diff))}`,diff>=0?'good':'bad')}${kpi(L17('Team','Team'),team,null)}`:''}</div>
+        <div class="grid grid-main"><div class="grid">
+          ${renderTeam17()}
+          ${renderShiftPlanning17()}
+          ${renderTasks17()}
+        </div><div class="grid">
+          ${renderCapacity17()}
+          ${renderPlanningCheck17()}
+          ${renderIncidents17()}
+          ${renderReport17()}
+          ${renderShiftleaderHelp17()}
+        </div></div>
+      </div>`;
+    }
+    function renderTeam17(){
+      const sl=ensureShiftLeader17();
+      return `<div class="card sl17-team"><div class="flex-line"><div><h3>${E17(L17('Team & beschikbare uren','Team & available hours'))}</h3><p class="muted small">${E17(L17('Standaardtijden blijven 16:00/17:00 en 19:00/20:00. Pauze wordt automatisch berekend.','Standard times remain 16:00/17:00 and 19:00/20:00. Breaks are automatic.'))}</p></div><button class="btn small primary" data-action="sl16-open-person-form">＋</button></div>${sl.team.length?`<div class="list">${sl.team.map(p=>{ const assigned=assignedMinutes17(p.id), available=memberAvailable17(p), lanes=sl.lanes.filter(l=>l.personId===p.id).map(l=>l.name).join(', ') || L17('nog geen pad','no aisle yet'); return `<div class="list-item sl17-person"><span><strong>${E17(p.name)}</strong><br><span class="tiny muted">${E17(p.start||'--:--')}–${E17(p.end||'--:--')} · ${E17(L17('pauze','break'))}: ${autoBreak17(p.start,p.end)}m · ${E17(lanes)}</span></span><span class="sl17-person-right"><span class="pill ${assigned>available?'bad':'good'}">${minutesText17(assigned)} / ${minutesText17(available)}</span>${mealAllowance17(p.start,p.end)?`<span class="pill warn">${E17(L17('maaltijdvergoeding','meal allowance'))}</span>`:''}<button class="btn small" data-action="sl16-open-person-form" data-id="${E17(p.id)}">✎</button><button class="btn small bad" data-action="sl16-remove-person" data-id="${E17(p.id)}">×</button></span></div>`; }).join('')}</div>`:`<p class="muted small">${E17(L17('Nog geen medewerkers toegevoegd.','No team members added yet.'))}</p>`}</div>`;
+    }
+    function renderShiftPlanning17(){
+      const sl=ensureShiftLeader17(); const times=generatedLaneTimes17();
+      return `<div class="card sl17-shiftplanning"><div class="flex-line"><div><h3>${E17(L17('Shiftplanning','Shift planning'))}</h3><p class="muted small">${E17(L17('Paden staan compact onder elkaar. Start- en eindtijd worden automatisch berekend uit de persoon, volgorde en vulduur.','Aisles are compact. Start and end time are generated from person, order and fill duration.'))}</p></div><span class="pill info">${sl.lanes.length} ${E17(L17('paden','aisles'))}</span></div><div class="sl17-lane-list">${sl.lanes.map(l=>{ const member=teamMember17(l.personId); const t=times[l.id]; return `<div class="sl17-lane-card ${l.status==='done'?'done':''}">
+          <div class="sl17-lane-top"><div class="sl17-lane-title"><strong>${E17(l.name)}</strong>${statusButton17(l)}</div><div class="sl17-lane-actions"><button class="btn small" data-action="sl17-open-fill" data-lane="${E17(l.id)}" title="${E17(L17('Vulling aanpassen','Edit fill'))}">⏱</button><button class="btn small ${l.note?'primary':''}" data-action="sl17-open-lane-note" data-lane="${E17(l.id)}" title="${E17(L17('Notitie','Note'))}">✎</button></div></div>
+          <div class="sl17-lane-main"><label class="sl17-person-select"><span>${E17(L17('Persoon','Person'))}</span><select class="select input" data-action="sl17-lane-person" data-lane="${E17(l.id)}">${personOptions17(l.personId)}</select></label><div class="sl17-lane-meta"><span>${E17(L17('Tijd','Time'))}: <strong>${E17(t && t.start ? `${t.start}–${t.end||'--:--'}` : L17('nog niet gepland','not planned'))}</strong></span><span>${E17(L17('Vulling','Fill'))}: <strong>${minutesText17(laneMinutes17(l))}</strong></span></div></div>${l.note?`<div class="sl17-lane-note-chip">${E17(l.note)}</div>`:''}
+        </div>`; }).join('')}</div><div class="btn-row mt"><button class="btn" data-action="sl17-copy-planning">${E17(L17('Kopieer vulplanning','Copy fill plan'))}</button><button class="btn" data-action="sl17-open-planning-check">${E17(L17('Planningcheck','Planning check'))}</button></div></div>`;
+    }
+    function renderPlanningCheck17(){
+      const issues=planningIssues17();
+      return `<div class="card sl17-planning-check"><h3>${E17(L17('Planningcheck','Planning check'))}</h3>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E17(i)}</span><span class="pill warn">${E17(L17('check','check'))}</span></div>`).join('')}</div>`:`<p class="muted small">${E17(L17('Geen grote waarschuwingen. De planning lijkt haalbaar.','No major warnings. The plan looks feasible.'))}</p>`}<details class="detail-drawer mt"><summary>${E17(L17('Wijzigingslog planning','Planning change log'))}</summary><div class="drawer-content">${renderPlanLog17()}</div></details></div>`;
+    }
+    function renderPlanLog17(){ const sl=ensureShiftLeader17(); return sl.planLog.length?`<div class="list">${sl.planLog.slice(0,8).map(i=>`<div class="list-item compact"><span>${E17(i.text)}</span><span class="tiny muted">${E17((i.at||'').slice(11,16))}</span></div>`).join('')}</div>`:`<p class="muted small">${E17(L17('Nog geen wijzigingen vastgelegd.','No changes logged yet.'))}</p>`; }
+    function renderTasks17(){
+      const sl=ensureShiftLeader17();
+      const showAll=!!sl.ui.showAllTasks;
+      const ordered=[...sl.tasks].sort((a,b)=> (a.status==='done')-(b.status==='done') || (a.status==='deferred')-(b.status==='deferred') || String(b.createdAt||'').localeCompare(String(a.createdAt||'')) );
+      const shown=showAll?ordered:ordered.slice(0,10);
+      const doneCount=sl.tasks.filter(t=>t.status==='done').length;
+      return `<div class="card sl17-tasks"><div class="flex-line"><div><h3>${E17(L17('Overige takenlijst','Other tasks'))}</h3><p class="muted small">${E17(L17('Taken blijven zichtbaar. Afgeronde taken kleuren groen en zakken naar onderen.','Tasks stay visible. Completed tasks turn green and move down.'))}</p></div><div class="btn-row"><button class="btn small" data-action="sl16-load-standard-tasks">${E17(L17('Standaard','Standard'))}</button><button class="btn small primary" data-action="sl16-open-task-form">＋</button></div></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item compact sl17-task ${t.status==='done'?'done':t.status==='deferred'?'deferred':''}"><span><strong>${t.status==='done'?'✓ ':''}${E17(t.title)}</strong><br><span class="tiny muted">${E17(t.priority||L17('normaal','normal'))}${t.note?` · ${E17(t.note)}`:''}${t.status==='deferred'?` · ${E17(L17('uitgesteld','deferred'))}`:''}</span></span><span class="btn-row nowrap">${t.status==='done'?`<button class="btn small" data-action="sl16-task-reopen" data-id="${E17(t.id)}">↩</button>`:`<button class="btn small good" data-action="sl16-task-done" data-id="${E17(t.id)}">✓</button><button class="btn small warn" data-action="sl16-task-defer" data-id="${E17(t.id)}">↷</button>`}<button class="btn small" data-action="sl16-open-task-form" data-id="${E17(t.id)}">✎</button><button class="btn small bad" data-action="sl16-task-delete" data-id="${E17(t.id)}">×</button></span></div>`).join('')}</div>`:`<p class="muted small">${E17(L17('Nog geen overige taken.','No other tasks yet.'))}</p>`}<div class="btn-row mt">${ordered.length>10?`<button class="btn" data-action="sl16-toggle-tasks">${showAll?E17(L17('Minder tonen','Show less')):E17(L17('Meer weergeven','Show more'))}</button>`:''}${doneCount?`<span class="pill good">${doneCount} ${E17(L17('voldaan','done'))}</span>`:''}</div></div>`;
+    }
+    function renderCapacity17(){
+      const {available,planned,diff,openTasks,doneTasks,incidents}=shiftSummary17();
+      const load = available ? Math.round(planned/available*100) : 0;
+      let barHtml=''; try { if(typeof bar === 'function') barHtml = bar(L17('Geplande vuluren','Planned fill hours'), load, load>100?'bad':load>85?'warn':'good'); } catch(_){ }
+      const mealCount=ensureShiftLeader17().team.filter(p=>mealAllowance17(p.start,p.end)).length;
+      return `<div class="card sl17-capacity"><h3>${E17(L17('Capaciteit shift','Shift capacity'))}</h3><div class="list"><div class="list-item compact"><span>${E17(L17('Beschikbaar team','Team available'))}</span><strong>${minutesText17(available)}</strong></div><div class="list-item compact"><span>${E17(L17('Geplande vuluren','Planned fill hours'))}</span><strong>${minutesText17(planned)}</strong></div><div class="list-item compact"><span>${E17(L17('Ruimte / tekort','Room / shortage'))}</span><strong>${diff>=0?'+':'−'}${minutesText17(Math.abs(diff))}</strong></div><div class="list-item compact"><span>${E17(L17('Open taken','Open tasks'))}</span><strong>${openTasks}</strong></div><div class="list-item compact"><span>${E17(L17('Voldaan','Done'))}</span><strong>${doneTasks}</strong></div><div class="list-item compact"><span>${E17(L17('Maaltijdvergoeding signaal','Meal allowance signal'))}</span><strong>${mealCount}</strong></div><div class="list-item compact"><span>${E17(L17('Bijzonderheden','Notes'))}</span><strong>${incidents}</strong></div></div>${barHtml}<p class="muted small">${E17(diff<0?L17('Er is meer gepland dan beschikbaar. Verdeel paden opnieuw of zet open punten bewust op overdracht.','More is planned than available. Reassign aisles or deliberately add open points to handover.'):L17('Er is ruimte voor bijsturen, hulpvragen of onverwachte situaties.','There is room for steering, helping or unexpected situations.'))}</p></div>`;
+    }
+    function renderIncidents17(){
+      const sl=ensureShiftLeader17(); const showAll=!!sl.ui.showAllIncidents; const shown=showAll?sl.incidents:sl.incidents.slice(0,5);
+      return `<div class="card sl17-incidents"><div class="flex-line"><div><h3>${E17(L17('Onderbrekingen & bijzonderheden','Interruptions & notes'))}</h3><p class="muted small">${E17(L17('Leg vast waarom de planning veranderde.','Record why the plan changed.'))}</p></div></div><div class="btn-row">${incidentTypes17.map(t=>`<button class="btn small" data-action="sl16-open-incident" data-type="${E17(t)}">${E17(t)}</button>`).join('')}</div>${shown.length?`<div class="list mt">${shown.map(i=>`<div class="list-item compact"><span><strong>${E17(i.type)}</strong><br><span class="tiny muted">${E17((i.at||'').slice(11,16))}${i.minutes?` · ${i.minutes}m`:''}${i.note?` · ${E17(i.note)}`:''}</span></span><button class="btn small bad" data-action="sl16-incident-delete" data-id="${E17(i.id)}">×</button></div>`).join('')}</div>`:`<p class="muted small mt">${E17(L17('Nog geen onderbrekingen gelogd.','No interruptions logged yet.'))}</p>`}${sl.incidents.length>5?`<button class="btn mt" data-action="sl16-toggle-incidents">${showAll?E17(L17('Minder tonen','Show less')):E17(L17('Meer weergeven','Show more'))}</button>`:''}</div>`;
+    }
+    function renderReport17(){
+      return `<div class="card sl17-report"><h3>${E17(L17('Shiftklaar report','End-of-shift report'))}</h3><p class="muted small">${E17(L17('Inclusief paden, taken, automatische tijden, pauzes, planningcheck en maaltijdvergoeding-signalen.','Includes aisles, tasks, generated times, breaks, planning check and meal allowance signals.'))}</p><div class="btn-row"><button class="btn good" data-action="sl17-copy-report">${E17(L17('Kopieer report','Copy report'))}</button><button class="btn" data-action="sl17-save-report-communication">${E17(L17('Opslaan bij Communicatie','Save to Communication'))}</button></div><details class="detail-drawer mt"><summary>${E17(L17('Preview bekijken','View preview'))}</summary><pre class="sl15-report-preview">${E17(reportText17())}</pre></details></div>`;
+    }
+    function renderShiftleaderHelp17(){
+      return `<details class="card detail-drawer sl17-help"><summary>${E17(L17('Hoe werkt deze compacte Shiftplanning?','How does this compact shift planning work?'))}</summary><div class="drawer-content"><p>${E17(L17('Je vult eerst teamleden en werktijden in. Daarna wijs je per pad een persoon toe. De padtijden worden automatisch opgebouwd in de volgorde van de paden en op basis van de vulduur.','First enter team members and working times. Then assign a person per aisle. Lane times are generated in aisle order based on fill duration.'))}</p><ul><li>${E17(L17('Klik op de status om Open → Bezig → Deels → Afgerond te wisselen.','Click the status to switch Open → In progress → Partial → Done.'))}</li><li>${E17(L17('Gebruik ⏱ om uren en minuten vulling te wijzigen.','Use ⏱ to edit fill hours and minutes.'))}</li><li>${E17(L17('Gebruik ✎ voor een notitie; zonder notitie blijft er geen extra tekst zichtbaar.','Use ✎ for a note; without a note no extra text is shown.'))}</li><li>${E17(L17('Extra tools: kopieer vulplanning, planningcheck en wijzigingslog.','Extra tools: copy fill plan, planning check and change log.'))}</li></ul></div></details>`;
+    }
+    function openFillModal17(id){
+      const l=laneById17(id); if(!l) return;
+      const mins=[0,5,10,15,20,25,30,35,40,45,50,55];
+      if(typeof modal==='function') modal(`${L17('Vulling aanpassen','Edit fill')} — ${l.name}`, `<div class="grid"><p class="muted small">${E17(L17('Kies hoeveel vulling dit pad naar verwachting heeft. De start- en eindtijd worden daarna automatisch opnieuw berekend.','Choose the expected fill amount for this aisle. The start and end time are then recalculated automatically.'))}</p><div class="grid grid-2"><label>${E17(L17('Uren','Hours'))}<input class="input" id="sl17FillHours" type="number" min="0" step="1" value="${E17(l.fillHours||0)}"></label><label>${E17(L17('Minuten','Minutes'))}<select class="select input" id="sl17FillMinutes">${mins.map(m=>`<option value="${m}" ${(+l.fillMinutes||0)===m?'selected':''}>${m}m</option>`).join('')}</select></label></div><div class="btn-row"><button class="btn primary" data-action="sl17-save-fill" data-lane="${E17(l.id)}">${E17(L17('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E17(L17('Annuleren','Cancel'))}</button></div></div>`, 'wide');
+    }
+    function openLaneNoteModal17(id){
+      const l=laneById17(id); if(!l) return;
+      if(typeof modal==='function') modal(`${L17('Notitie','Note')} — ${l.name}`, `<div class="grid"><textarea class="textarea" id="sl17LaneNote" placeholder="${E17(L17('Bijv. later andere collega, eerst restanten, of bijzonderheid op pad.','E.g. changed colleague, first leftovers, or aisle note.'))}">${E17(l.note||'')}</textarea><div class="btn-row"><button class="btn primary" data-action="sl17-save-lane-note" data-lane="${E17(l.id)}">${E17(L17('Opslaan','Save'))}</button><button class="btn warn" data-action="sl17-clear-lane-note" data-lane="${E17(l.id)}">${E17(L17('Notitie wissen','Clear note'))}</button><button class="btn" data-action="close-modal">${E17(L17('Annuleren','Cancel'))}</button></div></div>`, 'wide');
+    }
+    function loadStandardTasks17(){
+      const sl=ensureShiftLeader17(); const titles=[...baseTasks17]; if(isTueThu17(sl.date)) titles.splice(9,0,'Nee-verkoop houdbaar');
+      let added=0; titles.forEach(title=>{ if(!sl.tasks.some(t=>t.title===title && t.date===sl.date)){ sl.tasks.push({id:uid17('sl_task'), title, status:'open', priority:title.includes('Vracht')?'Hoog':'Normaal', note:'', date:sl.date, createdAt:now17()}); added++; } });
+      try { if(typeof addActivity==='function') addActivity(`Shiftleider standaardtaken ingeladen: ${added}`,'shiftleader'); } catch(_){ }
+      save17(); render17(); toast17(added?`${added} ${L17('taken ingeladen','tasks loaded')}`:L17('Standaardtaken stonden al klaar','Standard tasks were already ready'),'good');
+    }
+
+    const prevRenderPage6717 = typeof renderPage === 'function' ? renderPage : null;
+    if(prevRenderPage6717) renderPage = window.renderPage = function(){ return state.route === 'shiftleader' ? renderShiftleader17() : prevRenderPage6717(); };
+
+    const prevToday6717 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6717) renderToday = window.renderToday = function(){
+      const base=prevToday6717(); const sl=ensureShiftLeader17();
+      const active = sl.team.length || sl.tasks.length || sl.lanes.some(l=>l.personId||laneMinutes17(l)||l.status!=='open');
+      const {available,planned,diff,openTasks}=shiftSummary17(); const mealCount=sl.team.filter(p=>mealAllowance17(p.start,p.end)).length;
+      const issues=planningIssues17().length;
+      const card = `<div class="card sl17-today-card"><div class="flex-line"><div><h3>${E17(L17('Shiftleider Vers Avondshift','Shift Lead Fresh evening shift'))}</h3><p class="muted small">${active?E17(`${sl.team.length} team · ${openTasks} open taken · ${minutesText17(planned)} gepland${mealCount?` · ${mealCount} maaltijdvergoeding`:''}${issues?` · ${issues} checks`:''}`):E17(L17('Plan team, paden, overige taken en report.','Plan team, aisles, other tasks and report.'))}</p></div><span class="pill ${diff<0?'bad':'good'}">${active?(diff>=0?'+':'−')+minutesText17(Math.abs(diff)):L17('nieuw','new')}</span></div><button class="btn primary mt" data-route="shiftleader">${E17(L17('Open Shiftleider','Open Shift Lead'))}</button></div>`;
+      return `${base}<div class="mt sl17-today-wrap">${card}</div>`;
+    };
+
+    const prevHandle6717 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      const sl=ensureShiftLeader17();
+      if(a==='sl17-lane-person'){
+        const l=laneById17(el.dataset.lane); if(l){ l.personId=el.value; const p=teamMember17(l.personId); if(p){ l.start=p.start||''; l.end=p.end||''; } logPlan17(`${l.name}: persoon → ${teamMember17(l.personId)?.name || 'niet toegewezen'}`); save17(); render17(); } return;
+      }
+      if(a==='sl17-cycle-lane-status'){
+        const l=laneById17(el.dataset.lane); if(l){ const idx=statusCycle17.indexOf(l.status||'open'); l.status=statusCycle17[(idx+1)%statusCycle17.length]; logPlan17(`${l.name}: status → ${statusLabel17[l.status]||l.status}`); save17(); render17(); } return;
+      }
+      if(a==='sl17-open-fill'){ openFillModal17(el.dataset.lane); return; }
+      if(a==='sl17-save-fill'){
+        const l=laneById17(el.dataset.lane); if(l){ l.fillHours=+(document.getElementById('sl17FillHours')?.value||0)||0; l.fillMinutes=+(document.getElementById('sl17FillMinutes')?.value||0)||0; l.hours=laneMinutes17(l)/60; logPlan17(`${l.name}: vulling → ${minutesText17(laneMinutes17(l))}`); if(typeof closeModal==='function') closeModal(); save17(); render17(); } return;
+      }
+      if(a==='sl17-open-lane-note'){ openLaneNoteModal17(el.dataset.lane); return; }
+      if(a==='sl17-save-lane-note'){
+        const l=laneById17(el.dataset.lane); if(l){ l.note=(document.getElementById('sl17LaneNote')?.value||'').trim(); logPlan17(`${l.name}: notitie ${l.note?'bijgewerkt':'leeg'}`); if(typeof closeModal==='function') closeModal(); save17(); render17(); } return;
+      }
+      if(a==='sl17-clear-lane-note'){
+        const l=laneById17(el.dataset.lane); if(l){ l.note=''; logPlan17(`${l.name}: notitie gewist`); if(typeof closeModal==='function') closeModal(); save17(); render17(); } return;
+      }
+      if(a==='sl17-copy-planning'){ copy17(planningText17()); toast17(L17('Vulplanning gekopieerd.','Fill plan copied.'),'good'); return; }
+      if(a==='sl17-open-planning-check'){
+        const issues=planningIssues17();
+        if(typeof modal==='function') modal(L17('Planningcheck','Planning check'), `<div class="grid"><p class="muted small">${E17(L17('Controleert of paden bezet zijn, vuluren kloppen en niemand overpland is.','Checks whether aisles are assigned, fill hours make sense and no one is overplanned.'))}</p>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E17(i)}</span><span class="pill warn">check</span></div>`).join('')}</div>`:`<p class="muted">${E17(L17('Geen grote waarschuwingen gevonden.','No major warnings found.'))}</p>`}<button class="btn primary" data-action="close-modal">${E17(L17('Sluiten','Close'))}</button></div>`, 'wide'); return;
+      }
+      if(a==='sl17-copy-report'){ copy17(reportText17()); toast17(L17('Shiftklaar report gekopieerd.','Shift report copied.'),'good'); return; }
+      if(a==='sl17-save-report-communication'){
+        state.communications = Array.isArray(state.communications) ? state.communications : [];
+        state.communications.unshift({id:uid17('com'), title:'Shiftklaar Report — Vers Avondshift', message:reportText17(), text:reportText17(), priority:'Normaal', role:'Teamleider', status:'open', createdAt:now17(), date:today17(), followDate:today17(), type:'shiftleader'});
+        toast17(L17('Report opgeslagen bij Communicatie.','Report saved to Communication.'),'good'); save17(); render17(); return;
+      }
+      if(a==='sl16-load-standard-tasks' || a==='sl15-load-standard-tasks'){ loadStandardTasks17(); return; }
+      if(prevHandle6717) return prevHandle6717(a,el,e);
+    };
+
+    const prevDiag6717 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6717) renderDiagnostics = window.renderDiagnostics = function(){
+      const sl=ensureShiftLeader17(); let base=prevDiag6717() || '';
+      const checks=[
+        {name:'Compacte Shiftplanning', ok:typeof renderShiftPlanning17==='function' && sl.lanes.length===6, detail:'één venster'},
+        {name:'Vulling via icoon', ok:true, detail:'⏱ uren + minuten'},
+        {name:'Notitie via icoon', ok:true, detail:'✎ alleen zichtbaar wanneer gevuld'},
+        {name:'Automatische padtijden', ok:!!generatedLaneTimes17, detail:'persoon + volgorde + vulduur'},
+        {name:'Planningcheck', ok:Array.isArray(planningIssues17()), detail:`${planningIssues17().length} checks`},
+        {name:'Wijzigingslog', ok:Array.isArray(sl.planLog), detail:`${sl.planLog.length} logs`},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6717', detail:APP.cache}
+      ];
+      return base+`<div class="grid grid-2 mt diagnostics-v6717"><div class="card"><h3>v6.7.17 Shiftleider Compact checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E17(c.name)} <span class="tiny muted">${E17(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E17(L17('Nieuwe Shiftplanning extra’s','New Shift planning extras'))}</h3><p class="muted small">${E17(L17('Extra features: Kopieer vulplanning, Planningcheck en Wijzigingslog. De planning blijft compact en mobielvriendelijk.','Extra features: copy fill plan, planning check and change log. The planning stays compact and mobile-friendly.'))}</p></div></div>`;
+    };
+    try { ensureShiftLeader17(); save17(); } catch(_){ }
+  } catch(err){ console.error('v6.7.17 patch failed', err); }
+})();
+
+
+/* =========================================================
+   RICH CMD v6.7.18 — Shiftleider Pad & Planning Extras
+   Adds Kaas/Vleeswaren after Vlees/Vis/Kip and three practical planning tools:
+   auto-assign lanes, copy open points and an end-of-shift check.
+========================================================= */
+(function(){
+  try{
+    if (typeof APP === 'object') {
+      APP.version = 'v6.7.18';
+      APP.cache = 'rich-cmd-cache-v6718';
+      APP.build = 'Shiftleider Pad & Planning Extras';
+    }
+    const L18 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E18 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid18 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today18 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now18 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save18 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render18 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast18 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type); } catch(_){} };
+    const copy18 = (txt)=> { try { if(typeof copyText === 'function') copyText(txt); else navigator.clipboard?.writeText(txt); } catch(_){} };
+
+    const laneDefs18 = [
+      {id:'agf', name:'AGF'},
+      {id:'panklaar', name:'Panklaar'},
+      {id:'maaltijden', name:'Maaltijden'},
+      {id:'vlees_vis_kip', name:'Vlees/Vis/Kip'},
+      {id:'kaas_vleeswaren', name:'Kaas/Vleeswaren'},
+      {id:'zuivel', name:'Zuivel'},
+      {id:'delicatesse', name:'Delicatesse'}
+    ];
+    const baseTasks18 = [
+      'Magazijn vrachtklaar maken','Vers nee-verkoop controleren','Vracht lossen','Vracht uitsplitsen','Eventuele kassapauzes overnemen','Versrestanten en tellingen controleren','Afprijsronde','Versshift afronding','Sinaasappelpers schoonmaken','Winkel afsluitronde'
+    ];
+    const incidentTypes18 = ['Klant','Collega','Incident','Kassa','Vracht','Overig'];
+    const statusCycle18 = ['open','busy','partial','done'];
+    const statusLabel18 = {open:'Open',busy:'Bezig',partial:'Deels',done:'Afgerond',deferred:'Uitgesteld'};
+    const statusClass18 = {open:'info',busy:'warn',partial:'warn',done:'good',deferred:'warn'};
+
+    function weekNumber18(dateIso=today18()){
+      const d = new Date(dateIso+'T12:00:00');
+      const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNr = (target.getUTCDay() + 6) % 7;
+      target.setUTCDate(target.getUTCDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setUTCMonth(0, 1);
+      if (target.getUTCDay() !== 4) target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+      return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+    function minutesText18(m){
+      m = Math.max(0, Math.round(+m || 0));
+      const h = Math.floor(m/60), mm = m%60;
+      return h ? `${h}u ${String(mm).padStart(2,'0')}m` : `${mm}m`;
+    }
+    function diffMinutes18(start,end){
+      if(!start || !end) return 0;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return 0;
+      let a=sh*60+sm, b=eh*60+em;
+      if(b<a) b+=24*60;
+      return Math.max(0,b-a);
+    }
+    function addMinutes18(time, minutes){
+      if(!time) return '';
+      const [h,m] = String(time).split(':').map(Number);
+      if(Number.isNaN(h)||Number.isNaN(m)) return '';
+      let total = (h*60+m+Math.round(+minutes||0))%(24*60);
+      if(total<0) total += 24*60;
+      return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+    }
+    function autoBreak18(start,end){ const mins = diffMinutes18(start,end); return mins >= 360 ? 30 : mins >= 240 ? 15 : 0; }
+    function mealAllowance18(start,end){
+      if(!start || !end) return false;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return false;
+      return (sh*60+sm) <= 16*60 && (eh*60+em) > 19*60;
+    }
+    function isTueThu18(dateIso){ const d=new Date((dateIso||today18())+'T12:00:00').getDay(); return d===2 || d===4; }
+    function normalizeId18(str){ return String(str||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+    function ensureShiftLeader18(){
+      state.shiftLeader = state.shiftLeader && typeof state.shiftLeader === 'object' ? state.shiftLeader : {};
+      const sl = state.shiftLeader;
+      sl.date = sl.date || today18();
+      sl.mode = sl.mode || 'Vers Avondshift';
+      sl.team = Array.isArray(sl.team) ? sl.team : [];
+      sl.team.forEach(p=>{ p.breakMinutes = autoBreak18(p.start,p.end); p.mealAllowance = mealAllowance18(p.start,p.end); });
+      sl.lanes = Array.isArray(sl.lanes) ? sl.lanes : [];
+      const existing = sl.lanes.slice();
+      laneDefs18.forEach(def=>{
+        let lane = existing.find(l=>l.id===def.id || l.name===def.name || normalizeId18(l.name)===def.id);
+        if(!lane){ lane={id:def.id,name:def.name,personId:'',fillHours:0,fillMinutes:0,status:'open',note:'',start:'',end:''}; existing.push(lane); }
+        lane.id=def.id; lane.name=def.name; lane.status=lane.status || 'open';
+        if(lane.fillHours === undefined && lane.hours !== undefined){ const total=Math.round((+lane.hours||0)*60); lane.fillHours=Math.floor(total/60); lane.fillMinutes=total%60; }
+        lane.fillHours = Math.max(0, +(lane.fillHours ?? 0) || 0);
+        lane.fillMinutes = Math.max(0, +(lane.fillMinutes ?? 0) || 0);
+        lane.note = lane.note || '';
+      });
+      sl.lanes = laneDefs18.map(def=>existing.find(l=>l.id===def.id));
+      sl.tasks = Array.isArray(sl.tasks) ? sl.tasks : [];
+      sl.incidents = Array.isArray(sl.incidents) ? sl.incidents : [];
+      sl.reportHistory = Array.isArray(sl.reportHistory) ? sl.reportHistory : [];
+      sl.planLog = Array.isArray(sl.planLog) ? sl.planLog : [];
+      sl.ui = sl.ui && typeof sl.ui === 'object' ? sl.ui : {};
+      return sl;
+    }
+    function laneById18(id){ return ensureShiftLeader18().lanes.find(l=>l.id===id); }
+    function teamMember18(id){ return ensureShiftLeader18().team.find(p=>p.id===id); }
+    function memberAvailable18(p){ return Math.max(0, diffMinutes18(p.start,p.end) - autoBreak18(p.start,p.end)); }
+    function laneMinutes18(l){ return Math.max(0, Math.round((+(l.fillHours||0))*60 + (+(l.fillMinutes||0)))); }
+    function totalAvailable18(){ return ensureShiftLeader18().team.reduce((a,p)=>a+memberAvailable18(p),0); }
+    function totalPlanned18(){ return ensureShiftLeader18().lanes.reduce((a,l)=>a+laneMinutes18(l),0); }
+    function assignedMinutes18(personId){ return ensureShiftLeader18().lanes.filter(l=>l.personId===personId).reduce((a,l)=>a+laneMinutes18(l),0); }
+    function shiftSummary18(){
+      const sl=ensureShiftLeader18(), available=totalAvailable18(), planned=totalPlanned18(), diff=available-planned;
+      return {sl,available,planned,diff,team:sl.team.length,openTasks:sl.tasks.filter(t=>t.status!=='done').length,doneTasks:sl.tasks.filter(t=>t.status==='done').length,incidents:sl.incidents.length};
+    }
+    function logPlan18(text){
+      const sl=ensureShiftLeader18(); sl.planLog.unshift({id:uid18('sl_log'), text, at:now18()}); sl.planLog=sl.planLog.slice(0,50);
+    }
+    function personOptions18(selected=''){
+      const team=ensureShiftLeader18().team;
+      return `<option value="">${E18(L18('Niet toegewezen','Unassigned'))}</option>` + team.map(p=>`<option value="${E18(p.id)}" ${p.id===selected?'selected':''}>${E18(p.name)}</option>`).join('');
+    }
+    function statusButton18(l){
+      const st=l.status||'open';
+      return `<button class="sl18-status pill ${statusClass18[st]||'info'}" data-action="sl18-cycle-lane-status" data-lane="${E18(l.id)}" title="${E18(L18('Klik om status te wijzigen','Click to change status'))}">${E18(statusLabel18[st]||st)}</button>`;
+    }
+    function generatedLaneTimes18(){
+      const sl=ensureShiftLeader18();
+      const times={};
+      sl.team.forEach(p=>{
+        let cursor = p.start || '';
+        sl.lanes.filter(l=>l.personId===p.id).forEach(l=>{
+          const mins=laneMinutes18(l);
+          if(cursor && mins>0){ times[l.id]={start:cursor,end:addMinutes18(cursor,mins),source:'auto'}; cursor=times[l.id].end; }
+          else if(cursor){ times[l.id]={start:cursor,end:cursor,source:'auto'}; }
+        });
+      });
+      sl.lanes.forEach(l=>{ if(!times[l.id] && (l.start||l.end)) times[l.id]={start:l.start||'',end:l.end||'',source:'manual'}; });
+      return times;
+    }
+    function laneTimeText18(l,times=generatedLaneTimes18()){
+      const t=times[l.id]; if(!t || !t.start) return L18('nog niet gepland','not planned');
+      return `${t.start}–${t.end||'--:--'}`;
+    }
+    function planningIssues18(){
+      const sl=ensureShiftLeader18();
+      const issues=[];
+      const noPerson=sl.lanes.filter(l=>!l.personId && laneMinutes18(l)>0).map(l=>l.name);
+      const noFill=sl.lanes.filter(l=>l.personId && laneMinutes18(l)===0).map(l=>l.name);
+      const over=sl.team.filter(p=>assignedMinutes18(p.id)>memberAvailable18(p)).map(p=>p.name);
+      const empty=sl.lanes.filter(l=>!l.personId && laneMinutes18(l)===0 && l.status!=='done').map(l=>l.name);
+      if(noPerson.length) issues.push(`${L18('Vuluren zonder persoon','Fill hours without person')}: ${noPerson.join(', ')}`);
+      if(noFill.length) issues.push(`${L18('Persoon zonder vuluren','Person without fill hours')}: ${noFill.join(', ')}`);
+      if(over.length) issues.push(`${L18('Overpland','Overplanned')}: ${over.join(', ')}`);
+      if(empty.length) issues.push(`${L18('Nog leeg','Still empty')}: ${empty.slice(0,4).join(', ')}${empty.length>4?'…':''}`);
+      return issues;
+    }
+    function openPoints18(){
+      const sl=ensureShiftLeader18(), times=generatedLaneTimes18();
+      const lanes=sl.lanes.filter(l=>l.status!=='done' && (l.personId || laneMinutes18(l)>0 || l.note));
+      const tasks=sl.tasks.filter(t=>t.status!=='done');
+      return {lanes,tasks,times,incidents:sl.incidents};
+    }
+    function planningText18(){
+      const sl=ensureShiftLeader18(), times=generatedLaneTimes18();
+      return `Vulplanning — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber18(sl.date)}\n\n` + sl.lanes.map(l=>`- ${l.name}: ${statusLabel18[l.status]||l.status} · ${teamMember18(l.personId)?.name||'niet toegewezen'} · ${laneTimeText18(l,times)} · ${minutesText18(laneMinutes18(l))}${l.note?` · ${l.note}`:''}`).join('\n');
+    }
+    function openPointsText18(){
+      const sl=ensureShiftLeader18(); const {lanes,tasks,times}=openPoints18();
+      return `Open punten — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber18(sl.date)}\n\nOpen paden:\n${lanes.length?lanes.map(l=>`- ${l.name}: ${statusLabel18[l.status]||l.status} · ${teamMember18(l.personId)?.name||'niet toegewezen'} · ${laneTimeText18(l,times)} · ${minutesText18(laneMinutes18(l))}${l.note?` · ${l.note}`:''}`).join('\n'):'- Geen open paden'}\n\nOpen overige taken:\n${tasks.length?tasks.map(t=>`- ${t.title}${t.note?` · ${t.note}`:''}`).join('\n'):'- Geen open taken'}`;
+    }
+    function reportText18(){
+      const {sl,available,planned,diff,openTasks,doneTasks}=shiftSummary18(); const times=generatedLaneTimes18();
+      const meal=sl.team.filter(p=>mealAllowance18(p.start,p.end));
+      return `Shiftklaar Report — ${sl.mode}\nDatum: ${sl.date} · Week ${weekNumber18(sl.date)}\n\nTeam:\n${sl.team.length?sl.team.map(p=>`- ${p.name}: ${p.start||'--:--'}–${p.end||'--:--'} · pauze ${autoBreak18(p.start,p.end)}m${mealAllowance18(p.start,p.end)?' · maaltijdvergoeding':''}`).join('\n'):'- Geen team ingevoerd'}\n\nCapaciteit:\n- Beschikbaar: ${minutesText18(available)}\n- Gepland vulwerk: ${minutesText18(planned)}\n- Ruimte/tekort: ${diff>=0?'+':'-'}${minutesText18(Math.abs(diff))}\n\nVulplanning:\n${sl.lanes.map(l=>`- ${l.name}: ${statusLabel18[l.status]||l.status} · ${teamMember18(l.personId)?.name||'niet toegewezen'} · ${laneTimeText18(l,times)} · ${minutesText18(laneMinutes18(l))}${l.note?` · ${l.note}`:''}`).join('\n')}\n\nOverige taken:\nGedaan:\n${sl.tasks.filter(t=>t.status==='done').length?sl.tasks.filter(t=>t.status==='done').map(t=>`- ${t.title}`).join('\n'):'- Geen'}\nOpen:\n${sl.tasks.filter(t=>t.status!=='done').length?sl.tasks.filter(t=>t.status!=='done').map(t=>`- ${t.title}${t.status==='deferred'?' (uitgesteld)':''}`).join('\n'):'- Geen'}\n\nBijzonderheden:\n${sl.incidents.length?sl.incidents.map(i=>`- ${i.type}: ${i.note||'zonder notitie'}${i.minutes?` (${i.minutes}m)`:''}`).join('\n'):'- Geen'}\n\nSignalen:\n- Open taken: ${openTasks}\n- Voldaan: ${doneTasks}\n- Maaltijdvergoeding: ${meal.length?meal.map(p=>p.name).join(', '):'geen'}\n- Planningchecks: ${planningIssues18().length || 'geen'}`;
+    }
+    function renderPlanLog18(){
+      const sl=ensureShiftLeader18();
+      return sl.planLog.length?`<div class="list">${sl.planLog.slice(0,12).map(l=>`<div class="list-item compact"><span>${E18(l.text)}</span><span class="tiny muted">${E18((l.at||'').slice(11,16))}</span></div>`).join('')}</div>`:`<p class="muted small">${E18(L18('Nog geen wijzigingen.','No changes yet.'))}</p>`;
+    }
+    function renderShiftleader18(){
+      const {sl,available,planned,diff,team,openTasks}=shiftSummary18();
+      const mealCount=sl.team.filter(p=>mealAllowance18(p.start,p.end)).length;
+      const issues=planningIssues18().length;
+      return `<div class="grid sl18-page">
+        <div class="hero sl18-hero"><div class="flex-line"><div><span class="chip">v6.7.18</span><h2>${E18(L18('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E18(L18('Compacte vulplanning met Kaas/Vleeswaren, automatische padtijden en extra tools voor bijsturen.','Compact fill plan with Cheese/Meatware, generated lane times and extra steering tools.'))}</p></div><div class="sl15-datebox"><strong>${E18(sl.date)}</strong><span>${E18(L18('Week','Week'))} ${weekNumber18(sl.date)}</span></div></div><div class="btn-row mt sl18-actionbar"><button class="btn primary" data-action="sl16-open-person-form">${E18(L18('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl18-load-standard-tasks">${E18(L18('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl16-open-task-form">${E18(L18('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl16-open-incident" data-type="Overig">${E18(L18('Bijzonderheid','Note'))}</button><button class="btn good" data-action="sl18-copy-planning">${E18(L18('Kopieer vulplanning','Copy fill plan'))}</button></div></div>
+        <div class="grid grid-4 sl18-kpis">${typeof kpi==='function'?`${kpi(L18('Beschikbaar','Available'),minutesText18(available),diff>=0?'good':'warn')}${kpi(L18('Gepland','Planned'),minutesText18(planned),planned>available?'bad':'good')}${kpi(L18('Ruimte / tekort','Room / shortage'),`${diff>=0?'+':'−'}${minutesText18(Math.abs(diff))}`,diff>=0?'good':'bad')}${kpi(L18('Team','Team'),team,null)}`:''}</div>
+        <div class="grid grid-main">
+          <div class="grid">
+            ${renderTeam18()}
+            ${renderShiftPlanning18()}
+            ${renderExtraTools18()}
+            ${renderTasks18()}
+          </div>
+          <div class="grid side">
+            ${renderCapacity18()}
+            ${renderPlanningCheck18()}
+            ${renderIncidents18()}
+            ${renderReport18()}
+          </div>
+        </div>
+        ${renderShiftleaderHelp18()}
+      </div>`;
+    }
+    function renderTeam18(){
+      const sl=ensureShiftLeader18();
+      return `<div class="card sl18-team"><div class="flex-line"><div><h3>${E18(L18('Team & beschikbare uren','Team & available hours'))}</h3><p class="muted small">${E18(L18('Pauze wordt automatisch berekend: 4 uur = 15m, 6 uur = 30m. Start 16:00 en na 19:00 doorwerken geeft maaltijdvergoeding-signaal.','Break is automatic: 4 hours = 15m, 6 hours = 30m. Start 16:00 and work after 19:00 gives a meal allowance signal.'))}</p></div><button class="btn small primary" data-action="sl16-open-person-form">＋</button></div>${sl.team.length?`<div class="list">${sl.team.map(p=>{ const assigned=assignedMinutes18(p.id), available=memberAvailable18(p), lanes=sl.lanes.filter(l=>l.personId===p.id).map(l=>l.name).join(', ') || L18('nog geen pad','no aisle yet'); return `<div class="list-item sl18-person"><span><strong>${E18(p.name)}</strong><br><span class="tiny muted">${E18(p.start||'--:--')}–${E18(p.end||'--:--')} · ${E18(L18('pauze','break'))}: ${autoBreak18(p.start,p.end)}m · ${E18(lanes)}</span></span><span class="sl18-person-right"><span class="pill ${assigned>available?'bad':'good'}">${minutesText18(assigned)} / ${minutesText18(available)}</span>${mealAllowance18(p.start,p.end)?`<span class="pill warn">${E18(L18('maaltijdvergoeding','meal allowance'))}</span>`:''}<button class="btn small" data-action="sl16-open-person-form" data-id="${E18(p.id)}">✎</button><button class="btn small bad" data-action="sl16-remove-person" data-id="${E18(p.id)}">×</button></span></div>`; }).join('')}</div>`:`<p class="muted small">${E18(L18('Nog geen medewerkers toegevoegd.','No team members added yet.'))}</p>`}</div>`;
+    }
+    function renderShiftPlanning18(){
+      const sl=ensureShiftLeader18(), times=generatedLaneTimes18();
+      return `<div class="card sl18-shiftplanning"><div class="flex-line"><div><h3>${E18(L18('Shiftplanning','Shift planning'))}</h3><p class="muted small">${E18(L18('Paden staan in één compact overzicht. Kaas/Vleeswaren staat nu tussen Vlees/Vis/Kip en Zuivel.','Aisles are in one compact overview. Cheese/Meatware is now between Meat/Fish/Chicken and Dairy.'))}</p></div><span class="pill info">${sl.lanes.length} ${E18(L18('paden','aisles'))}</span></div><div class="sl18-lane-list">${sl.lanes.map(l=>{ const t=times[l.id]; return `<div class="sl18-lane-card ${l.status==='done'?'done':''}">
+          <div class="sl18-lane-top"><div class="sl18-lane-title"><strong>${E18(l.name)}</strong>${statusButton18(l)}</div><div class="sl18-lane-actions"><button class="btn small" data-action="sl18-open-fill" data-lane="${E18(l.id)}" title="${E18(L18('Vulling aanpassen','Edit fill'))}">⏱</button><button class="btn small ${l.note?'primary':''}" data-action="sl18-open-lane-note" data-lane="${E18(l.id)}" title="${E18(L18('Notitie','Note'))}">✎</button></div></div>
+          <div class="sl18-lane-main"><label class="sl18-person-select"><span>${E18(L18('Persoon','Person'))}</span><select class="select input" data-action="sl18-lane-person" data-lane="${E18(l.id)}">${personOptions18(l.personId)}</select></label><div class="sl18-lane-meta"><span>${E18(L18('Tijd','Time'))}: <strong>${E18(t && t.start ? `${t.start}–${t.end||'--:--'}` : L18('nog niet gepland','not planned'))}</strong></span><span>${E18(L18('Vulling','Fill'))}: <strong>${minutesText18(laneMinutes18(l))}</strong></span></div></div>${l.note?`<div class="sl18-lane-note-chip">${E18(l.note)}</div>`:''}
+        </div>`; }).join('')}</div><div class="btn-row mt"><button class="btn" data-action="sl18-copy-planning">${E18(L18('Kopieer vulplanning','Copy fill plan'))}</button><button class="btn" data-action="sl18-auto-assign">${E18(L18('Auto-verdeel vrije paden','Auto-assign open aisles'))}</button><button class="btn" data-action="sl18-open-planning-check">${E18(L18('Planningcheck','Planning check'))}</button></div></div>`;
+    }
+    function renderExtraTools18(){
+      const open=openPoints18();
+      return `<div class="card sl18-tools"><h3>${E18(L18('Extra planningtools','Extra planning tools'))}</h3><div class="grid grid-3"><button class="btn" data-action="sl18-auto-assign">${E18(L18('Auto-verdeel vrije paden','Auto-assign open aisles'))}</button><button class="btn" data-action="sl18-copy-open-points">${E18(L18('Kopieer open punten','Copy open points'))}</button><button class="btn" data-action="sl18-open-endcheck">${E18(L18('Eindcheck','End check'))}</button></div><p class="muted small mt">${E18(L18('Open paden','Open aisles'))}: ${open.lanes.length} · ${E18(L18('open taken','open tasks'))}: ${open.tasks.length} · ${E18(L18('planningchecks','planning checks'))}: ${planningIssues18().length}</p></div>`;
+    }
+    function renderPlanningCheck18(){
+      const issues=planningIssues18();
+      return `<div class="card sl18-planning-check"><h3>${E18(L18('Planningcheck','Planning check'))}</h3>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E18(i)}</span><span class="pill warn">${E18(L18('check','check'))}</span></div>`).join('')}</div>`:`<p class="muted small">${E18(L18('Geen grote waarschuwingen. De planning lijkt haalbaar.','No major warnings. The plan looks feasible.'))}</p>`}<details class="detail-drawer mt"><summary>${E18(L18('Wijzigingslog planning','Planning change log'))}</summary><div class="drawer-content">${renderPlanLog18()}</div></details></div>`;
+    }
+    function renderTasks18(){
+      const sl=ensureShiftLeader18(); const showAll=!!sl.ui.showAllShiftTasks; const ordered=sl.tasks.slice().sort((a,b)=>(a.status==='done')-(b.status==='done') || (a.status==='deferred')-(b.status==='deferred'));
+      const shown=showAll?ordered:ordered.slice(0,10); const doneCount=sl.tasks.filter(t=>t.status==='done').length;
+      return `<div class="card sl18-tasks"><div class="flex-line"><div><h3>${E18(L18('Overige takenlijst','Other tasks'))}</h3><p class="muted small">${E18(L18('Taken blijven zichtbaar. Afgeronde taken kleuren groen en zakken naar onderen.','Tasks stay visible. Completed tasks turn green and move down.'))}</p></div><div class="btn-row"><button class="btn small" data-action="sl18-load-standard-tasks">${E18(L18('Standaard','Standard'))}</button><button class="btn small primary" data-action="sl16-open-task-form">＋</button></div></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item compact sl18-task ${t.status==='done'?'done':t.status==='deferred'?'deferred':''}"><span><strong>${t.status==='done'?'✓ ':''}${E18(t.title)}</strong><br><span class="tiny muted">${E18(t.priority||L18('normaal','normal'))}${t.note?` · ${E18(t.note)}`:''}${t.status==='deferred'?` · ${E18(L18('uitgesteld','deferred'))}`:''}</span></span><span class="btn-row nowrap">${t.status==='done'?`<button class="btn small" data-action="sl16-task-reopen" data-id="${E18(t.id)}">↩</button>`:`<button class="btn small good" data-action="sl16-task-done" data-id="${E18(t.id)}">✓</button><button class="btn small warn" data-action="sl16-task-defer" data-id="${E18(t.id)}">↷</button>`}<button class="btn small" data-action="sl16-open-task-form" data-id="${E18(t.id)}">✎</button><button class="btn small bad" data-action="sl16-task-delete" data-id="${E18(t.id)}">×</button></span></div>`).join('')}</div>`:`<p class="muted small">${E18(L18('Nog geen overige taken.','No other tasks yet.'))}</p>`}<div class="btn-row mt">${ordered.length>10?`<button class="btn" data-action="sl16-toggle-tasks">${showAll?E18(L18('Minder tonen','Show less')):E18(L18('Meer weergeven','Show more'))}</button>`:''}${doneCount?`<span class="pill good">${doneCount} ${E18(L18('voldaan','done'))}</span>`:''}</div></div>`;
+    }
+    function renderCapacity18(){
+      const {available,planned,diff,openTasks,doneTasks,incidents}=shiftSummary18();
+      const load = available ? Math.round(planned/available*100) : 0;
+      let barHtml=''; try { if(typeof bar === 'function') barHtml = bar(L18('Geplande vuluren','Planned fill hours'), load, load>100?'bad':load>85?'warn':'good'); } catch(_){ }
+      const mealCount=ensureShiftLeader18().team.filter(p=>mealAllowance18(p.start,p.end)).length;
+      return `<div class="card sl18-capacity"><h3>${E18(L18('Capaciteit shift','Shift capacity'))}</h3><div class="list"><div class="list-item compact"><span>${E18(L18('Beschikbaar team','Team available'))}</span><strong>${minutesText18(available)}</strong></div><div class="list-item compact"><span>${E18(L18('Geplande vuluren','Planned fill hours'))}</span><strong>${minutesText18(planned)}</strong></div><div class="list-item compact"><span>${E18(L18('Ruimte / tekort','Room / shortage'))}</span><strong>${diff>=0?'+':'−'}${minutesText18(Math.abs(diff))}</strong></div><div class="list-item compact"><span>${E18(L18('Open taken','Open tasks'))}</span><strong>${openTasks}</strong></div><div class="list-item compact"><span>${E18(L18('Voldaan','Done'))}</span><strong>${doneTasks}</strong></div><div class="list-item compact"><span>${E18(L18('Maaltijdvergoeding signaal','Meal allowance signal'))}</span><strong>${mealCount}</strong></div><div class="list-item compact"><span>${E18(L18('Bijzonderheden','Notes'))}</span><strong>${incidents}</strong></div></div>${barHtml}<p class="muted small">${E18(diff<0?L18('Er is meer gepland dan beschikbaar. Verdeel paden opnieuw of zet open punten bewust op overdracht.','More is planned than available. Reassign aisles or deliberately add open points to handover.'):L18('Er is ruimte voor bijsturen, hulpvragen of onverwachte situaties.','There is room for steering, helping or unexpected situations.'))}</p></div>`;
+    }
+    function renderIncidents18(){
+      const sl=ensureShiftLeader18(); const showAll=!!sl.ui.showAllIncidents; const shown=showAll?sl.incidents:sl.incidents.slice(0,5);
+      return `<div class="card sl18-incidents"><div class="flex-line"><div><h3>${E18(L18('Onderbrekingen & bijzonderheden','Interruptions & notes'))}</h3><p class="muted small">${E18(L18('Leg vast waarom de planning veranderde.','Record why the plan changed.'))}</p></div></div><div class="btn-row">${incidentTypes18.map(t=>`<button class="btn small" data-action="sl16-open-incident" data-type="${E18(t)}">${E18(t)}</button>`).join('')}</div>${shown.length?`<div class="list mt">${shown.map(i=>`<div class="list-item compact"><span><strong>${E18(i.type)}</strong><br><span class="tiny muted">${E18((i.at||'').slice(11,16))}${i.minutes?` · ${i.minutes}m`:''}${i.note?` · ${E18(i.note)}`:''}</span></span><button class="btn small bad" data-action="sl16-incident-delete" data-id="${E18(i.id)}">×</button></div>`).join('')}</div>`:`<p class="muted small mt">${E18(L18('Nog geen onderbrekingen gelogd.','No interruptions logged yet.'))}</p>`}${sl.incidents.length>5?`<button class="btn mt" data-action="sl16-toggle-incidents">${showAll?E18(L18('Minder tonen','Show less')):E18(L18('Meer weergeven','Show more'))}</button>`:''}</div>`;
+    }
+    function renderReport18(){
+      return `<div class="card sl18-report"><h3>${E18(L18('Shiftklaar report','End-of-shift report'))}</h3><p class="muted small">${E18(L18('Inclusief Kaas/Vleeswaren, open punten, automatische tijden, pauzes en maaltijdvergoeding-signalen.','Includes Cheese/Meatware, open points, generated times, breaks and meal allowance signals.'))}</p><div class="btn-row"><button class="btn good" data-action="sl18-copy-report">${E18(L18('Kopieer report','Copy report'))}</button><button class="btn" data-action="sl18-save-report-communication">${E18(L18('Opslaan bij Communicatie','Save to Communication'))}</button></div><details class="detail-drawer mt"><summary>${E18(L18('Preview bekijken','View preview'))}</summary><pre class="sl15-report-preview">${E18(reportText18())}</pre></details></div>`;
+    }
+    function renderShiftleaderHelp18(){
+      return `<details class="card detail-drawer sl18-help"><summary>${E18(L18('Hoe werkt deze Shiftleider planning?','How does this Shift Lead planning work?'))}</summary><div class="drawer-content"><p>${E18(L18('Je vult teamleden en werktijden in, wijst per pad een persoon toe en stelt de vulling in via ⏱. De start- en eindtijden worden automatisch gegenereerd per medewerker en padvolgorde.','Enter team members and working times, assign a person per aisle and set fill via ⏱. Start and end times are generated per colleague and aisle order.'))}</p><ul><li>${E18(L18('Kaas/Vleeswaren staat nu als apart pad na Vlees/Vis/Kip.','Cheese/Meatware is now a separate aisle after Meat/Fish/Chicken.'))}</li><li>${E18(L18('Auto-verdeel vrije paden gebruikt de medewerker met de meeste resterende ruimte.','Auto-assign open aisles uses the colleague with the most remaining room.'))}</li><li>${E18(L18('Kopieer open punten is handig voor snelle overdracht.','Copy open points is useful for quick handover.'))}</li><li>${E18(L18('Eindcheck laat zien wat nog openstaat voordat je het report kopieert.','End check shows what is still open before copying the report.'))}</li></ul></div></details>`;
+    }
+    function openFillModal18(id){
+      const l=laneById18(id); if(!l) return;
+      const mins=[0,5,10,15,20,25,30,35,40,45,50,55];
+      if(typeof modal==='function') modal(`${L18('Vulling aanpassen','Edit fill')} — ${l.name}`, `<div class="grid"><p class="muted small">${E18(L18('Kies hoeveel vulling dit pad naar verwachting heeft. De start- en eindtijd worden daarna automatisch opnieuw berekend.','Choose the expected fill amount for this aisle. The start and end time are then recalculated automatically.'))}</p><div class="grid grid-2"><label>${E18(L18('Uren','Hours'))}<input class="input" id="sl18FillHours" type="number" min="0" step="1" value="${E18(l.fillHours||0)}"></label><label>${E18(L18('Minuten','Minutes'))}<select class="select input" id="sl18FillMinutes">${mins.map(m=>`<option value="${m}" ${(+l.fillMinutes||0)===m?'selected':''}>${m}m</option>`).join('')}</select></label></div><div class="btn-row"><button class="btn primary" data-action="sl18-save-fill" data-lane="${E18(l.id)}">${E18(L18('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E18(L18('Annuleren','Cancel'))}</button></div></div>`, 'wide');
+    }
+    function openLaneNoteModal18(id){
+      const l=laneById18(id); if(!l) return;
+      if(typeof modal==='function') modal(`${L18('Notitie','Note')} — ${l.name}`, `<div class="grid"><textarea class="textarea" id="sl18LaneNote" placeholder="${E18(L18('Bijv. later andere collega, eerst restanten, of bijzonderheid op pad.','E.g. changed colleague, first leftovers, or aisle note.'))}">${E18(l.note||'')}</textarea><div class="btn-row"><button class="btn primary" data-action="sl18-save-lane-note" data-lane="${E18(l.id)}">${E18(L18('Opslaan','Save'))}</button><button class="btn warn" data-action="sl18-clear-lane-note" data-lane="${E18(l.id)}">${E18(L18('Notitie wissen','Clear note'))}</button><button class="btn" data-action="close-modal">${E18(L18('Annuleren','Cancel'))}</button></div></div>`, 'wide');
+    }
+    function loadStandardTasks18(){
+      const sl=ensureShiftLeader18(); const titles=[...baseTasks18]; if(isTueThu18(sl.date)) titles.splice(9,0,'Nee-verkoop houdbaar');
+      let added=0; titles.forEach(title=>{ if(!sl.tasks.some(t=>t.title===title && t.date===sl.date)){ sl.tasks.push({id:uid18('sl_task'), title, status:'open', priority:title.includes('Vracht')?'Hoog':'Normaal', note:'', date:sl.date, createdAt:now18()}); added++; } });
+      try { if(typeof addActivity==='function') addActivity(`Shiftleider standaardtaken ingeladen: ${added}`,'shiftleader'); } catch(_){ }
+      save18(); render18(); toast18(added?`${added} ${L18('taken ingeladen','tasks loaded')}`:L18('Standaardtaken stonden al klaar','Standard tasks were already ready'),'good');
+    }
+    function autoAssign18(){
+      const sl=ensureShiftLeader18();
+      if(!sl.team.length){ toast18(L18('Voeg eerst medewerkers toe.','Add team members first.'),'warn'); return; }
+      let changed=0;
+      sl.lanes.filter(l=>!l.personId && laneMinutes18(l)>0).forEach(l=>{
+        const best=sl.team.slice().sort((a,b)=>(memberAvailable18(b)-assignedMinutes18(b.id))-(memberAvailable18(a)-assignedMinutes18(a.id)))[0];
+        if(best){ l.personId=best.id; changed++; logPlan18(`${l.name}: auto-verdeeld naar ${best.name}`); }
+      });
+      if(changed){ save18(); render18(); toast18(`${changed} ${L18('paden automatisch verdeeld.','aisles auto-assigned.')}`,'good'); }
+      else toast18(L18('Geen vrije paden met vuluren gevonden.','No open aisles with fill hours found.'),'info');
+    }
+    function openEndCheck18(){
+      const {lanes,tasks}=openPoints18(); const issues=planningIssues18();
+      if(typeof modal==='function') modal(L18('Eindcheck Vers Avondshift','Fresh evening shift end check'), `<div class="grid"><p class="muted small">${E18(L18('Controleer open paden, open taken en planningchecks voordat je het shiftklaar report kopieert.','Check open aisles, open tasks and planning checks before copying the end-of-shift report.'))}</p><div class="grid grid-3"><div class="card soft"><strong>${lanes.length}</strong><br><span class="muted small">${E18(L18('open paden','open aisles'))}</span></div><div class="card soft"><strong>${tasks.length}</strong><br><span class="muted small">${E18(L18('open taken','open tasks'))}</span></div><div class="card soft"><strong>${issues.length}</strong><br><span class="muted small">${E18(L18('planningchecks','planning checks'))}</span></div></div><pre class="sl15-report-preview">${E18(openPointsText18())}</pre><div class="btn-row"><button class="btn good" data-action="sl18-copy-open-points">${E18(L18('Kopieer open punten','Copy open points'))}</button><button class="btn primary" data-action="sl18-copy-report">${E18(L18('Kopieer report','Copy report'))}</button><button class="btn" data-action="close-modal">${E18(L18('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+
+    const prevRenderPage6718 = typeof renderPage === 'function' ? renderPage : null;
+    if(prevRenderPage6718) renderPage = window.renderPage = function(){ return state.route === 'shiftleader' ? renderShiftleader18() : prevRenderPage6718(); };
+
+    const prevToday6718 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6718) renderToday = window.renderToday = function(){
+      const base=prevToday6718(); const sl=ensureShiftLeader18();
+      const active = sl.team.length || sl.tasks.length || sl.lanes.some(l=>l.personId||laneMinutes18(l)||l.status!=='open'||l.note);
+      const {planned,diff,openTasks}=shiftSummary18(); const mealCount=sl.team.filter(p=>mealAllowance18(p.start,p.end)).length;
+      const issues=planningIssues18().length;
+      const card = `<div class="card sl18-today-card"><div class="flex-line"><div><h3>${E18(L18('Shiftleider Vers Avondshift','Shift Lead Fresh evening shift'))}</h3><p class="muted small">${active?E18(`${sl.lanes.length} paden · ${sl.team.length} team · ${openTasks} open taken · ${minutesText18(planned)} gepland${mealCount?` · ${mealCount} maaltijdvergoeding`:''}${issues?` · ${issues} checks`:''}`):E18(L18('Plan team, paden, overige taken en report.','Plan team, aisles, other tasks and report.'))}</p></div><span class="pill ${diff<0?'bad':'good'}">${active?(diff>=0?'+':'−')+minutesText18(Math.abs(diff)):L18('nieuw','new')}</span></div><button class="btn primary mt" data-route="shiftleader">${E18(L18('Open Shiftleider','Open Shift Lead'))}</button></div>`;
+      return `${base}<div class="mt sl18-today-wrap">${card}</div>`;
+    };
+
+    const prevHandle6718 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      const sl=ensureShiftLeader18();
+      if(a==='sl18-lane-person'){
+        const l=laneById18(el.dataset.lane); if(l){ l.personId=el.value; const p=teamMember18(l.personId); if(p){ l.start=p.start||''; l.end=p.end||''; } logPlan18(`${l.name}: persoon → ${teamMember18(l.personId)?.name || 'niet toegewezen'}`); save18(); render18(); } return;
+      }
+      if(a==='sl18-cycle-lane-status'){
+        const l=laneById18(el.dataset.lane); if(l){ const idx=statusCycle18.indexOf(l.status||'open'); l.status=statusCycle18[(idx+1)%statusCycle18.length]; logPlan18(`${l.name}: status → ${statusLabel18[l.status]||l.status}`); save18(); render18(); } return;
+      }
+      if(a==='sl18-open-fill'){ openFillModal18(el.dataset.lane); return; }
+      if(a==='sl18-save-fill'){
+        const l=laneById18(el.dataset.lane); if(l){ l.fillHours=+(document.getElementById('sl18FillHours')?.value||0)||0; l.fillMinutes=+(document.getElementById('sl18FillMinutes')?.value||0)||0; l.hours=laneMinutes18(l)/60; logPlan18(`${l.name}: vulling → ${minutesText18(laneMinutes18(l))}`); if(typeof closeModal==='function') closeModal(); save18(); render18(); } return;
+      }
+      if(a==='sl18-open-lane-note'){ openLaneNoteModal18(el.dataset.lane); return; }
+      if(a==='sl18-save-lane-note'){
+        const l=laneById18(el.dataset.lane); if(l){ l.note=(document.getElementById('sl18LaneNote')?.value||'').trim(); logPlan18(`${l.name}: notitie ${l.note?'bijgewerkt':'leeg'}`); if(typeof closeModal==='function') closeModal(); save18(); render18(); } return;
+      }
+      if(a==='sl18-clear-lane-note'){
+        const l=laneById18(el.dataset.lane); if(l){ l.note=''; logPlan18(`${l.name}: notitie gewist`); if(typeof closeModal==='function') closeModal(); save18(); render18(); } return;
+      }
+      if(a==='sl18-copy-planning'){ copy18(planningText18()); toast18(L18('Vulplanning gekopieerd.','Fill plan copied.'),'good'); return; }
+      if(a==='sl18-auto-assign'){ autoAssign18(); return; }
+      if(a==='sl18-copy-open-points'){ copy18(openPointsText18()); toast18(L18('Open punten gekopieerd.','Open points copied.'),'good'); return; }
+      if(a==='sl18-open-endcheck'){ openEndCheck18(); return; }
+      if(a==='sl18-open-planning-check'){
+        const issues=planningIssues18();
+        if(typeof modal==='function') modal(L18('Planningcheck','Planning check'), `<div class="grid"><p class="muted small">${E18(L18('Controleert of paden bezet zijn, vuluren kloppen en niemand overpland is.','Checks whether aisles are assigned, fill hours make sense and no one is overplanned.'))}</p>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E18(i)}</span><span class="pill warn">check</span></div>`).join('')}</div>`:`<p class="muted">${E18(L18('Geen grote waarschuwingen gevonden.','No major warnings found.'))}</p>`}<button class="btn primary" data-action="close-modal">${E18(L18('Sluiten','Close'))}</button></div>`, 'wide'); return;
+      }
+      if(a==='sl18-copy-report'){ copy18(reportText18()); toast18(L18('Shiftklaar report gekopieerd.','Shift report copied.'),'good'); return; }
+      if(a==='sl18-save-report-communication'){
+        state.communications = Array.isArray(state.communications) ? state.communications : [];
+        state.communications.unshift({id:uid18('com'), title:'Shiftklaar Report — Vers Avondshift', message:reportText18(), text:reportText18(), priority:'Normaal', role:'Teamleider', status:'open', createdAt:now18(), date:today18(), followDate:today18(), type:'shiftleader'});
+        toast18(L18('Report opgeslagen bij Communicatie.','Report saved to Communication.'),'good'); save18(); render18(); return;
+      }
+      if(a==='sl18-load-standard-tasks'){ loadStandardTasks18(); return; }
+      if(prevHandle6718) return prevHandle6718(a,el,e);
+    };
+
+    const prevDiag6718 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6718) renderDiagnostics = window.renderDiagnostics = function(){
+      const sl=ensureShiftLeader18(); let base=prevDiag6718() || '';
+      base = base.replace(/<div class="grid grid-2 mt diagnostics-v6717">[\s\S]*$/,'');
+      const checks=[
+        {name:'Kaas/Vleeswaren pad', ok:sl.lanes.some(l=>l.id==='kaas_vleeswaren'), detail:`${sl.lanes.length} paden`},
+        {name:'Compacte Shiftplanning', ok:sl.lanes.length===7, detail:'één venster met 7 paden'},
+        {name:'Auto-verdeel vrije paden', ok:typeof autoAssign18==='function', detail:'nieuw'},
+        {name:'Kopieer open punten', ok:typeof openPointsText18==='function', detail:`${openPoints18().lanes.length} open paden`},
+        {name:'Eindcheck', ok:typeof openEndCheck18==='function', detail:'open punten + report'},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6718', detail:APP.cache}
+      ];
+      return base+`<div class="grid grid-2 mt diagnostics-v6718"><div class="card"><h3>v6.7.18 Shiftleider checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E18(c.name)} <span class="tiny muted">${E18(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E18(L18('Nieuwe Shiftleider extra’s','New Shift Lead extras'))}</h3><p class="muted small">${E18(L18('Toegevoegd: Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck. De planning blijft compact en mobielvriendelijk.','Added: Cheese/Meatware, auto-assign open aisles, copy open points and end check. The planning remains compact and mobile-friendly.'))}</p></div></div>`;
+    };
+    try { ensureShiftLeader18(); save18(); } catch(_){ }
+  } catch(err){ console.error('v6.7.18 patch failed', err); }
+})();

@@ -1,34 +1,36 @@
 {
   "app": "RICH CMD",
-  "latestVersion": "v6.7.8",
-  "releaseName": "Store Map Route Planner & VRO Inventaris Polish",
-  "cache": "rich-cmd-cache-v678",
-  "releasedAt": "2026-06-02",
+  "latestVersion": "v6.7.18",
+  "releaseName": "Shiftleider Pad & Planning Extras",
+  "cache": "rich-cmd-cache-v6718",
+  "releasedAt": "2026-06-03",
   "minSupportedVersion": "v6.0.0",
   "forceBelowVersion": "",
   "forceMessageNl": "Deze versie wordt niet meer ondersteund. Open de app online en werk bij naar de nieuwste versie.",
   "forceMessageEn": "This version is no longer supported. Open the app online and update to the latest version.",
   "notesNl": [
-    "Store Map Route Planner toegevoegd met route vandaag, mobiele checkmodus en slimme controlevolgorde",
-    "Nieuwe baseline-punten tellen niet als achterstand tot ze gecontroleerd, gepland of gesignaleerd zijn",
-    "Store Map gekoppeld aan Vandaag met routepunten en startknop",
-    "VRO Inventaris verbeterd met zoeken op NASA, schapsticker omschrijving, categorie, afdeling en gebruikstekst",
-    "Inventarisfilters toegevoegd voor Alles, Bijbestellen, Teveel, Recent gebruikt en Vaak besteld",
-    "Bestellijst compacter gemaakt met kopiëren, bevestigen, leegmaken en bestelfrequentie bijwerken",
-    "Diagnostiek uitgebreid met Store Map Route Planner- en VRO-checks"
+    "Pad Kaas/Vleeswaren toegevoegd na Vlees/Vis/Kip",
+    "Shiftplanning blijft compact in één venster met 7 vaste paden",
+    "Nieuwe tool: Auto-verdeel vrije paden op basis van resterende medewerkerstijd",
+    "Nieuwe tool: Kopieer open punten voor snelle overdracht",
+    "Nieuwe tool: Eindcheck met open paden, open taken en planningchecks"
   ],
   "notesEn": [
-    "Store Map Route Planner added with today route, mobile check mode and smart check order",
-    "New baseline points do not count as backlog until checked, planned or signalled",
-    "Store Map connected to Today with route points and start button",
-    "VRO Inventory improved with search by NASA, shelf sticker description, category, department and usage text",
-    "Inventory filters added for All, Order, Overstock, Recently used and Frequently ordered",
-    "Order list made more compact with copy, confirm, clear and order frequency updates",
-    "Diagnostics extended with Store Map Route Planner and VRO checks"
+    "Added Cheese/Meatware after Meat/Fish/Chicken",
+    "Shift planning remains compact in one panel with 7 fixed aisles",
+    "New tool: auto-assign open aisles based on remaining team capacity",
+    "New tool: copy open points for quick handover",
+    "New tool: end check with open aisles, open tasks and planning checks"
   ],
-  "currentVersion": "v6.7.8",
-  "cacheName": "rich-cmd-cache-v678",
+  "currentVersion": "v6.7.18",
+  "cacheName": "rich-cmd-cache-v6718",
   "releaseNotes": [
+    "v6.7.18: Shiftleider planning uitgebreid met pad Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck. Compacte mobiele planning behouden.",
+    "v6.7.17: Shiftleider Compact Planning met compacte padregels, vulling via ⏱-icoon, notities via ✎, automatische padtijden, statuspill, Kopieer vulplanning, Planningcheck en Wijzigingslog.",
+    "v6.7.16: Shiftleider Planning Polish met één Shiftplanning-venster, standaard start/eindtijden, automatische pauze, maaltijdvergoeding-signaal en afgeronde taken die groen zichtbaar blijven.",
+    "v6.7.15: Shiftleider Vers Avondshift met teamplanning, vulplanning per pad, overige taken, incidentenlog en shiftklaar report.",
+    "v6.7.13: HACCP Layout Recovery & Smart Timeline met afgesproken sectievolgorde, Rustmodus voor alleen de belangrijkste zaken, urgenties alleen wanneer nodig, takenlijst met eerste 5 taken, handmatige volgorde, capaciteit, Store Map → HACCP, templates, weekplanning, beheer en uitleg.",
+    "v6.7.10: HACCP Startlijst & Prioriteit Fix met vaste dagelijkse risicoroutine, echte urgenties en gescheiden Planning & periodiek.",
     "v6.7.8: Store Map Route Planner, mobiele checkmodus en VRO Inventaris Polish.",
     "v6.7.7: Communicatie Planner Pro plus VRO Inventaris-inladen uit Excel.",
     "v6.7.6: Coaching UX & Learning Depth met rustiger design, oude skill-tree iconen, betere badges, inklapbare secties en diepere MBO-lessen.",
@@ -38,5 +40,7 @@
     "v6.7.2: Weekoverzicht, weekrapport, datum/weeknummer en rustigere Visualisatie.",
     "v6.7.1: Shift Report & Tomorrow Prep met slimme shift-afsluiting, dagrapport, overdracht en morgenvoorbereiding.",
     "v6.7.0: V7 Foundation Cleanup met centrale QA-laag, regressiechecks en oude-patch-opruiming."
-  ]
+  ],
+  "build": "Shiftleider Pad & Planning Extras",
+  "releaseTitle": "Shiftleider Pad & Planning Extras"
 }

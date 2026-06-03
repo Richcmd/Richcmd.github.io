@@ -1,24 +1,50 @@
-# RICH CMD v6.7.8 — Store Map Route Planner & VRO Inventaris Polish
+# RICH CMD v6.7.18 — Shiftleider Pad & Planning Extras
 
-Deze build werkt verder op v6.7.7 en maakt Store Map en Inventaris praktischer voor dagelijks gebruik.
+Deze build voegt een aparte Shiftleider-module toe voor de Vers Avondshift.
 
-## Store Map Route Planner
-- Route vandaag met slimme controlevolgorde.
-- Mobiele checkmodus: stap voor stap controleren met grote knoppen.
-- Statussen vastleggen: Oké, Aandacht, Nacontrole en Schoon.
-- Routepunten kunnen naar HACCP worden gepland.
-- Nieuwe neutrale baseline-punten tellen niet als achterstand tot ze gecontroleerd, gepland of gesignaleerd zijn.
-- Vandaag toont Store Map-routepunten compact mee.
+## Nieuw
 
-## VRO Inventaris Polish
-- Zoeken op NASA nummer, schapsticker omschrijving, ass/categorie, afdeling en gebruikstekst.
-- Filters: Alles, Bijbestellen, Teveel, Recent gebruikt en Vaak besteld.
-- Compactere artikelkaarten voor telefoon.
-- Compactere bestellijst met Kopieer, Bevestig en Leegmaken.
-- Bevestigen werkt bestelfrequentie, laatste besteldatum en historie bij.
-- VRO-data beheer toont bronartikelen, ingeladen artikelen en laatste import.
+- Shiftleider-dashboard met datum, weeknummer, beschikbare uren, geplande vuluren en ruimte/tekort.
+- Teamplanning met naam, werktijd, pauze, beschikbare tijd en toegewezen paden.
+- Vulplanning per vast pad: AGF, Panklaar, Maaltijden, Vlees/Vis/Kip, Zuivel en Delicatesse.
+- Overige takenlijst met standaard shiftleider-taken en snelle taaktoevoeging.
+- Automatische taak: Nee-verkoop houdbaar op dinsdag en donderdag.
+- Onderbrekingen & bijzonderheden-log voor klanten, collega’s, incidenten, kassa en overig.
+- Shiftklaar report met kopiëren en opslaan naar Communicatie.
+- Vandaag toont een compacte Shiftleider-kaart zodra de module actief is.
+- Diagnostiek bevat v6.7.16-checks.
 
-## Versie
-- App: v6.7.8
-- Cache: rich-cmd-cache-v678
-- Assets: ?v=678
+## Technisch
+
+- Versie: v6.7.16
+- Cache: rich-cmd-cache-v6716
+- Assets: ?v=6716
+
+
+## v6.7.16 — Shiftleider Planning Polish
+
+- Shiftplanning per pad staat nu onder elkaar in één venster in plaats van losse padblokken.
+- Medewerkerstijden hebben standaardkeuzes: start 16:00/17:00 en eind 19:00/20:00, met optioneel een andere tijd.
+- Pauze wordt automatisch berekend: 4 uur werken = 15 minuten, 6 uur werken = 30 minuten.
+- Maaltijdvergoeding wordt gesignaleerd bij starten om/rond 16:00 en werken na 19:00.
+- Overige taken verdwijnen niet meer na afronden: ze kleuren groen en schuiven naar onderen.
+
+
+## v6.7.18 — Shiftleider Compact Planning & Extra Tools
+
+- Shiftplanning per pad compacter en mobielvriendelijker gemaakt.
+- Paden tonen padnaam, status, persoon, automatisch gegenereerde start/eindtijd en vulduur.
+- Vuluren/minuten worden aangepast via een compact ⏱-icoon.
+- Notities worden aangepast via ✎ en zijn alleen zichtbaar wanneer gevuld.
+- Status wijzig je via de statuspill; dubbele statusvelden zijn verwijderd.
+- Extra features: Kopieer vulplanning, Planningcheck en Wijzigingslog.
+
+
+## v6.7.18 — Shiftleider Pad & Planning Extras
+
+- Pad **Kaas/Vleeswaren** toegevoegd na **Vlees/Vis/Kip**.
+- Shiftplanning blijft compact in één venster met 7 vaste paden.
+- Nieuwe feature: **Auto-verdeel vrije paden** op basis van resterende ruimte per medewerker.
+- Nieuwe feature: **Kopieer open punten** voor snelle overdracht.
+- Nieuwe feature: **Eindcheck** met open paden, open taken en planningchecks vóór het shiftklaar report.
+- Versie/cache/assets bijgewerkt naar v6.7.18 / rich-cmd-cache-v6718 / ?v=6718.

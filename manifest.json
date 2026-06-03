@@ -1,8 +1,8 @@
 {
-  "name": "RICH CMD v6.7.8",
+  "name": "RICH CMD v6.7.18",
   "short_name": "RICH CMD",
-  "description": "RICH CMD v6.7.8 — Store Map Route Planner & VRO Inventaris Polish",
-  "start_url": "./index.html?v=678",
+  "description": "RICH CMD v6.7.18 — Shiftleider Pad & Planning Extras",
+  "start_url": "./index.html?v=6718",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f7fafc",
