@@ -13475,3 +13475,379 @@ try {
     try { ensureShiftLeader18(); save18(); } catch(_){ }
   } catch(err){ console.error('v6.7.19 patch failed', err); }
 })();
+
+/* =========================================================
+   RICH CMD v6.7.20 — Shiftleider Pro & UX Stability Polish
+   Adds Shift Lead presets, team profiles, productivity-aware planning,
+   Live Assist, end-phase mode, impact incidents and improved reports.
+========================================================= */
+(function(){
+  try{
+    if (typeof APP === 'object') {
+      APP.version = 'v6.7.20';
+      APP.cache = 'rich-cmd-cache-v6720';
+      APP.build = 'Shiftleider Pro & UX Stability Polish';
+    }
+
+    const L20 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
+    const E20 = (s)=> typeof escapeHtml === 'function' ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const uid20 = (p)=> typeof uid === 'function' ? uid(p) : `${p}_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+    const today20 = ()=> typeof TODAY === 'function' ? TODAY() : new Date().toISOString().slice(0,10);
+    const now20 = ()=> typeof nowISO === 'function' ? nowISO() : new Date().toISOString();
+    const save20 = ()=> { try { if(typeof save === 'function') save(); } catch(_){} };
+    const render20 = ()=> { try { if(typeof render === 'function') render(); } catch(_){} };
+    const toast20 = (msg,type='info')=> { try { if(typeof toast === 'function') toast(msg,type); } catch(_){} };
+    const copy20 = (txt)=> { try { if(typeof copyText === 'function') copyText(txt); else navigator.clipboard?.writeText(txt); } catch(_){} };
+
+    const laneDefs20 = [
+      {id:'agf', name:'AGF'},
+      {id:'panklaar', name:'Panklaar'},
+      {id:'maaltijden', name:'Maaltijden'},
+      {id:'vlees_vis_kip', name:'Vlees/Vis/Kip'},
+      {id:'kaas_vleeswaren', name:'Kaas/Vleeswaren'},
+      {id:'zuivel', name:'Zuivel'},
+      {id:'delicatesse', name:'Delicatesse'}
+    ];
+    const baseTasks20 = [
+      'Magazijn vrachtklaar maken','Vers nee-verkoop controleren','Vracht lossen','Vracht uitsplitsen','Eventuele kassapauzes overnemen','Versrestanten en tellingen controleren','Afprijsronde','Versshift afronding','Sinaasappelpers schoonmaken','Winkel afsluitronde'
+    ];
+    const incidentTypes20 = ['Klant','Collega','Incident','Kassa','Vracht','Overig'];
+    const statusCycle20 = ['open','busy','partial','done'];
+    const statusLabel20 = {open:L20('Open','Open'),busy:L20('Bezig','In progress'),partial:L20('Deels','Partial'),done:L20('Afgerond','Done'),deferred:L20('Uitgesteld','Deferred')};
+    const statusClass20 = {open:'info',busy:'warn',partial:'warn',done:'good',deferred:'warn'};
+    const presets20 = {
+      'avond-16-20': {label:L20('Vers Avondshift 16:00–20:00','Fresh evening shift 16:00–20:00'), start:'16:00', end:'20:00', fills:{agf:120,panklaar:45,maaltijden:75,vlees_vis_kip:45,kaas_vleeswaren:45,zuivel:75,delicatesse:45}},
+      'avond-17-20': {label:L20('Vers Avondshift 17:00–20:00','Fresh evening shift 17:00–20:00'), start:'17:00', end:'20:00', fills:{agf:90,panklaar:30,maaltijden:60,vlees_vis_kip:30,kaas_vleeswaren:30,zuivel:60,delicatesse:30}},
+      'druk-vracht': {label:L20('Drukke vrachtavond','Busy freight evening'), start:'16:00', end:'20:00', fills:{agf:150,panklaar:60,maaltijden:90,vlees_vis_kip:60,kaas_vleeswaren:60,zuivel:90,delicatesse:60}, loadTasks:true},
+      'rustig': {label:L20('Rustige avond','Quiet evening'), start:'17:00', end:'20:00', fills:{agf:60,panklaar:25,maaltijden:40,vlees_vis_kip:25,kaas_vleeswaren:25,zuivel:40,delicatesse:25}}
+    };
+
+    function weekNumber20(dateIso=today20()){
+      const d = new Date(dateIso+'T12:00:00');
+      const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      const dayNr = (target.getUTCDay() + 6) % 7;
+      target.setUTCDate(target.getUTCDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setUTCMonth(0, 1);
+      if (target.getUTCDay() !== 4) target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
+      return 1 + Math.ceil((firstThursday - target) / 604800000);
+    }
+    function minutesText20(m){
+      m = Math.max(0, Math.round(+m || 0));
+      const h=Math.floor(m/60), mm=m%60;
+      return h ? `${h}u ${String(mm).padStart(2,'0')}m` : `${mm}m`;
+    }
+    function diffMinutes20(start,end){
+      if(!start || !end) return 0;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return 0;
+      let a=sh*60+sm, b=eh*60+em;
+      if(b<a) b+=24*60;
+      return Math.max(0,b-a);
+    }
+    function addMinutes20(time, minutes){
+      if(!time) return '';
+      const [h,m]=String(time).split(':').map(Number);
+      if(Number.isNaN(h)||Number.isNaN(m)) return '';
+      let total=(h*60+m+Math.round(+minutes||0))%(24*60);
+      if(total<0) total+=24*60;
+      return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+    }
+    function autoBreak20(start,end){ const mins=diffMinutes20(start,end); return mins>=360?30:mins>=240?15:0; }
+    function mealAllowance20(start,end){
+      if(!start||!end) return false;
+      const [sh,sm]=String(start).split(':').map(Number), [eh,em]=String(end).split(':').map(Number);
+      if([sh,sm,eh,em].some(n=>Number.isNaN(n))) return false;
+      return (sh*60+sm)<=16*60 && (eh*60+em)>19*60;
+    }
+    function isTueThu20(dateIso){ const d=new Date((dateIso||today20())+'T12:00:00').getDay(); return d===2||d===4; }
+    function normalizeId20(str){ return String(str||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+    function laneName20(id){ return laneDefs20.find(l=>l.id===id)?.name || id || ''; }
+
+    function ensureShiftLeader20(){
+      state.shiftLeader = state.shiftLeader && typeof state.shiftLeader === 'object' ? state.shiftLeader : {};
+      const sl = state.shiftLeader;
+      sl.date = sl.date || today20();
+      sl.mode = sl.mode || 'Vers Avondshift';
+      sl.team = Array.isArray(sl.team) ? sl.team : [];
+      sl.team.forEach(p=>{
+        p.id = p.id || uid20('slp');
+        p.name = p.name || L20('Naamloos','Unnamed');
+        p.start = p.start || '';
+        p.end = p.end || '';
+        p.fixedLane = p.fixedLane || '';
+        p.preferredLanes = Array.isArray(p.preferredLanes) ? p.preferredLanes : (p.strongLanes ? String(p.strongLanes).split(',').map(normalizeId20).filter(Boolean) : []);
+        p.isNew = !!p.isNew;
+        p.note = p.note || '';
+        p.breakMinutes = autoBreak20(p.start,p.end);
+        p.mealAllowance = mealAllowance20(p.start,p.end);
+      });
+      sl.lanes = Array.isArray(sl.lanes) ? sl.lanes : [];
+      const existing = sl.lanes.slice();
+      laneDefs20.forEach(def=>{
+        let lane = existing.find(l=>l.id===def.id || l.name===def.name || normalizeId20(l.name)===def.id);
+        if(!lane){ lane={id:def.id,name:def.name,personId:'',fillHours:0,fillMinutes:0,status:'open',note:'',start:'',end:''}; existing.push(lane); }
+        lane.id=def.id; lane.name=def.name; lane.status=lane.status || 'open'; lane.note=lane.note || '';
+        if(lane.fillHours === undefined && lane.hours !== undefined){ const total=Math.round((+lane.hours||0)*60); lane.fillHours=Math.floor(total/60); lane.fillMinutes=total%60; }
+        lane.fillHours = Math.max(0, +(lane.fillHours ?? 0) || 0);
+        lane.fillMinutes = Math.max(0, +(lane.fillMinutes ?? 0) || 0);
+      });
+      sl.lanes = laneDefs20.map(def=>existing.find(l=>l.id===def.id));
+      sl.tasks = Array.isArray(sl.tasks) ? sl.tasks : [];
+      sl.incidents = Array.isArray(sl.incidents) ? sl.incidents : [];
+      sl.reportHistory = Array.isArray(sl.reportHistory) ? sl.reportHistory : [];
+      sl.planLog = Array.isArray(sl.planLog) ? sl.planLog : [];
+      sl.ui = sl.ui && typeof sl.ui === 'object' ? sl.ui : {};
+      sl.ui.preset = sl.ui.preset || 'avond-16-20';
+      return sl;
+    }
+    function laneById20(id){ return ensureShiftLeader20().lanes.find(l=>l.id===id); }
+    function teamMember20(id){ return ensureShiftLeader20().team.find(p=>p.id===id); }
+    function memberAvailable20(p){ return Math.max(0, diffMinutes20(p.start,p.end) - autoBreak20(p.start,p.end)); }
+    function laneMinutes20(l){ return Math.max(0, Math.round((+(l.fillHours||0))*60 + (+(l.fillMinutes||0)))); }
+    function productivityFactor20(p,lane){
+      if(!p) return 1;
+      if(p.isNew) return 0.70;
+      const laneId = typeof lane === 'string' ? lane : lane?.id;
+      if(!laneId) return 1;
+      if(p.fixedLane && p.fixedLane === laneId) return 1;
+      if(p.fixedLane && p.fixedLane !== laneId) return 0.85;
+      if(Array.isArray(p.preferredLanes) && p.preferredLanes.length){ return p.preferredLanes.includes(laneId) ? 1 : 0.85; }
+      return 1;
+    }
+    function productivityReason20(p,lane){
+      if(!p) return L20('geen persoon','no person');
+      if(p.isNew) return L20('nieuw: 70%','new: 70%');
+      const laneId = typeof lane === 'string' ? lane : lane?.id;
+      if(p.fixedLane && p.fixedLane === laneId) return L20('vast pad: 100%','fixed aisle: 100%');
+      if(p.fixedLane && p.fixedLane !== laneId) return L20('niet vast pad: 85%','not fixed aisle: 85%');
+      if(Array.isArray(p.preferredLanes) && p.preferredLanes.length){ return p.preferredLanes.includes(laneId) ? L20('past goed: 100%','good fit: 100%') : L20('niet passend pad: 85%','not a fitted aisle: 85%'); }
+      return L20('standaard: 100%','standard: 100%');
+    }
+    function adjustedLaneMinutes20(l){
+      const p=teamMember20(l.personId); const base=laneMinutes20(l); const f=productivityFactor20(p,l);
+      return f>0 ? Math.ceil(base/f) : base;
+    }
+    function totalAvailable20(){ return ensureShiftLeader20().team.reduce((a,p)=>a+memberAvailable20(p),0); }
+    function totalPlanned20(){ return ensureShiftLeader20().lanes.reduce((a,l)=>a+adjustedLaneMinutes20(l),0); }
+    function assignedMinutes20(personId){ return ensureShiftLeader20().lanes.filter(l=>l.personId===personId).reduce((a,l)=>a+adjustedLaneMinutes20(l),0); }
+    function shiftSummary20(){
+      const sl=ensureShiftLeader20(), available=totalAvailable20(), planned=totalPlanned20(), diff=available-planned;
+      return {sl,available,planned,diff,team:sl.team.length,openTasks:sl.tasks.filter(t=>t.status!=='done').length,doneTasks:sl.tasks.filter(t=>t.status==='done').length,incidents:sl.incidents.length};
+    }
+    function logPlan20(text){ const sl=ensureShiftLeader20(); sl.planLog.unshift({id:uid20('sl_log'),text,at:now20()}); sl.planLog=sl.planLog.slice(0,80); }
+    function personOptions20(selected=''){
+      const team=ensureShiftLeader20().team;
+      return `<option value="">${E20(L20('Niet toegewezen','Unassigned'))}</option>` + team.map(p=>`<option value="${E20(p.id)}" ${p.id===selected?'selected':''}>${E20(p.name)}${p.isNew?' · nieuw':''}</option>`).join('');
+    }
+    function statusButton20(l){ const st=l.status||'open'; return `<button class="sl18-status pill ${statusClass20[st]||'info'}" data-action="sl20-cycle-lane-status" data-lane="${E20(l.id)}" title="${E20(L20('Klik om status te wijzigen','Click to change status'))}">${E20(statusLabel20[st]||st)}</button>`; }
+    function generatedLaneTimes20(){
+      const sl=ensureShiftLeader20(); const times={};
+      sl.team.forEach(p=>{
+        let cursor=p.start||'';
+        sl.lanes.filter(l=>l.personId===p.id).forEach(l=>{
+          const mins=adjustedLaneMinutes20(l);
+          if(cursor && mins>0){ times[l.id]={start:cursor,end:addMinutes20(cursor,mins),source:'auto'}; cursor=times[l.id].end; }
+          else if(cursor){ times[l.id]={start:cursor,end:cursor,source:'auto'}; }
+        });
+      });
+      sl.lanes.forEach(l=>{ if(!times[l.id] && (l.start||l.end)) times[l.id]={start:l.start||'',end:l.end||'',source:'manual'}; });
+      return times;
+    }
+    function planningIssues20(){
+      const sl=ensureShiftLeader20(); const issues=[];
+      const noPerson=sl.lanes.filter(l=>!l.personId && laneMinutes20(l)>0).map(l=>l.name);
+      const noFill=sl.lanes.filter(l=>l.personId && laneMinutes20(l)===0).map(l=>l.name);
+      const over=sl.team.filter(p=>assignedMinutes20(p.id)>memberAvailable20(p)).map(p=>p.name);
+      const empty=sl.lanes.filter(l=>!l.personId && laneMinutes20(l)===0 && l.status!=='done').map(l=>l.name);
+      const nonFit=sl.lanes.filter(l=>l.personId && productivityFactor20(teamMember20(l.personId),l)<1).map(l=>`${l.name}: ${teamMember20(l.personId)?.name||''}`);
+      if(noPerson.length) issues.push(`${L20('Vuluren zonder persoon','Fill hours without person')}: ${noPerson.join(', ')}`);
+      if(noFill.length) issues.push(`${L20('Persoon zonder vuluren','Person without fill hours')}: ${noFill.join(', ')}`);
+      if(over.length) issues.push(`${L20('Overpland','Overplanned')}: ${over.join(', ')}`);
+      if(nonFit.length) issues.push(`${L20('Productiviteit lager dan 100%','Productivity below 100%')}: ${nonFit.slice(0,3).join(', ')}`);
+      if(empty.length) issues.push(`${L20('Nog leeg','Still empty')}: ${empty.slice(0,4).join(', ')}${empty.length>4?'…':''}`);
+      return issues;
+    }
+    function openPoints20(){ const sl=ensureShiftLeader20(); return {lanes:sl.lanes.filter(l=>l.status!=='done' && (laneMinutes20(l)>0 || l.personId || l.note)), tasks:sl.tasks.filter(t=>t.status!=='done')}; }
+    function latestTeamEnd20(){
+      const sl=ensureShiftLeader20();
+      const ends=sl.team.map(p=>p.end).filter(Boolean).sort();
+      return ends.length ? ends[ends.length-1] : '';
+    }
+    function minutesToEnd20(){
+      const end=latestTeamEnd20(); if(!end) return null;
+      const now=new Date(); const today=today20(); if(ensureShiftLeader20().date!==today) return null;
+      const [eh,em]=end.split(':').map(Number); const target=new Date(); target.setHours(eh,em,0,0);
+      return Math.round((target-now)/60000);
+    }
+    function liveAssistItems20(){
+      const sl=ensureShiftLeader20(); const items=[]; const minsEnd=minutesToEnd20();
+      const noPerson=sl.lanes.filter(l=>laneMinutes20(l)>0 && !l.personId && l.status!=='done');
+      const openTasks=sl.tasks.filter(t=>t.status!=='done');
+      const issues=planningIssues20();
+      if(noPerson.length) items.push(`${noPerson.length} ${L20('pad(en) met vuluren maar zonder persoon','aisle(s) with fill hours but no person')}`);
+      if(issues.some(i=>i.includes(L20('Overpland','Overplanned')) || i.includes('Overplanned'))) items.push(L20('Er is overplanning. Controleer beschikbare ruimte.','There is overplanning. Check available room.'));
+      if(openTasks.length) items.push(`${openTasks.length} ${L20('overige taken staan nog open','other tasks are still open')}`);
+      if(minsEnd!==null && minsEnd<=45 && minsEnd>=0) items.push(`${L20('Eindfase actief','End phase active')}: ${minsEnd} ${L20('minuten tot einde','minutes until end')}`);
+      const meal=sl.team.filter(p=>mealAllowance20(p.start,p.end)); if(meal.length) items.push(`${meal.length} ${L20('maaltijdvergoeding-signaal','meal allowance signal')}`);
+      return items.length?items:[L20('Geen directe waarschuwingen. De shiftplanning lijkt rustig.','No immediate warnings. The shift plan looks calm.')];
+    }
+
+    function renderDashboard20(){
+      const s=shiftSummary20(); const meal=s.sl.team.filter(p=>mealAllowance20(p.start,p.end)).length; const issues=planningIssues20().length;
+      return `<div class="grid grid-4 sl20-dashboard"><div class="card kpi"><div><div class="label">${E20(L20('Beschikbaar','Available'))}</div><div class="value">${minutesText20(s.available)}</div></div></div><div class="card kpi"><div><div class="label">${E20(L20('Gepland effectief','Planned effective'))}</div><div class="value">${minutesText20(s.planned)}</div></div></div><div class="card kpi"><div><div class="label">${E20(L20('Ruimte / tekort','Room / shortage'))}</div><div class="value ${s.diff<0?'danger':''}">${s.diff>=0?'+':'−'}${minutesText20(Math.abs(s.diff))}</div></div></div><div class="card kpi"><div><div class="label">${E20(L20('Checks','Checks'))}</div><div class="value">${issues}</div><div class="tiny muted">${meal} ${E20(L20('maaltijdvergoeding','meal allowance'))}</div></div></div></div>`;
+    }
+    function renderTeam20(){
+      const sl=ensureShiftLeader20();
+      return `<div class="card sl20-team"><div class="flex-line"><div><h3>${E20(L20('Teamprofielen & uren','Team profiles & hours'))}</h3><p class="muted small">${E20(L20('Leg vast op welke paden iemand past. Nieuwe collega’s tellen voorlopig op 70%; buiten vaste/passende paden op 85%.','Record which aisles someone fits. New colleagues count as 70%; outside fixed/fitted aisles as 85%.'))}</p></div><button class="btn small primary" data-action="sl20-open-person-form">＋</button></div>${sl.team.length?`<div class="list">${sl.team.map(p=>{ const assigned=assignedMinutes20(p.id), available=memberAvailable20(p), lanes=sl.lanes.filter(l=>l.personId===p.id).map(l=>l.name).join(', ') || L20('nog geen pad','no aisle yet'); const fit=[p.fixedLane?`${L20('vast','fixed')}: ${laneName20(p.fixedLane)}`:'', Array.isArray(p.preferredLanes)&&p.preferredLanes.length?`${L20('past op','fits')}: ${p.preferredLanes.map(laneName20).join(', ')}`:'', p.isNew?L20('nieuw','new'):''].filter(Boolean).join(' · '); return `<div class="list-item sl20-person"><span><strong>${E20(p.name)}</strong><br><span class="tiny muted">${E20(p.start||'--:--')}–${E20(p.end||'--:--')} · ${E20(L20('pauze','break'))}: ${autoBreak20(p.start,p.end)}m · ${E20(lanes)}</span>${fit?`<br><span class="tiny muted">${E20(fit)}</span>`:''}</span><span class="sl18-person-right"><span class="pill ${assigned>available?'bad':'good'}">${minutesText20(assigned)} / ${minutesText20(available)}</span>${mealAllowance20(p.start,p.end)?`<span class="pill warn">${E20(L20('maaltijdvergoeding','meal allowance'))}</span>`:''}<button class="btn small" data-action="sl20-open-person-form" data-id="${E20(p.id)}">✎</button><button class="btn small bad" data-action="sl20-remove-person" data-id="${E20(p.id)}">×</button></span></div>`; }).join('')}</div>`:`<p class="muted small">${E20(L20('Nog geen medewerkers toegevoegd.','No team members added yet.'))}</p>`}</div>`;
+    }
+    function renderShiftPlanning20(){
+      const sl=ensureShiftLeader20(), times=generatedLaneTimes20();
+      return `<div class="card sl20-shiftplanning"><div class="flex-line"><div><h3>${E20(L20('Shiftplanning','Shift planning'))}</h3><p class="muted small">${E20(L20('Compact overzicht per pad. Tijden worden automatisch opgebouwd op basis van persoon, starttijd, padvolgorde, vulduur en productiviteit.','Compact overview per aisle. Times are generated based on person, start time, aisle order, fill duration and productivity.'))}</p></div><span class="pill info">${sl.lanes.length} ${E20(L20('paden','aisles'))}</span></div><div class="sl18-lane-list sl20-lane-list">${sl.lanes.map(l=>{ const p=teamMember20(l.personId), t=times[l.id], base=laneMinutes20(l), adj=adjustedLaneMinutes20(l), fit=productivityReason20(p,l), fitClass=p&&productivityFactor20(p,l)<1?'warn':'good'; return `<div class="sl18-lane-card sl20-lane-card ${l.status==='done'?'done':''}"><div class="sl18-lane-top"><div class="sl18-lane-title"><strong>${E20(l.name)}</strong>${statusButton20(l)}</div><div class="sl18-lane-actions"><button class="btn small" data-action="sl20-open-fill" data-lane="${E20(l.id)}" title="${E20(L20('Vulling aanpassen','Edit fill'))}">⏱</button><button class="btn small ${l.note?'primary':''}" data-action="sl20-open-lane-note" data-lane="${E20(l.id)}" title="${E20(L20('Notitie','Note'))}">✎</button></div></div><div class="sl20-lane-main"><label class="sl18-person-select"><span>${E20(L20('Persoon','Person'))}</span><select class="select input sl20-lane-person-select" data-change="sl20-lane-person" data-lane="${E20(l.id)}" aria-label="Persoon kiezen">${personOptions20(l.personId)}</select></label><div class="sl18-lane-meta"><span>${E20(L20('Tijd','Time'))}: <strong>${E20(t&&t.start?`${t.start}–${t.end||'--:--'}`:L20('nog niet gepland','not planned'))}</strong></span><span>${E20(L20('Vulling','Fill'))}: <strong>${minutesText20(base)}</strong>${adj!==base?` <span class="tiny muted">(${minutesText20(adj)} ${E20(L20('verwacht','expected'))})</span>`:''}</span><span class="pill ${fitClass}">${E20(fit)}</span></div></div>${l.note?`<div class="sl18-lane-note-chip">${E20(l.note)}</div>`:''}</div>`; }).join('')}</div><div class="btn-row mt"><button class="btn" data-action="sl20-copy-planning">${E20(L20('Kopieer vulplanning','Copy fill plan'))}</button><button class="btn" data-action="sl20-auto-assign">${E20(L20('Slim verdelen','Smart assign'))}</button><button class="btn" data-action="sl20-open-planning-check">${E20(L20('Planningcheck','Planning check'))}</button></div></div>`;
+    }
+    function renderPresetAndTools20(){
+      const sl=ensureShiftLeader20();
+      return `<div class="card sl20-tools"><h3>${E20(L20('Shiftleider tools','Shift Lead tools'))}</h3><div class="grid grid-2 sl20-preset-grid"><label>${E20(L20('Shiftplanning preset','Shift planning preset'))}<select class="select input" id="sl20PresetSelect">${Object.entries(presets20).map(([k,p])=>`<option value="${E20(k)}" ${sl.ui.preset===k?'selected':''}>${E20(p.label)}</option>`).join('')}</select></label><div class="btn-row sl20-tool-buttons"><button class="btn primary" data-action="sl20-apply-preset">${E20(L20('Preset toepassen','Apply preset'))}</button><button class="btn" data-action="sl20-copy-open-points">${E20(L20('Kopieer open punten','Copy open points'))}</button><button class="btn" data-action="sl20-open-endcheck">${E20(L20('Eindcheck','End check'))}</button></div></div><p class="muted small mt">${E20(L20('Presets zetten vooral standaard vuluren en helpen sneller starten. Je kunt daarna alles handmatig aanpassen.','Presets mainly set default fill hours and help you start faster. You can still adjust everything manually afterwards.'))}</p></div>`;
+    }
+    function renderLiveAssist20(){
+      const items=liveAssistItems20(); const minsEnd=minutesToEnd20();
+      return `<div class="card sl20-live"><div class="flex-line"><div><h3>${E20(L20('Shiftleider Live Assist','Shift Lead Live Assist'))}</h3><p class="muted small">${E20(L20('Helpt je bijsturen zonder de planning te overspoelen.','Helps you steer without overwhelming the plan.'))}</p></div>${minsEnd!==null&&minsEnd<=45&&minsEnd>=0?`<span class="pill warn">${E20(L20('Eindfase','End phase'))}</span>`:''}</div><div class="list">${items.map(i=>`<div class="list-item compact"><span>${E20(i)}</span><span class="pill info">assist</span></div>`).join('')}</div></div>`;
+    }
+    function renderEndPhase20(){
+      const mins=minutesToEnd20(); if(mins===null || mins>45 || mins<0) return '';
+      const open=openPoints20();
+      return `<div class="card sl20-endphase"><h3>${E20(L20('Eindfase shift','End phase shift'))}</h3><p class="muted small">${E20(L20('Nog','Remaining'))} ${mins} ${E20(L20('minuten tot einde. Controleer open paden, overige taken en report.','minutes until end. Check open aisles, other tasks and report.'))}</p><div class="btn-row"><button class="btn" data-action="sl20-copy-open-points">${E20(L20('Kopieer open punten','Copy open points'))}</button><button class="btn primary" data-action="sl20-open-endcheck">${E20(L20('Eindcheck starten','Start end check'))}</button></div><p class="tiny muted mt">${open.lanes.length} ${E20(L20('open paden','open aisles'))} · ${open.tasks.length} ${E20(L20('open taken','open tasks'))}</p></div>`;
+    }
+    function renderTasks20(){
+      const sl=ensureShiftLeader20(); const showAll=!!sl.ui.showAllShiftTasks; const ordered=sl.tasks.slice().sort((a,b)=>(a.status==='done')-(b.status==='done') || (a.status==='deferred')-(b.status==='deferred'));
+      const shown=showAll?ordered:ordered.slice(0,10); const doneCount=sl.tasks.filter(t=>t.status==='done').length;
+      return `<div class="card sl20-tasks"><div class="flex-line"><div><h3>${E20(L20('Overige takenlijst','Other tasks'))}</h3><p class="muted small">${E20(L20('Taken blijven zichtbaar. Afgeronde taken kleuren groen en zakken naar onderen.','Tasks stay visible. Completed tasks turn green and move down.'))}</p></div><div class="btn-row"><button class="btn small" data-action="sl20-load-standard-tasks">${E20(L20('Standaard','Standard'))}</button><button class="btn small primary" data-action="sl20-open-task-form">＋</button></div></div>${shown.length?`<div class="list">${shown.map(t=>`<div class="list-item compact sl18-task ${t.status==='done'?'done':t.status==='deferred'?'deferred':''}"><span><strong>${t.status==='done'?'✓ ':''}${E20(t.title)}</strong><br><span class="tiny muted">${E20(t.priority||L20('normaal','normal'))}${t.note?` · ${E20(t.note)}`:''}${t.status==='deferred'?` · ${E20(L20('uitgesteld','deferred'))}`:''}</span></span><span class="btn-row nowrap">${t.status==='done'?`<button class="btn small" data-action="sl20-task-reopen" data-id="${E20(t.id)}">↩</button>`:`<button class="btn small good" data-action="sl20-task-done" data-id="${E20(t.id)}">✓</button><button class="btn small warn" data-action="sl20-task-defer" data-id="${E20(t.id)}">↷</button>`}<button class="btn small" data-action="sl20-open-task-form" data-id="${E20(t.id)}">✎</button><button class="btn small bad" data-action="sl20-task-delete" data-id="${E20(t.id)}">×</button></span></div>`).join('')}</div>`:`<p class="muted small">${E20(L20('Nog geen overige taken.','No other tasks yet.'))}</p>`}<div class="btn-row mt">${ordered.length>10?`<button class="btn" data-action="sl20-toggle-tasks">${showAll?E20(L20('Minder tonen','Show less')):E20(L20('Meer weergeven','Show more'))}</button>`:''}${doneCount?`<span class="pill good">${doneCount} ${E20(L20('voldaan','done'))}</span>`:''}</div></div>`;
+    }
+    function renderCapacity20(){
+      const s=shiftSummary20(); const load=s.available?Math.round(s.planned/s.available*100):0; let barHtml=''; try { if(typeof bar==='function') barHtml=bar(L20('Effectieve planning','Effective planning'), load, load>100?'bad':load>85?'warn':'good'); } catch(_){ }
+      const meal=s.sl.team.filter(p=>mealAllowance20(p.start,p.end)).length;
+      return `<div class="card sl20-capacity"><h3>${E20(L20('Capaciteit shift','Shift capacity'))}</h3><div class="list"><div class="list-item compact"><span>${E20(L20('Beschikbaar team','Team available'))}</span><strong>${minutesText20(s.available)}</strong></div><div class="list-item compact"><span>${E20(L20('Gepland effectief','Planned effective'))}</span><strong>${minutesText20(s.planned)}</strong></div><div class="list-item compact"><span>${E20(L20('Ruimte / tekort','Room / shortage'))}</span><strong>${s.diff>=0?'+':'−'}${minutesText20(Math.abs(s.diff))}</strong></div><div class="list-item compact"><span>${E20(L20('Open taken','Open tasks'))}</span><strong>${s.openTasks}</strong></div><div class="list-item compact"><span>${E20(L20('Voldaan','Done'))}</span><strong>${s.doneTasks}</strong></div><div class="list-item compact"><span>${E20(L20('Maaltijdvergoeding signaal','Meal allowance signal'))}</span><strong>${meal}</strong></div><div class="list-item compact"><span>${E20(L20('Bijzonderheden','Notes'))}</span><strong>${s.incidents}</strong></div></div>${barHtml}<p class="muted small">${E20(L20('Effectieve planning houdt rekening met nieuw/niet-passend pad, zodat planning realistischer wordt.','Effective planning accounts for new/not-fitted aisles, making the plan more realistic.'))}</p></div>`;
+    }
+    function renderPlanningCheck20(){
+      const issues=planningIssues20();
+      return `<div class="card sl20-planning-check"><h3>${E20(L20('Planningcheck','Planning check'))}</h3>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E20(i)}</span><span class="pill warn">check</span></div>`).join('')}</div>`:`<p class="muted small">${E20(L20('Geen grote waarschuwingen. De planning lijkt haalbaar.','No major warnings. The plan looks feasible.'))}</p>`}<details class="detail-drawer mt"><summary>${E20(L20('Wijzigingslog planning','Planning change log'))}</summary><div class="drawer-content">${renderPlanLog20()}</div></details></div>`;
+    }
+    function renderIncidents20(){
+      const sl=ensureShiftLeader20(); const showAll=!!sl.ui.showAllIncidents; const shown=showAll?sl.incidents:sl.incidents.slice(0,5);
+      return `<div class="card sl20-incidents"><div class="flex-line"><div><h3>${E20(L20('Onderbrekingen & bijzonderheden','Interruptions & notes'))}</h3><p class="muted small">${E20(L20('Leg ook impact-minuten vast. Dan verklaart het report waarom iets niet afkwam.','Also record impact minutes. Then the report explains why something was not finished.'))}</p></div></div><div class="btn-row">${incidentTypes20.map(t=>`<button class="btn small" data-action="sl20-open-incident" data-type="${E20(t)}">${E20(t)}</button>`).join('')}</div>${shown.length?`<div class="list mt">${shown.map(i=>`<div class="list-item compact"><span><strong>${E20(i.type)}</strong><br><span class="tiny muted">${E20((i.at||'').slice(11,16))}${i.minutes?` · ${i.minutes}m ${E20(L20('impact','impact'))}`:''}${i.note?` · ${E20(i.note)}`:''}</span></span><button class="btn small bad" data-action="sl20-incident-delete" data-id="${E20(i.id)}">×</button></div>`).join('')}</div>`:`<p class="muted small mt">${E20(L20('Nog geen onderbrekingen gelogd.','No interruptions logged yet.'))}</p>`}${sl.incidents.length>5?`<button class="btn mt" data-action="sl20-toggle-incidents">${showAll?E20(L20('Minder tonen','Show less')):E20(L20('Meer weergeven','Show more'))}</button>`:''}</div>`;
+    }
+    function renderReport20(){
+      return `<div class="card sl20-report"><h3>${E20(L20('Shiftklaar report','End-of-shift report'))}</h3><p class="muted small">${E20(L20('Met planning, gedaan/niet af, bijzonderheden, impact en overdracht voor morgen.','With planning, done/not done, notes, impact and handover for tomorrow.'))}</p><div class="btn-row"><button class="btn good" data-action="sl20-copy-report">${E20(L20('Kopieer volledig report','Copy full report'))}</button><button class="btn" data-action="sl20-copy-open-points">${E20(L20('Kopieer open punten','Copy open points'))}</button><button class="btn" data-action="sl20-save-report-communication">${E20(L20('Opslaan bij Communicatie','Save to Communication'))}</button></div><details class="detail-drawer mt"><summary>${E20(L20('Preview bekijken','View preview'))}</summary><pre class="sl15-report-preview">${E20(reportText20())}</pre></details></div>`;
+    }
+    function renderPlanLog20(){ const sl=ensureShiftLeader20(); return sl.planLog.length?`<div class="list">${sl.planLog.slice(0,12).map(x=>`<div class="list-item compact"><span>${E20(x.text)}</span><span class="tiny muted">${E20((x.at||'').slice(11,16))}</span></div>`).join('')}</div>`:`<p class="muted small">${E20(L20('Nog geen wijzigingen.','No changes yet.'))}</p>`; }
+    function renderHelp20(){
+      return `<details class="card detail-drawer sl20-help"><summary>${E20(L20('Hoe werkt Shiftleider Pro?','How does Shift Lead Pro work?'))}</summary><div class="drawer-content"><p>${E20(L20('Je plant mensen, paden en vuluren. RICH CMD berekent effectieve planning met productiviteit, pauze en maaltijdvergoeding-signalen.','You plan people, aisles and fill hours. RICH CMD calculates effective planning with productivity, breaks and meal allowance signals.'))}</p><ul><li>${E20(L20('Nieuwe collega: 70% productiviteit. Dit is bewust veilig gerekend.','New colleague: 70% productivity. This is deliberately conservative.'))}</li><li>${E20(L20('Niet vast/passend pad: 85% productiviteit. Dit houdt rekening met zoeken, wennen en bijsturen.','Not a fixed/fitted aisle: 85% productivity. This accounts for searching, adapting and steering.'))}</li><li>${E20(L20('Vast of passend pad: 100%. Je kunt dit later verfijnen met echte resultaten.','Fixed or fitted aisle: 100%. You can refine this later with real results.'))}</li></ul></div></details>`;
+    }
+    function renderShiftleader20(){
+      const sl=ensureShiftLeader20();
+      return `<div class="page shiftleader-page sl20-page"><div class="hero sl20-hero"><div class="flex-line"><div><span class="chip">v6.7.20</span><h2>${E20(L20('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E20(L20('Professionele versplanning met teamprofielen, productiviteit, Live Assist, presets en sterkere overdracht.','Professional fresh planning with team profiles, productivity, Live Assist, presets and stronger handover.'))}</p></div><div class="sl15-datebox"><strong>${E20(sl.date)}</strong><span>${E20(L20('Week','Week'))} ${weekNumber20(sl.date)}</span></div></div><div class="btn-row mt sl20-actionbar"><button class="btn primary" data-action="sl20-open-person-form">${E20(L20('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl20-load-standard-tasks">${E20(L20('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl20-open-task-form">${E20(L20('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl20-open-incident" data-type="Overig">${E20(L20('Bijzonderheid','Note'))}</button><button class="btn good" data-action="sl20-copy-report">${E20(L20('Kopieer report','Copy report'))}</button></div></div>${renderDashboard20()}${renderLiveAssist20()}${renderEndPhase20()}<div class="grid grid-2 sl20-layout"><div class="grid">${renderTeam20()}${renderShiftPlanning20()}${renderPresetAndTools20()}${renderTasks20()}</div><div class="grid side">${renderCapacity20()}${renderPlanningCheck20()}${renderIncidents20()}${renderReport20()}</div></div>${renderHelp20()}</div>`;
+    }
+
+    function laneChecks20(selected=[]){ return `<div class="sl20-lane-checks">${laneDefs20.map(l=>`<label class="chip-check"><input type="checkbox" value="${E20(l.id)}" ${selected.includes(l.id)?'checked':''}> ${E20(l.name)}</label>`).join('')}</div>`; }
+    function timeSelect20(id,value,standard){
+      const isCustom=value && !standard.includes(value);
+      return `<select class="select input" id="${id}Choice"><option value="">${E20(L20('Kies tijd','Choose time'))}</option>${standard.map(t=>`<option value="${t}" ${value===t?'selected':''}>${t}</option>`).join('')}<option value="custom" ${isCustom?'selected':''}>${E20(L20('Anders','Other'))}</option></select><input class="input mt" id="${id}Custom" type="time" value="${isCustom?E20(value):''}" placeholder="${E20(L20('Eigen tijd','Custom time'))}">`;
+    }
+    function readTime20(id){ const choice=document.getElementById(id+'Choice')?.value||''; if(choice==='custom') return document.getElementById(id+'Custom')?.value||''; return choice; }
+    function openPersonForm20(id=''){
+      const sl=ensureShiftLeader20(); const p=id?sl.team.find(x=>x.id===id):null; const preferred=Array.isArray(p?.preferredLanes)?p.preferredLanes:[];
+      const html=`<div class="grid sl20-person-form"><label>${E20(L20('Naam','Name'))}<input class="input" id="sl20PersonName" value="${E20(p?.name||'')}" placeholder="${E20(L20('Naam medewerker','Team member name'))}"></label><div class="grid grid-2"><label>${E20(L20('Starttijd','Start time'))}${timeSelect20('sl20Start',p?.start||'', ['16:00','17:00'])}</label><label>${E20(L20('Eindtijd','End time'))}${timeSelect20('sl20End',p?.end||'', ['19:00','20:00'])}</label></div><label>${E20(L20('Vast pad','Fixed aisle'))}<select class="select input" id="sl20FixedLane"><option value="">${E20(L20('Geen vast pad','No fixed aisle'))}</option>${laneDefs20.map(l=>`<option value="${E20(l.id)}" ${p?.fixedLane===l.id?'selected':''}>${E20(l.name)}</option>`).join('')}</select></label><div><strong>${E20(L20('Past op paden','Fits aisles'))}</strong><p class="muted small">${E20(L20('Selecteer de paden waar deze collega goed op past. Als dit leeg is, rekent de app neutraal.','Select the aisles this colleague fits well. If empty, the app calculates neutrally.'))}</p>${laneChecks20(preferred)}</div><label class="check-line"><input type="checkbox" id="sl20IsNew" ${p?.isNew?'checked':''}> ${E20(L20('Nieuwe collega / inwerkfase — 70% productiviteit','New colleague / training phase — 70% productivity'))}</label><label>${E20(L20('Notitie','Note'))}<textarea class="textarea" id="sl20PersonNote" placeholder="${E20(L20('Bijv. sterk op AGF, nog niet alleen op sluitronde.','E.g. strong at AGF, not yet alone on closing round.'))}">${E20(p?.note||'')}</textarea></label><div class="btn-row"><button class="btn primary" data-action="sl20-save-person" data-id="${E20(p?.id||'')}">${E20(L20('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E20(L20('Annuleren','Cancel'))}</button></div></div>`;
+      if(typeof modal==='function') modal(p?L20('Medewerker bewerken','Edit team member'):L20('Medewerker toevoegen','Add team member'), html, 'wide');
+    }
+    function savePerson20(id=''){
+      const sl=ensureShiftLeader20(); const name=(document.getElementById('sl20PersonName')?.value||'').trim();
+      if(!name){ toast20(L20('Vul een naam in.','Enter a name.'),'warn'); return; }
+      const preferred=Array.from(document.querySelectorAll('.sl20-lane-checks input:checked')).map(x=>x.value);
+      let p=id?sl.team.find(x=>x.id===id):null;
+      if(!p){ p={id:uid20('slp')}; sl.team.push(p); }
+      p.name=name; p.start=readTime20('sl20Start'); p.end=readTime20('sl20End'); p.fixedLane=document.getElementById('sl20FixedLane')?.value||''; p.preferredLanes=preferred; p.isNew=!!document.getElementById('sl20IsNew')?.checked; p.note=(document.getElementById('sl20PersonNote')?.value||'').trim(); p.breakMinutes=autoBreak20(p.start,p.end); p.mealAllowance=mealAllowance20(p.start,p.end);
+      logPlan20(`${p.name}: ${id?L20('profiel bijgewerkt','profile updated'):L20('toegevoegd','added')}`); if(typeof closeModal==='function') closeModal(); save20(); render20();
+    }
+    function openFillModal20(id){ const l=laneById20(id); if(!l) return; const mins=[0,5,10,15,20,25,30,35,40,45,50,55]; if(typeof modal==='function') modal(`${L20('Vulling aanpassen','Edit fill')} — ${l.name}`, `<div class="grid"><p class="muted small">${E20(L20('Kies hoeveel vulling dit pad heeft. De effectieve tijd kan hoger worden bij nieuwe collega’s of niet-passende paden.','Choose how much fill this aisle has. Effective time may increase for new colleagues or non-fitted aisles.'))}</p><div class="grid grid-2"><label>${E20(L20('Uren','Hours'))}<input class="input" id="sl20FillHours" type="number" min="0" step="1" value="${E20(l.fillHours||0)}"></label><label>${E20(L20('Minuten','Minutes'))}<select class="select input" id="sl20FillMinutes">${mins.map(m=>`<option value="${m}" ${(+l.fillMinutes||0)===m?'selected':''}>${m}m</option>`).join('')}</select></label></div><div class="btn-row"><button class="btn primary" data-action="sl20-save-fill" data-lane="${E20(l.id)}">${E20(L20('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E20(L20('Annuleren','Cancel'))}</button></div></div>`, 'wide'); }
+    function openLaneNoteModal20(id){ const l=laneById20(id); if(!l) return; if(typeof modal==='function') modal(`${L20('Notitie','Note')} — ${l.name}`, `<div class="grid"><textarea class="textarea" id="sl20LaneNote" placeholder="${E20(L20('Bijv. eerst restanten, wissel medewerker later, of aandachtspunt.','E.g. first leftovers, switch colleague later, or attention point.'))}">${E20(l.note||'')}</textarea><div class="btn-row"><button class="btn primary" data-action="sl20-save-lane-note" data-lane="${E20(l.id)}">${E20(L20('Opslaan','Save'))}</button><button class="btn warn" data-action="sl20-clear-lane-note" data-lane="${E20(l.id)}">${E20(L20('Notitie wissen','Clear note'))}</button><button class="btn" data-action="close-modal">${E20(L20('Annuleren','Cancel'))}</button></div></div>`, 'wide'); }
+    function openTaskForm20(id=''){ const sl=ensureShiftLeader20(); const t=id?sl.tasks.find(x=>x.id===id):null; if(typeof modal==='function') modal(t?L20('Taak bewerken','Edit task'):L20('Nieuwe taak','New task'), `<div class="grid"><label>${E20(L20('Taak','Task'))}<input class="input" id="sl20TaskTitle" value="${E20(t?.title||'')}" placeholder="${E20(L20('Bijv. extra controle panklaar','E.g. extra ready-to-cook check'))}"></label><label>${E20(L20('Prioriteit','Priority'))}<select class="select input" id="sl20TaskPriority"><option ${t?.priority==='Normaal'?'selected':''}>Normaal</option><option ${t?.priority==='Hoog'?'selected':''}>Hoog</option><option ${t?.priority==='Laag'?'selected':''}>Laag</option></select></label><label>${E20(L20('Notitie','Note'))}<textarea class="textarea" id="sl20TaskNote">${E20(t?.note||'')}</textarea></label><div class="btn-row"><button class="btn primary" data-action="sl20-save-task" data-id="${E20(t?.id||'')}">${E20(L20('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E20(L20('Annuleren','Cancel'))}</button></div></div>`, 'wide'); }
+    function openIncidentModal20(type='Overig'){ if(typeof modal==='function') modal(`${L20('Bijzonderheid','Note')} — ${type}`, `<div class="grid"><label>${E20(L20('Impact in minuten','Impact in minutes'))}<input class="input" id="sl20IncidentMinutes" type="number" min="0" step="5" value="0"></label><label>${E20(L20('Notitie','Note'))}<textarea class="textarea" id="sl20IncidentNote" placeholder="${E20(L20('Wat gebeurde er en wat was het effect op de planning?','What happened and what was the impact on planning?'))}"></textarea></label><div class="btn-row"><button class="btn primary" data-action="sl20-save-incident" data-type="${E20(type)}">${E20(L20('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E20(L20('Annuleren','Cancel'))}</button></div></div>`, 'wide'); }
+
+    function loadStandardTasks20(){ const sl=ensureShiftLeader20(); const titles=[...baseTasks20]; if(isTueThu20(sl.date)) titles.splice(9,0,'Nee-verkoop houdbaar'); let added=0; titles.forEach(title=>{ if(!sl.tasks.some(t=>t.title===title && t.date===sl.date)){ sl.tasks.push({id:uid20('sl_task'),title,status:'open',priority:title.includes('Vracht')?'Hoog':'Normaal',note:'',date:sl.date,createdAt:now20()}); added++; } }); logPlan20(`${added} ${L20('standaardtaken ingeladen','standard tasks loaded')}`); save20(); render20(); toast20(added?`${added} ${L20('taken ingeladen','tasks loaded')}`:L20('Standaardtaken stonden al klaar','Standard tasks were already ready'),'good'); }
+    function applyPreset20(key){ const sl=ensureShiftLeader20(); const preset=presets20[key]||presets20['avond-16-20']; sl.ui.preset=key; sl.lanes.forEach(l=>{ const mins=preset.fills[l.id]; if(mins!==undefined){ l.fillHours=Math.floor(mins/60); l.fillMinutes=mins%60; l.hours=mins/60; } }); if(preset.loadTasks) loadStandardTasks20(); logPlan20(`${L20('Preset toegepast','Preset applied')}: ${preset.label}`); save20(); render20(); toast20(L20('Preset toegepast.','Preset applied.'),'good'); }
+    function autoAssign20(){ const sl=ensureShiftLeader20(); let changed=0; sl.lanes.filter(l=>!l.personId && laneMinutes20(l)>0).forEach(l=>{ let best=null, bestScore=-Infinity; sl.team.forEach(p=>{ const score=memberAvailable20(p)-assignedMinutes20(p.id)-adjustedForPerson20(l,p); if(score>bestScore){ bestScore=score; best=p; } }); if(best){ l.personId=best.id; changed++; logPlan20(`${l.name}: ${L20('slim toegewezen aan','smart assigned to')} ${best.name}`); } }); save20(); render20(); toast20(changed?`${changed} ${L20('paden slim verdeeld.','aisles smart assigned.')}`:L20('Geen vrije paden met vuluren gevonden.','No open aisles with fill hours found.'), changed?'good':'info'); }
+    function adjustedForPerson20(l,p){ const base=laneMinutes20(l); const f=productivityFactor20(p,l); return f>0?Math.ceil(base/f):base; }
+    function planningText20(){ const sl=ensureShiftLeader20(), times=generatedLaneTimes20(); return `Vulplanning — Vers Avondshift\n${sl.date} · week ${weekNumber20(sl.date)}\n\n` + sl.lanes.map(l=>{ const p=teamMember20(l.personId); const t=times[l.id]; return `${l.name}: ${p?.name||'niet toegewezen'} · ${t?.start?`${t.start}-${t.end}`:'geen tijd'} · ${minutesText20(laneMinutes20(l))}${adjustedLaneMinutes20(l)!==laneMinutes20(l)?` / effectief ${minutesText20(adjustedLaneMinutes20(l))}`:''} · ${statusLabel20[l.status]||l.status}${l.note?` · ${l.note}`:''}`; }).join('\n'); }
+    function openPointsText20(){ const o=openPoints20(); return `Open punten — Vers Avondshift\n\nPaden:\n${o.lanes.length?o.lanes.map(l=>`- ${l.name}: ${statusLabel20[l.status]||l.status} · ${teamMember20(l.personId)?.name||'niet toegewezen'} · ${minutesText20(laneMinutes20(l))}`).join('\n'):'- Geen open paden'}\n\nTaken:\n${o.tasks.length?o.tasks.map(t=>`- ${t.title}${t.status==='deferred'?' (uitgesteld)':''}`).join('\n'):'- Geen open taken'}`; }
+    function reportText20(){ const sl=ensureShiftLeader20(); const s=shiftSummary20(); const times=generatedLaneTimes20(); const doneTasks=sl.tasks.filter(t=>t.status==='done'); const openTasks=sl.tasks.filter(t=>t.status!=='done'); const issues=planningIssues20(); const impact=sl.incidents.reduce((a,i)=>a+(+i.minutes||0),0); return `Shiftklaar Report — Vers Avondshift\n${sl.date} · week ${weekNumber20(sl.date)}\n\nTeam:\n${sl.team.length?sl.team.map(p=>`- ${p.name}: ${p.start||'--:--'}-${p.end||'--:--'} · pauze ${autoBreak20(p.start,p.end)}m${mealAllowance20(p.start,p.end)?' · maaltijdvergoeding':''}${p.isNew?' · nieuw':''}${p.fixedLane?` · vast pad ${laneName20(p.fixedLane)}`:''}`).join('\n'):'- Geen team ingevoerd'}\n\nCapaciteit:\n- Beschikbaar: ${minutesText20(s.available)}\n- Gepland effectief: ${minutesText20(s.planned)}\n- Ruimte/tekort: ${s.diff>=0?'+':'-'}${minutesText20(Math.abs(s.diff))}\n\nVulplanning:\n${sl.lanes.map(l=>{ const p=teamMember20(l.personId), t=times[l.id]; return `- ${l.name}: ${p?.name||'niet toegewezen'} · ${t?.start?`${t.start}-${t.end}`:'geen tijd'} · ${statusLabel20[l.status]||l.status} · ${minutesText20(laneMinutes20(l))}${adjustedLaneMinutes20(l)!==laneMinutes20(l)?` / effectief ${minutesText20(adjustedLaneMinutes20(l))}`:''}${l.note?` · ${l.note}`:''}`; }).join('\n')}\n\nGedaan:\n${doneTasks.length?doneTasks.map(t=>`- ${t.title}`).join('\n'):'- Geen overige taken afgevinkt'}\n\nNiet af / open:\n${openTasks.length?openTasks.map(t=>`- ${t.title}${t.status==='deferred'?' (uitgesteld)':''}`).join('\n'):'- Geen open overige taken'}\n\nBijzonderheden (${impact}m impact):\n${sl.incidents.length?sl.incidents.map(i=>`- ${String(i.at||'').slice(11,16)} ${i.type}${i.minutes?` · ${i.minutes}m`:''}${i.note?` · ${i.note}`:''}`).join('\n'):'- Geen bijzonderheden gelogd'}\n\nPlanningchecks:\n${issues.length?issues.map(i=>`- ${i}`).join('\n'):'- Geen grote waarschuwingen'}\n\nOverdracht morgen:\n${openTasks.length || openPoints20().lanes.length ? '- Controleer open paden en taken uit bovenstaande lijst.' : '- Shift lijkt afgerond.'}`; }
+    function openEndCheck20(){ const o=openPoints20(), issues=planningIssues20(); if(typeof modal==='function') modal(L20('Eindcheck Vers Avondshift','Fresh evening shift end check'), `<div class="grid"><p class="muted small">${E20(L20('Controleer open paden, open taken, productiviteit en planningchecks voordat je het report kopieert.','Check open aisles, open tasks, productivity and planning checks before copying the report.'))}</p><div class="grid grid-3"><div class="card soft"><strong>${o.lanes.length}</strong><br><span class="muted small">${E20(L20('open paden','open aisles'))}</span></div><div class="card soft"><strong>${o.tasks.length}</strong><br><span class="muted small">${E20(L20('open taken','open tasks'))}</span></div><div class="card soft"><strong>${issues.length}</strong><br><span class="muted small">${E20(L20('planningchecks','planning checks'))}</span></div></div><pre class="sl15-report-preview">${E20(openPointsText20())}</pre><div class="btn-row"><button class="btn good" data-action="sl20-copy-open-points">${E20(L20('Kopieer open punten','Copy open points'))}</button><button class="btn primary" data-action="sl20-copy-report">${E20(L20('Kopieer report','Copy report'))}</button><button class="btn" data-action="close-modal">${E20(L20('Sluiten','Close'))}</button></div></div>`, 'wide'); }
+
+    const prevRenderPage6720 = typeof renderPage === 'function' ? renderPage : null;
+    if(prevRenderPage6720) renderPage = window.renderPage = function(){ return state.route === 'shiftleader' ? renderShiftleader20() : prevRenderPage6720(); };
+
+    const prevToday6720 = typeof renderToday === 'function' ? renderToday : null;
+    if(prevToday6720) renderToday = window.renderToday = function(){
+      const base=prevToday6720(); const sl=ensureShiftLeader20(); const active=sl.team.length||sl.tasks.length||sl.lanes.some(l=>l.personId||laneMinutes20(l)||l.status!=='open'||l.note); const s=shiftSummary20(); const issues=planningIssues20().length; const card=`<div class="card sl20-today-card"><div class="flex-line"><div><h3>${E20(L20('Shiftleider Vers Avondshift','Shift Lead Fresh evening shift'))}</h3><p class="muted small">${active?E20(`${sl.lanes.length} paden · ${sl.team.length} team · ${s.openTasks} open taken · ${minutesText20(s.planned)} effectief gepland${issues?` · ${issues} checks`:''}`):E20(L20('Plan team, paden, overige taken en report.','Plan team, aisles, other tasks and report.'))}</p></div><span class="pill ${s.diff<0?'bad':'good'}">${active?(s.diff>=0?'+':'−')+minutesText20(Math.abs(s.diff)):L20('nieuw','new')}</span></div><button class="btn primary mt" data-route="shiftleader">${E20(L20('Open Shiftleider','Open Shift Lead'))}</button></div>`; return `${base}<div class="mt sl20-today-wrap">${card}</div>`;
+    };
+
+    const prevHandle6720 = typeof handleAction === 'function' ? handleAction : null;
+    handleAction = window.handleAction = function(a,el,e){
+      const sl=ensureShiftLeader20();
+      if(a==='sl20-open-person-form'){ openPersonForm20(el?.dataset?.id||''); return; }
+      if(a==='sl20-save-person'){ savePerson20(el?.dataset?.id||''); return; }
+      if(a==='sl20-remove-person'){ const id=el.dataset.id; sl.team=sl.team.filter(p=>p.id!==id); sl.lanes.forEach(l=>{ if(l.personId===id) l.personId=''; }); logPlan20(L20('Medewerker verwijderd','Team member removed')); save20(); render20(); return; }
+      if(a==='sl20-cycle-lane-status'){ const l=laneById20(el.dataset.lane); if(l){ const idx=statusCycle20.indexOf(l.status||'open'); l.status=statusCycle20[(idx+1)%statusCycle20.length]; logPlan20(`${l.name}: status → ${statusLabel20[l.status]||l.status}`); save20(); render20(); } return; }
+      if(a==='sl20-open-fill'){ openFillModal20(el.dataset.lane); return; }
+      if(a==='sl20-save-fill'){ const l=laneById20(el.dataset.lane); if(l){ l.fillHours=+(document.getElementById('sl20FillHours')?.value||0)||0; l.fillMinutes=+(document.getElementById('sl20FillMinutes')?.value||0)||0; l.hours=laneMinutes20(l)/60; logPlan20(`${l.name}: vulling → ${minutesText20(laneMinutes20(l))}`); if(typeof closeModal==='function') closeModal(); save20(); render20(); } return; }
+      if(a==='sl20-open-lane-note'){ openLaneNoteModal20(el.dataset.lane); return; }
+      if(a==='sl20-save-lane-note'){ const l=laneById20(el.dataset.lane); if(l){ l.note=(document.getElementById('sl20LaneNote')?.value||'').trim(); logPlan20(`${l.name}: notitie ${l.note?'bijgewerkt':'leeg'}`); if(typeof closeModal==='function') closeModal(); save20(); render20(); } return; }
+      if(a==='sl20-clear-lane-note'){ const l=laneById20(el.dataset.lane); if(l){ l.note=''; logPlan20(`${l.name}: notitie gewist`); if(typeof closeModal==='function') closeModal(); save20(); render20(); } return; }
+      if(a==='sl20-apply-preset'){ applyPreset20(document.getElementById('sl20PresetSelect')?.value || sl.ui.preset || 'avond-16-20'); return; }
+      if(a==='sl20-copy-planning'){ copy20(planningText20()); toast20(L20('Vulplanning gekopieerd.','Fill plan copied.'),'good'); return; }
+      if(a==='sl20-auto-assign'){ autoAssign20(); return; }
+      if(a==='sl20-open-planning-check'){ const issues=planningIssues20(); if(typeof modal==='function') modal(L20('Planningcheck','Planning check'), `<div class="grid"><p class="muted small">${E20(L20('Controleert bezetting, vuluren, productiviteit en overplanning.','Checks staffing, fill hours, productivity and overplanning.'))}</p>${issues.length?`<div class="list">${issues.map(i=>`<div class="list-item compact"><span>${E20(i)}</span><span class="pill warn">check</span></div>`).join('')}</div>`:`<p class="muted">${E20(L20('Geen grote waarschuwingen gevonden.','No major warnings found.'))}</p>`}<button class="btn primary" data-action="close-modal">${E20(L20('Sluiten','Close'))}</button></div>`, 'wide'); return; }
+      if(a==='sl20-copy-open-points'){ copy20(openPointsText20()); toast20(L20('Open punten gekopieerd.','Open points copied.'),'good'); return; }
+      if(a==='sl20-open-endcheck'){ openEndCheck20(); return; }
+      if(a==='sl20-open-task-form'){ openTaskForm20(el?.dataset?.id||''); return; }
+      if(a==='sl20-save-task'){ const id=el?.dataset?.id||''; let t=id?sl.tasks.find(x=>x.id===id):null; if(!t){ t={id:uid20('sl_task'),status:'open',date:sl.date,createdAt:now20()}; sl.tasks.push(t); } t.title=(document.getElementById('sl20TaskTitle')?.value||'').trim()||L20('Nieuwe taak','New task'); t.priority=document.getElementById('sl20TaskPriority')?.value||'Normaal'; t.note=(document.getElementById('sl20TaskNote')?.value||'').trim(); if(typeof closeModal==='function') closeModal(); save20(); render20(); return; }
+      if(a==='sl20-task-done'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){t.status='done'; t.doneAt=now20(); save20(); render20();} return; }
+      if(a==='sl20-task-reopen'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){t.status='open'; delete t.doneAt; save20(); render20();} return; }
+      if(a==='sl20-task-defer'){ const t=sl.tasks.find(x=>x.id===el.dataset.id); if(t){t.status='deferred'; save20(); render20();} return; }
+      if(a==='sl20-task-delete'){ sl.tasks=sl.tasks.filter(t=>t.id!==el.dataset.id); save20(); render20(); return; }
+      if(a==='sl20-toggle-tasks'){ sl.ui.showAllShiftTasks=!sl.ui.showAllShiftTasks; save20(); render20(); return; }
+      if(a==='sl20-load-standard-tasks'){ loadStandardTasks20(); return; }
+      if(a==='sl20-open-incident'){ openIncidentModal20(el?.dataset?.type||'Overig'); return; }
+      if(a==='sl20-save-incident'){ sl.incidents.unshift({id:uid20('sli'), type:el.dataset.type||'Overig', minutes:+(document.getElementById('sl20IncidentMinutes')?.value||0)||0, note:(document.getElementById('sl20IncidentNote')?.value||'').trim(), at:now20()}); if(typeof closeModal==='function') closeModal(); save20(); render20(); return; }
+      if(a==='sl20-incident-delete'){ sl.incidents=sl.incidents.filter(i=>i.id!==el.dataset.id); save20(); render20(); return; }
+      if(a==='sl20-toggle-incidents'){ sl.ui.showAllIncidents=!sl.ui.showAllIncidents; save20(); render20(); return; }
+      if(a==='sl20-copy-report'){ copy20(reportText20()); toast20(L20('Shiftklaar report gekopieerd.','Shift report copied.'),'good'); return; }
+      if(a==='sl20-save-report-communication'){ state.communications=Array.isArray(state.communications)?state.communications:[]; state.communications.unshift({id:uid20('com'), title:'Shiftklaar Report — Vers Avondshift', message:reportText20(), text:reportText20(), priority:'Normaal', role:'Teamleider', status:'open', createdAt:now20(), date:today20(), followDate:today20(), type:'shiftleader'}); toast20(L20('Report opgeslagen bij Communicatie.','Report saved to Communication.'),'good'); save20(); render20(); return; }
+      if(prevHandle6720) return prevHandle6720(a,el,e);
+    };
+
+    if(!window.__richCmdSl20ChangeHandlers){
+      window.__richCmdSl20ChangeHandlers=true;
+      document.addEventListener('change', function(e){
+        const laneSelect=e.target && e.target.closest ? e.target.closest('[data-change="sl20-lane-person"]') : null;
+        if(laneSelect){ try{ const l=laneById20(laneSelect.dataset.lane); if(l){ l.personId=laneSelect.value||''; const p=teamMember20(l.personId); if(p){ l.start=p.start||''; l.end=p.end||''; } logPlan20(`${l.name}: persoon → ${teamMember20(l.personId)?.name || 'niet toegewezen'}`); save20(); render20(); } }catch(err){ console.error('v6.7.20 lane select failed', err); } }
+      });
+    }
+
+    const prevDiag6720 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
+    if(prevDiag6720) renderDiagnostics = window.renderDiagnostics = function(){
+      const sl=ensureShiftLeader20(); let base=prevDiag6720()||'';
+      const checks=[
+        {name:'Shiftleider Pro render', ok:typeof renderShiftleader20==='function', detail:'v6.7.20'},
+        {name:'Teamprofielen', ok:sl.team.every(p=>Array.isArray(p.preferredLanes)), detail:`${sl.team.length} teamleden`},
+        {name:'Productiviteit berekening', ok:typeof productivityFactor20==='function' && typeof adjustedLaneMinutes20==='function', detail:'70/85/100'},
+        {name:'Live Assist', ok:typeof liveAssistItems20==='function', detail:`${liveAssistItems20().length} signalen`},
+        {name:'Eindfase-modus', ok:typeof minutesToEnd20==='function', detail:'45 minuten'},
+        {name:'Engelse Shiftleider teksten', ok:!!L20('Shiftleider','Shift Lead'), detail:'basis aanwezig'},
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6720', detail:APP.cache}
+      ];
+      return base+`<div class="grid grid-2 mt diagnostics-v6720"><div class="card"><h3>v6.7.20 Shiftleider Pro checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E20(c.name)} <span class="tiny muted">${E20(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E20(L20('Productiviteit advies','Productivity advice'))}</h3><p class="muted small">${E20(L20('Nieuwe collega’s tellen op 70%. Niet vast/passend pad telt op 85%. Dat is een veilige startberekening; later kun je dit verfijnen met echte resultaten.','New colleagues count as 70%. Non-fixed/fitted aisles count as 85%. This is a safe starting calculation; later you can refine it with real results.'))}</p></div></div>`;
+    };
+
+    try { ensureShiftLeader20(); save20(); } catch(_){ }
+  } catch(err){ console.error('v6.7.20 patch failed', err); }
+})();

@@ -1,8 +1,8 @@
 {
   "app": "RICH CMD",
-  "latestVersion": "v6.7.19",
+  "latestVersion": "v6.7.20",
   "releaseName": "Shiftleider Pad & Planning Extras",
-  "cache": "rich-cmd-cache-v6719",
+  "cache": "rich-cmd-cache-v6720",
   "releasedAt": "2026-06-03",
   "minSupportedVersion": "v6.0.0",
   "forceBelowVersion": "",
@@ -22,8 +22,8 @@
     "New tool: copy open points for quick handover",
     "New tool: end check with open aisles, open tasks and planning checks"
   ],
-  "currentVersion": "v6.7.19",
-  "cacheName": "rich-cmd-cache-v6719",
+  "currentVersion": "v6.7.20",
+  "cacheName": "rich-cmd-cache-v6720",
   "releaseNotes": [
     "v6.7.19: Shiftleider hotfix: persoon-dropdown in Shiftplanning sluit niet meer direct; compacte planning, Kaas/Vleeswaren en extra tools behouden.",
     "v6.7.17: Shiftleider Compact Planning met compacte padregels, vulling via ⏱-icoon, notities via ✎, automatische padtijden, statuspill, Kopieer vulplanning, Planningcheck en Wijzigingslog.",
@@ -41,6 +41,11 @@
     "v6.7.1: Shift Report & Tomorrow Prep met slimme shift-afsluiting, dagrapport, overdracht en morgenvoorbereiding.",
     "v6.7.0: V7 Foundation Cleanup met centrale QA-laag, regressiechecks en oude-patch-opruiming."
   ],
-  "build": "Shiftleider Pad & Planning Extras",
-  "releaseTitle": "Shiftleider Pad & Planning Extras"
+  "build": "Shiftleider Pro & UX Stability Polish",
+  "releaseTitle": "Shiftleider Pad & Planning Extras",
+  "version": "v6.7.20",
+  "notes": "Shiftleider Pro met teamprofielen, productiviteit 70/85/100, presets, Live Assist, eindfase-modus en betere Engelse teksten.",
+  "changelog": [
+    "v6.7.20: Shiftleider Pro met teamprofielen, vaste/passende paden, productiviteit 70/85/100, presets, Live Assist, eindfase-modus en incidentimpact."
+  ]
 }

@@ -1,4 +1,10 @@
-# RICH CMD v6.7.19 — Shiftleider Dropdown Stability Hotfix
+# RICH CMD v6.7.20 — Shiftleider Pro & UX Stability Polish
+
+Deze update maakt de Shiftleider Vers Avondshift-module volwassener met teamprofielen, vaste/passende paden, productiviteitsberekening, presets, Live Assist, eindfase-modus, incidentimpact en betere Engelse teksten.
+
+Belangrijk: bestaande Shiftleider-functies blijven behouden en zijn compacter/overzichtelijker geplaatst.
+
+# RICH CMD v6.7.20 — Shiftleider Dropdown Stability Hotfix
 
 Deze build voegt een aparte Shiftleider-module toe voor de Vers Avondshift.
 
@@ -47,12 +53,12 @@ Deze build voegt een aparte Shiftleider-module toe voor de Vers Avondshift.
 - Nieuwe feature: **Auto-verdeel vrije paden** op basis van resterende ruimte per medewerker.
 - Nieuwe feature: **Kopieer open punten** voor snelle overdracht.
 - Nieuwe feature: **Eindcheck** met open paden, open taken en planningchecks vóór het shiftklaar report.
-- Versie/cache/assets bijgewerkt naar v6.7.19 / rich-cmd-cache-v6719 / ?v=6719.
+- Versie/cache/assets bijgewerkt naar v6.7.20 / rich-cmd-cache-v6720 / ?v=6719.
 
 
-## v6.7.19 — Shiftleider Dropdown Stability Hotfix
+## v6.7.20 — Shiftleider Dropdown Stability Hotfix
 
 - Persoon-dropdown in Shiftplanning sluit niet meer direct bij openen.
 - Oorzaak opgelost: de select gebruikt nu change-handling in plaats van click-rendering.
 - Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck blijven behouden.
-- Versie/cache/assets bijgewerkt naar v6.7.19 / rich-cmd-cache-v6719 / ?v=6719.
+- Versie/cache/assets bijgewerkt naar v6.7.20 / rich-cmd-cache-v6720 / ?v=6719.
