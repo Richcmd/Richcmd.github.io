@@ -1,8 +1,8 @@
 {
   "app": "RICH CMD",
-  "latestVersion": "v6.7.18",
+  "latestVersion": "v6.7.19",
   "releaseName": "Shiftleider Pad & Planning Extras",
-  "cache": "rich-cmd-cache-v6718",
+  "cache": "rich-cmd-cache-v6719",
   "releasedAt": "2026-06-03",
   "minSupportedVersion": "v6.0.0",
   "forceBelowVersion": "",
@@ -22,10 +22,10 @@
     "New tool: copy open points for quick handover",
     "New tool: end check with open aisles, open tasks and planning checks"
   ],
-  "currentVersion": "v6.7.18",
-  "cacheName": "rich-cmd-cache-v6718",
+  "currentVersion": "v6.7.19",
+  "cacheName": "rich-cmd-cache-v6719",
   "releaseNotes": [
-    "v6.7.18: Shiftleider planning uitgebreid met pad Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck. Compacte mobiele planning behouden.",
+    "v6.7.19: Shiftleider hotfix: persoon-dropdown in Shiftplanning sluit niet meer direct; compacte planning, Kaas/Vleeswaren en extra tools behouden.",
     "v6.7.17: Shiftleider Compact Planning met compacte padregels, vulling via ⏱-icoon, notities via ✎, automatische padtijden, statuspill, Kopieer vulplanning, Planningcheck en Wijzigingslog.",
     "v6.7.16: Shiftleider Planning Polish met één Shiftplanning-venster, standaard start/eindtijden, automatische pauze, maaltijdvergoeding-signaal en afgeronde taken die groen zichtbaar blijven.",
     "v6.7.15: Shiftleider Vers Avondshift met teamplanning, vulplanning per pad, overige taken, incidentenlog en shiftklaar report.",

@@ -13108,15 +13108,15 @@ try {
 
 
 /* =========================================================
-   RICH CMD v6.7.18 — Shiftleider Pad & Planning Extras
+   RICH CMD v6.7.19 — Shiftleider Dropdown Stability Hotfix
    Adds Kaas/Vleeswaren after Vlees/Vis/Kip and three practical planning tools:
    auto-assign lanes, copy open points and an end-of-shift check.
 ========================================================= */
 (function(){
   try{
     if (typeof APP === 'object') {
-      APP.version = 'v6.7.18';
-      APP.cache = 'rich-cmd-cache-v6718';
+      APP.version = 'v6.7.19';
+      APP.cache = 'rich-cmd-cache-v6719';
       APP.build = 'Shiftleider Pad & Planning Extras';
     }
     const L18 = (nl,en)=> (typeof currentLang === 'function' && currentLang() === 'en') ? (en || nl) : nl;
@@ -13294,7 +13294,7 @@ try {
       const mealCount=sl.team.filter(p=>mealAllowance18(p.start,p.end)).length;
       const issues=planningIssues18().length;
       return `<div class="grid sl18-page">
-        <div class="hero sl18-hero"><div class="flex-line"><div><span class="chip">v6.7.18</span><h2>${E18(L18('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E18(L18('Compacte vulplanning met Kaas/Vleeswaren, automatische padtijden en extra tools voor bijsturen.','Compact fill plan with Cheese/Meatware, generated lane times and extra steering tools.'))}</p></div><div class="sl15-datebox"><strong>${E18(sl.date)}</strong><span>${E18(L18('Week','Week'))} ${weekNumber18(sl.date)}</span></div></div><div class="btn-row mt sl18-actionbar"><button class="btn primary" data-action="sl16-open-person-form">${E18(L18('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl18-load-standard-tasks">${E18(L18('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl16-open-task-form">${E18(L18('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl16-open-incident" data-type="Overig">${E18(L18('Bijzonderheid','Note'))}</button><button class="btn good" data-action="sl18-copy-planning">${E18(L18('Kopieer vulplanning','Copy fill plan'))}</button></div></div>
+        <div class="hero sl18-hero"><div class="flex-line"><div><span class="chip">v6.7.19</span><h2>${E18(L18('Shiftleider — Vers Avondshift','Shift Lead — Fresh evening shift'))}</h2><p>${E18(L18('Compacte vulplanning met Kaas/Vleeswaren, automatische padtijden en extra tools voor bijsturen.','Compact fill plan with Cheese/Meatware, generated lane times and extra steering tools.'))}</p></div><div class="sl15-datebox"><strong>${E18(sl.date)}</strong><span>${E18(L18('Week','Week'))} ${weekNumber18(sl.date)}</span></div></div><div class="btn-row mt sl18-actionbar"><button class="btn primary" data-action="sl16-open-person-form">${E18(L18('Medewerker toevoegen','Add team member'))}</button><button class="btn" data-action="sl18-load-standard-tasks">${E18(L18('Standaardtaken inladen','Load standard tasks'))}</button><button class="btn" data-action="sl16-open-task-form">${E18(L18('Nieuwe taak','New task'))}</button><button class="btn" data-action="sl16-open-incident" data-type="Overig">${E18(L18('Bijzonderheid','Note'))}</button><button class="btn good" data-action="sl18-copy-planning">${E18(L18('Kopieer vulplanning','Copy fill plan'))}</button></div></div>
         <div class="grid grid-4 sl18-kpis">${typeof kpi==='function'?`${kpi(L18('Beschikbaar','Available'),minutesText18(available),diff>=0?'good':'warn')}${kpi(L18('Gepland','Planned'),minutesText18(planned),planned>available?'bad':'good')}${kpi(L18('Ruimte / tekort','Room / shortage'),`${diff>=0?'+':'−'}${minutesText18(Math.abs(diff))}`,diff>=0?'good':'bad')}${kpi(L18('Team','Team'),team,null)}`:''}</div>
         <div class="grid grid-main">
           <div class="grid">
@@ -13321,7 +13321,7 @@ try {
       const sl=ensureShiftLeader18(), times=generatedLaneTimes18();
       return `<div class="card sl18-shiftplanning"><div class="flex-line"><div><h3>${E18(L18('Shiftplanning','Shift planning'))}</h3><p class="muted small">${E18(L18('Paden staan in één compact overzicht. Kaas/Vleeswaren staat nu tussen Vlees/Vis/Kip en Zuivel.','Aisles are in one compact overview. Cheese/Meatware is now between Meat/Fish/Chicken and Dairy.'))}</p></div><span class="pill info">${sl.lanes.length} ${E18(L18('paden','aisles'))}</span></div><div class="sl18-lane-list">${sl.lanes.map(l=>{ const t=times[l.id]; return `<div class="sl18-lane-card ${l.status==='done'?'done':''}">
           <div class="sl18-lane-top"><div class="sl18-lane-title"><strong>${E18(l.name)}</strong>${statusButton18(l)}</div><div class="sl18-lane-actions"><button class="btn small" data-action="sl18-open-fill" data-lane="${E18(l.id)}" title="${E18(L18('Vulling aanpassen','Edit fill'))}">⏱</button><button class="btn small ${l.note?'primary':''}" data-action="sl18-open-lane-note" data-lane="${E18(l.id)}" title="${E18(L18('Notitie','Note'))}">✎</button></div></div>
-          <div class="sl18-lane-main"><label class="sl18-person-select"><span>${E18(L18('Persoon','Person'))}</span><select class="select input" data-action="sl18-lane-person" data-lane="${E18(l.id)}">${personOptions18(l.personId)}</select></label><div class="sl18-lane-meta"><span>${E18(L18('Tijd','Time'))}: <strong>${E18(t && t.start ? `${t.start}–${t.end||'--:--'}` : L18('nog niet gepland','not planned'))}</strong></span><span>${E18(L18('Vulling','Fill'))}: <strong>${minutesText18(laneMinutes18(l))}</strong></span></div></div>${l.note?`<div class="sl18-lane-note-chip">${E18(l.note)}</div>`:''}
+          <div class="sl18-lane-main"><label class="sl18-person-select"><span>${E18(L18('Persoon','Person'))}</span><select class="select input sl19-lane-person-select" data-change="sl18-lane-person" data-lane="${E18(l.id)}" aria-label="Persoon kiezen">${personOptions18(l.personId)}</select></label><div class="sl18-lane-meta"><span>${E18(L18('Tijd','Time'))}: <strong>${E18(t && t.start ? `${t.start}–${t.end||'--:--'}` : L18('nog niet gepland','not planned'))}</strong></span><span>${E18(L18('Vulling','Fill'))}: <strong>${minutesText18(laneMinutes18(l))}</strong></span></div></div>${l.note?`<div class="sl18-lane-note-chip">${E18(l.note)}</div>`:''}
         </div>`; }).join('')}</div><div class="btn-row mt"><button class="btn" data-action="sl18-copy-planning">${E18(L18('Kopieer vulplanning','Copy fill plan'))}</button><button class="btn" data-action="sl18-auto-assign">${E18(L18('Auto-verdeel vrije paden','Auto-assign open aisles'))}</button><button class="btn" data-action="sl18-open-planning-check">${E18(L18('Planningcheck','Planning check'))}</button></div></div>`;
     }
     function renderExtraTools18(){
@@ -13436,6 +13436,28 @@ try {
       if(prevHandle6718) return prevHandle6718(a,el,e);
     };
 
+
+    // v6.7.19 hotfix: person selection uses data-change instead of data-action.
+    // This prevents the global click handler from re-rendering the Shiftplanning while the native dropdown is opening.
+    if(!window.__richCmdSl19LanePersonChange){
+      window.__richCmdSl19LanePersonChange = true;
+      document.addEventListener('change', function(e){
+        const el = e.target && e.target.closest ? e.target.closest('[data-change="sl18-lane-person"]') : null;
+        if(!el) return;
+        try{
+          const l = laneById18(el.dataset.lane);
+          if(l){
+            l.personId = el.value || '';
+            const p = teamMember18(l.personId);
+            if(p){ l.start = p.start || ''; l.end = p.end || ''; }
+            logPlan18(`${l.name}: persoon → ${teamMember18(l.personId)?.name || 'niet toegewezen'}`);
+            save18();
+            render18();
+          }
+        } catch(err){ console.error('v6.7.19 lane person change failed', err); }
+      });
+    }
+
     const prevDiag6718 = typeof renderDiagnostics === 'function' ? renderDiagnostics : null;
     if(prevDiag6718) renderDiagnostics = window.renderDiagnostics = function(){
       const sl=ensureShiftLeader18(); let base=prevDiag6718() || '';
@@ -13446,10 +13468,10 @@ try {
         {name:'Auto-verdeel vrije paden', ok:typeof autoAssign18==='function', detail:'nieuw'},
         {name:'Kopieer open punten', ok:typeof openPointsText18==='function', detail:`${openPoints18().lanes.length} open paden`},
         {name:'Eindcheck', ok:typeof openEndCheck18==='function', detail:'open punten + report'},
-        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6718', detail:APP.cache}
+        {name:'APP.cache', ok:APP.cache==='rich-cmd-cache-v6719', detail:APP.cache}
       ];
-      return base+`<div class="grid grid-2 mt diagnostics-v6718"><div class="card"><h3>v6.7.18 Shiftleider checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E18(c.name)} <span class="tiny muted">${E18(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E18(L18('Nieuwe Shiftleider extra’s','New Shift Lead extras'))}</h3><p class="muted small">${E18(L18('Toegevoegd: Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck. De planning blijft compact en mobielvriendelijk.','Added: Cheese/Meatware, auto-assign open aisles, copy open points and end check. The planning remains compact and mobile-friendly.'))}</p></div></div>`;
+      return base+`<div class="grid grid-2 mt diagnostics-v6718"><div class="card"><h3>v6.7.19 Shiftleider checks</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span>${E18(c.name)} <span class="tiny muted">${E18(c.detail||'')}</span></span><span class="pill ${c.ok?'good':'bad'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div><div class="card"><h3>${E18(L18('Nieuwe Shiftleider extra’s','New Shift Lead extras'))}</h3><p class="muted small">${E18(L18('Hotfix: persoon-dropdown in Shiftplanning blijft nu stabiel open; Kaas/Vleeswaren en extra planningtools blijven behouden.','Hotfix: person dropdown in Shift planning now stays stable; Cheese/Meatware and extra planning tools remain available.'))}</p></div></div>`;
     };
     try { ensureShiftLeader18(); save18(); } catch(_){ }
-  } catch(err){ console.error('v6.7.18 patch failed', err); }
+  } catch(err){ console.error('v6.7.19 patch failed', err); }
 })();

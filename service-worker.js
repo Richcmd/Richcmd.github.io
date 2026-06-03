@@ -1,13 +1,13 @@
-const CACHE = 'rich-cmd-cache-v6718';
-const APP_VERSION = 'v6.7.18';
+const CACHE = 'rich-cmd-cache-v6719';
+const APP_VERSION = 'v6.7.19';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './index.html?v=6718',
-  './styles.css?v=6718',
-  './vro-data.js?v=6718',
-  './app.js?v=6718',
-  './manifest.json?v=6718',
+  './index.html?v=6719',
+  './styles.css?v=6719',
+  './vro-data.js?v=6719',
+  './app.js?v=6719',
+  './manifest.json?v=6719',
   './version.json',
   './icon-192.png',
   './icon-512.png'
@@ -55,7 +55,7 @@ function cacheResponse(request, response) {
 }
 
 function cachedAppShell() {
-  return caches.match('./index.html?v=6718')
+  return caches.match('./index.html?v=6719')
     .then(match => match || caches.match('./index.html') || caches.match('./'));
 }
 
