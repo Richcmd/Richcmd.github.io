@@ -1,14 +1,14 @@
 {
-  "latestVersion": "v7.4.1",
-  "version": "v7.4.1",
-  "build": "Coaching UX Polish & Learning Quality",
-  "cache": "rich-cmd-cache-v741",
-  "assetVersion": "741",
+  "latestVersion": "v7.6.2",
+  "version": "v7.6.2",
+  "build": "Field Cause Tracking & Interruption Insights",
+  "cache": "rich-cmd-cache-v762",
+  "assetVersion": "762",
   "releaseDate": "2026-06-07",
   "minSupportedVersion": "v7.0.0",
   "forceBelowVersion": "",
-  "channel": "stable",
-  "updatePolicy": "Normal update; no forced migration. Make a backup before future V8 architecture updates.",
+  "channel": "stable-preview",
+  "updatePolicy": "Normal update; no forced migration. Field Cause Tracking & Interruption Insights adds cause labels, interruption impact, planning-impact visualisation and V8 learning context while keeping timers optional.",
   "modules": [
     "Vandaag",
     "AGF",
@@ -17,17 +17,17 @@
     "Bestelbeheer",
     "Communicatie",
     "Visualisatie",
-    "Coaching UX Polish & Learning Quality",
+    "Coaching",
     "Shiftleider Pro",
+    "V8 Preview",
     "Instellingen",
     "Diagnostiek"
   ],
   "highlights": [
-    "Coaching UX Polish & Learning Quality with skill paths and compact progress header",
-    "Improved lesson detail reading with clear sections, practice and reflection",
-    "Improved tests and exams UX with score, feedback and retake flow",
-    "Compact badge gallery with filters for earned, nearly earned and locked badges",
-    "Coaching advice remains linked to AGF/HACCP/Store Map intelligence, but is more calmly dosed",
-    "Coaching Rustmodus refined: progress, one recommended lesson and one learning advice"
+    "Cause labels for field notes, signals and day-shift explanations",
+    "Quick interruption logging with impact minutes",
+    "Planning-impact overview in Visualisation and reports",
+    "V8 Learning now distinguishes task delays from real causes such as late freight or interruptions",
+    "Diagnostics include Field Cause Tracking and Interruption Insights checks"
   ]
 }

@@ -1,20 +1,24 @@
-# RICH CMD v7.4.1 — Coaching UX Polish & Learning Quality
+# RICH CMD v7.6.2 — Field Cause Tracking & Interruption Insights
 
-Post-v7.4 Coaching polish update. This build keeps Coaching Academy Pro intact, but makes the learning environment calmer, more readable and more motivating.
+Deze update bouwt door op de V8 Data Learning Foundation. De focus ligt op het beter verklaren waarom planning verschuift, zonder dat de gebruiker alles live hoeft te timeren.
 
-## Highlights
-- Calmer Coaching page structure with progress at the top
-- Collapsible sections for recommended lessons, skill tree, lessons, exams and badges
-- Improved lesson detail reading with clear MBO/vocational sections
-- Better test/exam UX with score, feedback, retake and learning advice
-- Compact badge gallery with filters for earned, nearly earned and locked badges
-- Coaching advice is more calmly dosed and remains linked to work signals
-- Coaching Rustmodus shows only progress, one recommended lesson and one advice card
+## Nieuw
 
-## Version
-- Version: v7.4.1
-- Cache: rich-cmd-cache-v741
-- Assets: ?v=741
+- Oorzaaklabels bij snelle notities en signalen.
+- Snelle onderbreking registreren met impacttijd.
+- Planning-impact in Visualisatie.
+- Dagrapport/impactrapport met oorzaken.
+- V8 Learning gebruikt oorzaken zoals late vracht, klantvragen of collega geholpen.
+- Diagnostiek bevat Field Cause Tracking checks.
 
-## Test focus
-Open Coaching on mobile and desktop, open a lesson, mark practice done, complete a lesson, start a test, open badge details, toggle Rustmodus and run Diagnostics → Coaching UX checks.
+## Belangrijk beleid
+
+- Timers blijven optioneel.
+- Afvinken en notities zijn genoeg voor normale werkdagen.
+- Oorzaken helpen verklaren waarom taken uitlopen, zonder automatisch schuld of harde conclusies te trekken.
+- Shiftleider Pro blijft standalone.
+- De hoofdflow blijft AGF/HACCP-gericht.
+
+## Testadvies
+
+Test na upload vooral: Vandaag → Onderbreking, Field Notes met oorzaak, Visualisatie → Planning-impact, V8 Preview, Diagnostiek → Field Cause Tracking checks en backup/export.

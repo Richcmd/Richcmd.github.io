@@ -18606,3 +18606,1802 @@ try {
     ensure741(); save741();
   }catch(err){ console.error('v7.4.1 Coaching UX Polish patch failed', err); }
 })();
+
+/* ============================================================
+   RICH CMD v7.5.0 — V8 Preview Layer
+   Optional preview of Adaptive Retail Intelligence. Keeps V7
+   daily flow stable: Wat Nu max 3, AGF/HACCP as core, Shiftleider
+   Pro standalone, and V8 preview not dominant on Vandaag.
+   ============================================================ */
+(function(){
+  'use strict';
+  try{
+    APP.version = 'v7.5.0';
+    APP.cache = 'rich-cmd-cache-v750';
+    APP.build = 'V8 Preview Layer';
+
+    const L750 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E750 = s => (typeof escapeHtml==='function' ? escapeHtml(String(s==null?'':s)) : String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+    const A750 = v => Array.isArray(v) ? v : [];
+    const now750 = () => (typeof nowISO==='function' ? nowISO() : new Date().toISOString());
+    const fmt750 = iso => { try{ return new Date(iso||Date.now()).toLocaleString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{dateStyle:'short',timeStyle:'short'}); }catch(_){ return iso||''; } };
+    const save750 = () => { try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){ } };
+    const render750 = () => { try{ if(typeof render==='function') render(); }catch(_){ } };
+    const toast750 = (m,t='info') => { try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ } };
+    const icon750 = name => (typeof iconSvg==='function' ? iconSvg(name) : '');
+    function copy750(txt){
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast750(L750('Gekopieerd','Copied'),'good')).catch(()=>fallback750(txt));
+      else fallback750(txt);
+    }
+    function fallback750(txt){ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast750(L750('Gekopieerd','Copied'),'good'); }
+
+    if(typeof I18N==='object'){
+      I18N.nl = I18N.nl || {}; I18N.en = I18N.en || {};
+      Object.assign(I18N.nl,{v8preview:'V8 Preview', v750Title:'V8 Preview Layer'});
+      Object.assign(I18N.en,{v8preview:'V8 Preview', v750Title:'V8 Preview Layer'});
+    }
+    try{ if(Array.isArray(ROUTES) && !ROUTES.some(r=>r.id==='v8preview')) ROUTES.push({id:'v8preview',group:'system',icon:'dashboard',label:'v8preview'}); }catch(_){ }
+
+    function ensure750(){
+      state.v750 = state.v750 && typeof state.v750==='object' ? state.v750 : {};
+      const s = state.v750;
+      s.schemaVersion = s.schemaVersion || 'v7.5.0';
+      s.showDetails = !!s.showDetails;
+      s.lastScan = s.lastScan || null;
+      s.previewEnabled = s.previewEnabled !== false;
+      s.acknowledged = s.acknowledged || false;
+      state.ui = state.ui && typeof state.ui==='object' ? state.ui : {};
+      state.ui.menu = state.ui.menu && typeof state.ui.menu==='object' ? state.ui.menu : {};
+      ['daily','insight','optional','system'].forEach(g=>{ if(typeof state.ui.menu[g] === 'undefined') state.ui.menu[g]=true; });
+      return s;
+    }
+    function getAgfSignals750(){ return A750(state.agfPro&&state.agfPro.signals).concat(A750(state.agfSignals),A750(state.agfProductSignals),A750(state.agfAdviceSignals)).filter(Boolean); }
+    function getTasks750(){ return A750(state.tasks); }
+    function openTasks750(){ return getTasks750().filter(t=>!/voltooid|done|completed|overgeslagen|skipped/i.test(String(t.status||''))); }
+    function getCleaning750(){ return A750(state.cleaning&&state.cleaning.items).concat(A750(state.storeMap&&state.storeMap.items), A750(state.storeMap)).filter(Boolean); }
+    function getComms750(){ return A750(state.communications); }
+    function getOrders750(){ return A750(state.inventoryOrders).concat(A750(state.orderItems), A750(state.orders)).filter(Boolean); }
+    function text750(x){ try{return JSON.stringify(x||{}).toLowerCase();}catch(_){return String(x||'').toLowerCase();} }
+
+    function agfPatterns750(){
+      const map = {};
+      getAgfSignals750().slice(-400).forEach(sig=>{
+        const product = String(sig.product || sig.name || sig.item || sig.title || '').trim();
+        if(!product) return;
+        const t = text750(sig);
+        let kind = 'signaal';
+        if(/leeg|nee|no.?sales|empty/.test(t)) kind='leeg/nee-verkoop';
+        else if(/bijvul|hardloper|refill|fast/.test(t)) kind='bijvullen/hardloper';
+        else if(/over|restant|overstock|leftover/.test(t)) kind='over/restanten';
+        else if(/kwaliteit|quality|derving/.test(t)) kind='kwaliteit';
+        else if(/morgen|tomorrow/.test(t)) kind='aandacht morgen';
+        map[product] = map[product] || {product,total:0,kinds:{},last:sig};
+        map[product].total += 1;
+        map[product].kinds[kind] = (map[product].kinds[kind]||0)+1;
+        map[product].last = sig;
+      });
+      return Object.values(map).map(row=>{
+        const top = Object.entries(row.kinds).sort((a,b)=>b[1]-a[1])[0] || ['signaal',row.total];
+        const status = row.total>=5 ? L750('structureel','structural') : row.total>=3 ? L750('terugkerend','recurring') : row.total>=2 ? L750('monitoren','monitor') : L750('eenmalig','single');
+        const tone = row.total>=5 ? 'bad' : row.total>=3 ? 'warn' : row.total>=2 ? 'info' : 'neutral';
+        const advice = top[0].includes('leeg') ? L750('Controleer voorraad/bestelling; één signaal is nog geen structureel probleem.','Check stock/order; one signal is not yet a structural issue.') :
+          top[0].includes('bijvullen') ? L750('Plan een korte naloop voor hardlopers.','Plan a short fast-mover refill check.') :
+          top[0].includes('over') ? L750('Niet automatisch verhogen; monitor verkoopdruk en restanten.','Do not automatically increase; monitor sales pressure and leftovers.') :
+          top[0].includes('kwaliteit') ? L750('Eerst kwaliteit beoordelen, daarna pas bestelkeuze maken.','Assess quality first, then decide ordering.') :
+          L750('Blijf monitoren en bouw betrouwbare data op.','Keep monitoring and build reliable data.');
+        return {...row, kind:top[0], count:top[1], status, tone, advice};
+      }).sort((a,b)=>b.total-a.total).slice(0,8);
+    }
+    function haccpSignals750(){
+      const open = openTasks750();
+      const urgent = open.filter(t=>/kritiek|urgent|hoog|critical|high/i.test(String(t.priority||t.status||'')) || /temperatuur|koeling|schimmel|nacontrole|veilig/i.test(text750(t)));
+      const deferred = getTasks750().filter(t=>/uitgesteld|deferred/i.test(String(t.status||'')));
+      return {open:open.length, urgent:urgent.length, deferred:deferred.length};
+    }
+    function storeRisks750(){
+      return getCleaning750().map(item=>{
+        const t = text750(item);
+        let level='baseline', tone='good', reason=L750('nieuw of normaal punt','new or normal point');
+        if(/gradatie\s*3|mold3|schimmel.*3|kritiek|critical/.test(t)){ level='kritiek'; tone='bad'; reason=L750('schimmel gradatie 3 of kritiek signaal','mold gradation 3 or critical signal'); }
+        else if(/gradatie\s*2|mold2|schimmel.*2|urgent/.test(t)){ level='urgent'; tone='bad'; reason=L750('schimmel gradatie 2 of urgent signaal','mold gradation 2 or urgent signal'); }
+        else if(/nacontrole|follow.?up/.test(t)){ level='nacontrole'; tone='warn'; reason=L750('nacontrole nodig','follow-up check needed'); }
+        else if(/gradatie\s*1|mold1|schimmel.*1|monitor/.test(t)){ level='monitor'; tone='info'; reason=L750('gradatie 1 of monitorpunt','gradation 1 or monitoring point'); }
+        else if(/aandacht|vuil|dirty|attention/.test(t)){ level='aandacht'; tone='warn'; reason=L750('aandacht of vervuiling','attention or dirty signal'); }
+        return {item, label:item.label||item.name||item.title||item.location||L750('Store Map punt','Store Map item'), level, tone, reason};
+      }).filter(x=>x.level!=='baseline').sort((a,b)=>({bad:0,warn:1,info:2,good:3}[a.tone]-({bad:0,warn:1,info:2,good:3}[b.tone]))).slice(0,8);
+    }
+    function workdayStats750(){
+      const route = A750(state.workdayRoute||state.dayRoute||state.v684&&state.v684.route||state.v685&&state.v685.route);
+      const done = route.filter(x=>/done|voltooid|afgerond/i.test(String(x.status||''))).length;
+      const measured = route.filter(x=>x.measuredMinutes || x.actualMinutes || x.startedAt).length;
+      const open = route.length ? route.length-done : 0;
+      return {route:route.length, done, measured, open};
+    }
+    function adaptiveScore750(){
+      const agf = agfPatterns750();
+      const h = haccpSignals750();
+      const r = storeRisks750();
+      let score = 82;
+      if(h.urgent) score -= Math.min(18,h.urgent*6);
+      if(r.some(x=>x.level==='kritiek'||x.level==='urgent')) score -= 12;
+      if(agf.filter(x=>x.total>=3).length) score -= 4;
+      if(workdayStats750().route) score += 4;
+      return Math.max(50,Math.min(98,score));
+    }
+    function readiness750(){
+      const agf=getAgfSignals750().length, tasks=getTasks750().length, cleaning=getCleaning750().length, comm=getComms750().length;
+      const checks = [
+        {name:'Data safety', ok:!!(state.v712 || state.backups || state.restorePoints), detail:L750('backup/herstelpunten voorbereid','backup/restore points prepared')},
+        {name:'AGF signalen', ok:agf>0, detail:`${agf} ${L750('signalen beschikbaar','signals available')}`},
+        {name:'HACCP prioriteit', ok:tasks>=0, detail:`${openTasks750().length} ${L750('open taken','open tasks')}`},
+        {name:'Store Map risico', ok:cleaning>=0, detail:`${storeRisks750().length} ${L750('risicosignalen','risk signals')}`},
+        {name:'Bestelcontext', ok:true, detail:`${getOrders750().length} ${L750('actieve bestelitems','active order items')}`},
+        {name:'Coaching', ok:typeof renderCoaching==='function', detail:L750('leeradvies kan gekoppeld worden','learning advice can be linked')},
+        {name:'Shiftleider standalone', ok:true, detail:L750('blijft optioneel en losstaand','remains optional and standalone')},
+        {name:'PWA/cache', ok:APP.cache==='rich-cmd-cache-v750', detail:`${APP.cache}`},
+        {name:'Mobile QA', ok:true, detail:L750('V8 Preview blijft optioneel en compact','V8 Preview remains optional and compact')}
+      ];
+      const score = Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return {checks,score};
+    }
+    function adaptivePlanner750(){
+      const score = adaptiveScore750();
+      const agf = agfPatterns750();
+      const h = haccpSignals750();
+      const risks = storeRisks750();
+      let status = L750('haalbaar','feasible'), tone='good', text=L750('Je basisflow lijkt stabiel. Houd AGF/HACCP als hoofdroute aan.','Your base flow looks stable. Keep Produce/HACCP as the main route.');
+      if(h.urgent || risks.some(r=>r.level==='kritiek'||r.level==='urgent')){ status=L750('aandacht nodig','needs attention'); tone='bad'; text=L750('Pak eerst echte HACCP/Store Map-urgenties op. Daarna terug naar je dagroute.','Handle real HACCP/Store Map urgencies first. Then return to your workday route.'); }
+      else if(agf.some(p=>p.total>=3)){ status=L750('licht verhoogd','slightly elevated'); tone='warn'; text=L750('AGF heeft terugkerende signalen. Plan een korte naloop of controleer besteladvies-light.','Produce has recurring signals. Plan a short check or review light ordering advice.'); }
+      return {score,status,tone,text};
+    }
+    function measureTip750(){
+      const stats = workdayStats750();
+      const agf = agfPatterns750();
+      const h = haccpSignals750();
+      if(stats.measured<1) return L750('Meet vandaag één korte taak, bijvoorbeeld Vracht lossen of AGF vullen. Alleen als het uitkomt.','Measure one short task today, for example freight unloading or Produce filling. Only if it fits.');
+      if(agf.some(p=>p.total>=3)) return L750('Meet binnenkort één AGF-vulfase om je planning beter te leren.','Measure one Produce filling phase soon to improve planning.');
+      if(h.deferred) return L750('Meet een HACCP-blok eens op een rustige dag om realistische capaciteit te bepalen.','Measure a HACCP block on a calm day to estimate realistic capacity.');
+      return L750('Geen meetdruk: optioneel meten blijft alleen bedoeld om je planning af en toe te verbeteren.','No measuring pressure: optional measuring is only meant to occasionally improve your planning.');
+    }
+    function v8Coach750(){
+      const risks = storeRisks750();
+      const patterns = agfPatterns750();
+      const h = haccpSignals750();
+      if(risks.length) return {title:L750('Signaleren en opvolgen','Spotting and follow-up'), text:L750('Store Map-risico’s komen terug. Een korte les over signaleren helpt bij juist prioriteren.','Store Map risks are visible. A short lesson about spotting helps prioritize correctly.'), route:'coaching'};
+      if(patterns.some(p=>p.kind.includes('leeg') || p.kind.includes('bijvullen'))) return {title:L750('AGF-signalen begrijpen','Understanding Produce signals'), text:L750('AGF-signalen geven richting, maar voorraad en winkelbeeld blijven leidend.','Produce signals give direction, but stock and shop floor view remain leading.'), route:'coaching'};
+      if(h.deferred) return {title:L750('Prioriteren onder werkdruk','Prioritizing under pressure'), text:L750('Uitgestelde taken zijn een goed moment om prioriteiten opnieuw te leren wegen.','Deferred tasks are a good moment to re-evaluate priorities.'), route:'coaching'};
+      return {title:L750('Rustige groei vasthouden','Keep calm growth'), text:L750('Je basis staat. Bouw data rustig op met afvinken, notities en af en toe meten.','Your foundation is there. Build data calmly through check-offs, notes and occasional measuring.'), route:'coaching'};
+    }
+    function report750(){
+      const ap=adaptivePlanner750(), ready=readiness750(), patterns=agfPatterns750(), risks=storeRisks750(), h=haccpSignals750();
+      return `RICH CMD v7.5.0 — V8 Preview Layer\nDatum: ${fmt750(now750())}\n\nAdaptive Planner Preview\n- Status: ${ap.status}\n- Score: ${ap.score}/100\n- Advies: ${ap.text}\n\nPatronen-preview\nAGF:\n${patterns.length?patterns.map(p=>`- ${p.product}: ${p.status} · ${p.kind} · ${p.total} signalen — ${p.advice}`).join('\n'):'- Nog geen AGF-patronen'}\n\nHACCP:\n- Open: ${h.open}\n- Urgent: ${h.urgent}\n- Uitgesteld: ${h.deferred}\n\nStore Map:\n${risks.length?risks.map(r=>`- ${r.label}: ${r.level} — ${r.reason}`).join('\n'):'- Geen actieve risico-preview'}\n\nSlimme meettip:\n- ${measureTip750()}\n\nV8 Coach Preview:\n- ${v8Coach750().title}: ${v8Coach750().text}\n\nReadiness: ${ready.score}/100\n${ready.checks.map(c=>`- ${c.name}: ${c.ok?'OK':'Check'} (${c.detail})`).join('\n')}\n\nBeleid:\n- V8 Preview blijft optioneel.\n- V7 Command Center blijft leidend.\n- Wat Nu blijft rustig en maximaal 3 stappen.\n- Shiftleider Pro blijft standalone.`;
+    }
+    function hero750(){ const ap=adaptivePlanner750(); return `<div class="hero v750-hero"><div class="flex-line"><div><span class="chip">RICH CMD v7.5.0</span><h2>${E750(L750('V8 Preview Layer','V8 Preview Layer'))}</h2><p>${E750(L750('Een optionele vooruitblik op Adaptive Retail Intelligence: patronen, werkadvies, meettips en V8-readiness zonder de stabiele V7-flow te verstoren.','An optional preview of Adaptive Retail Intelligence: patterns, work advice, measuring tips and V8 readiness without disturbing the stable V7 flow.'))}</p></div><div class="v750-score ${ap.tone}"><strong>${ap.score}</strong><span>V8 preview</span></div></div><div class="btn-row mt"><button class="btn primary" data-action="v750-run-scan">${E750(L750('Scan V8 preview','Scan V8 preview'))}</button><button class="btn" data-action="v750-copy-report">${E750(L750('Kopieer V8 preview','Copy V8 preview'))}</button><button class="btn" data-action="v750-toggle-details">${ensure750().showDetails?E750(L750('Details verbergen','Hide details')):E750(L750('Details tonen','Show details'))}</button></div></div>`; }
+    function adaptiveCard750(){ const ap=adaptivePlanner750(); const h=haccpSignals750(); const patterns=agfPatterns750(); const risks=storeRisks750(); return `<div class="card v750-card"><div class="flex-line"><div><h3>${E750(L750('Adaptive Planner Preview','Adaptive Planner Preview'))}</h3><p class="muted small">${E750(L750('Geeft richting, maar maakt nog geen harde automatische planning. Jij houdt de controle.','Gives direction, but does not make hard automatic planning yet. You stay in control.'))}</p></div><span class="pill ${ap.tone}">${E750(ap.status)}</span></div><p class="mt">${E750(ap.text)}</p><div class="grid grid-4 mt"><div class="kpi"><span>AGF</span><strong>${patterns.length}</strong></div><div class="kpi"><span>HACCP</span><strong>${h.open}</strong></div><div class="kpi"><span>Urgent</span><strong>${h.urgent+risks.filter(r=>r.tone==='bad').length}</strong></div><div class="kpi"><span>Store Map</span><strong>${risks.length}</strong></div></div></div>`; }
+    function patternsCard750(){ const patterns=agfPatterns750(); const risks=storeRisks750(); const h=haccpSignals750(); return `<div class="card v750-card"><div class="flex-line"><div><h3>${E750(L750('Patronen-preview','Patterns preview'))}</h3><p class="muted small">${E750(L750('Labels blijven voorzichtig: eenmalig, monitoren, terugkerend of structureel.','Labels stay careful: single, monitor, recurring or structural.'))}</p></div><span class="pill info">${patterns.length+risks.length}</span></div><div class="list mt">${patterns.slice(0,5).map(p=>`<div class="list-item compact"><span><strong>${E750(p.product)}</strong><br><span class="tiny muted">${E750(p.status)} · ${E750(p.kind)} · ${p.total} ${E750(L750('signalen','signals'))}</span><br><span class="small">${E750(p.advice)}</span></span><span class="pill ${p.tone}">${p.count}×</span></div>`).join('') || `<p class="muted small">${E750(L750('Nog geen AGF-patronen. Bouw data op met signalen en afvinken.','No Produce patterns yet. Build data with signals and check-offs.'))}</p>`}</div><div class="card soft mt"><strong>HACCP</strong><p class="muted small">${h.open} ${E750(L750('open','open'))} · ${h.urgent} ${E750(L750('urgent','urgent'))} · ${h.deferred} ${E750(L750('uitgesteld','deferred'))}</p></div>${risks.length?`<div class="list mt">${risks.slice(0,4).map(r=>`<div class="list-item compact"><span><strong>${E750(r.label)}</strong><br><span class="tiny muted">${E750(r.level)} · ${E750(r.reason)}</span></span><button class="btn small" data-route="storemap">${E750(L750('Open','Open'))}</button></div>`).join('')}</div>`:''}</div>`; }
+    function tipCoachCard750(){ const coach=v8Coach750(); return `<div class="grid grid-2"><div class="card v750-card"><h3>${E750(L750('Slimme meettip','Smart measuring tip'))}</h3><p class="muted small">${E750(L750('Meten blijft incidenteel en optioneel; de app mag je werk niet onderbreken.','Measuring remains occasional and optional; the app should not interrupt your work.'))}</p><p class="mt"><strong>${E750(measureTip750())}</strong></p></div><div class="card v750-card"><h3>${E750(L750('V8 Coach Preview','V8 Coach Preview'))}</h3><p class="muted small">${E750(L750('Leeradvies op basis van signalen, zonder te pushen.','Learning advice based on signals, without pushing.'))}</p><p><strong>${E750(coach.title)}</strong><br><span class="muted small">${E750(coach.text)}</span></p><button class="btn" data-route="${E750(coach.route)}">${E750(L750('Open Coaching','Open Coaching'))}</button></div></div>`; }
+    function readinessCard750(){ const r=readiness750(); return `<div class="card v750-card"><div class="flex-line"><div><h3>${E750(L750('V8 readiness','V8 readiness'))}</h3><p class="muted small">${E750(L750('Controleert of de V7-basis genoeg data en veiligheid heeft voor toekomstige adaptieve intelligentie.','Checks whether the V7 foundation has enough data and safety for future adaptive intelligence.'))}</p></div><span class="pill ${r.score>=90?'good':'warn'}">${r.score}/100</span></div><div class="list mt">${r.checks.map(c=>`<div class="list-item compact"><span><strong>${E750(c.name)}</strong><br><span class="tiny muted">${E750(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`; }
+    function roadmapCard750(){ const rows=[['v7.5.0','V8 Preview Layer',L750('optionele preview actief','optional preview active'),'good'],['v7.5.1','Preview Field Polish',L750('ervaringen finetunen','fine-tune field experience'),'info'],['v7.6.0','Adaptive Data Polish',L750('patronen betrouwbaarder maken','make patterns more reliable'),'info'],['v8.0.0','Adaptive Retail Intelligence',L750('officiële V8-release','official V8 release'),'warn']]; return `<div class="card v750-card"><h3>${E750(L750('Route naar V8','Path to V8'))}</h3><div class="list mt">${rows.map(r=>`<div class="list-item compact"><span><strong>${E750(r[0])} · ${E750(r[1])}</strong><br><span class="tiny muted">${E750(r[2])}</span></span><span class="pill ${r[3]}">${r[0]==='v7.5.0'?E750(L750('actief','active')):E750(L750('later','later'))}</span></div>`).join('')}</div></div>`; }
+    function renderV8Preview750(){ ensure750(); const s=ensure750(); return `<div class="page v750-page">${hero750()}${adaptiveCard750()}${patternsCard750()}${tipCoachCard750()}<div class="grid grid-2">${readinessCard750()}${roadmapCard750()}</div>${s.showDetails?`<div class="card v750-card"><h3>${E750(L750('Beleid voor deze preview','Policy for this preview'))}</h3><div class="list"><div class="list-item compact"><span>${E750(L750('V7 blijft leidend: Vandaag en Wat Nu worden niet drukker gemaakt.','V7 remains leading: Today and What Now are not made busier.'))}</span></div><div class="list-item compact"><span>${E750(L750('Shiftleider Pro blijft standalone en optioneel.','Shift Lead Pro remains standalone and optional.'))}</span></div><div class="list-item compact"><span>${E750(L750('Adviezen zijn advies-light; jouw oordeel en winkelprotocol blijven leidend.','Advice is light advice; your judgment and store protocol remain leading.'))}</span></div><div class="list-item compact"><span>${E750(L750('Meten blijft incidenteel. Afvinken en notities blijven voldoende voor normale dagen.','Measuring remains occasional. Check-offs and notes remain enough for normal days.'))}</span></div></div></div>`:''}</div>`; }
+
+    function v8PreviewSmallCard750(){ const ap=adaptivePlanner750(); return `<div class="card v750-small"><div class="flex-line"><div><span class="chip">V8 Preview</span><h3>${E750(L750('Adaptive Retail Intelligence','Adaptive Retail Intelligence'))}</h3><p class="muted small">${E750(L750('Optionele vooruitblik; V7 blijft de stabiele hoofdflow.','Optional preview; V7 remains the stable main flow.'))}</p></div><span class="pill ${ap.tone}">${ap.score}/100</span></div><div class="btn-row mt"><button class="btn" data-route="v8preview">${E750(L750('Open V8 Preview','Open V8 Preview'))}</button><button class="btn" data-action="v750-copy-report">${E750(L750('Kopieer preview','Copy preview'))}</button></div></div>`; }
+    function diagnosticsCard750(){ const r=readiness750(); const ap=adaptivePlanner750(); return `<div class="card v750-card"><div class="flex-line"><div><span class="chip">v7.5.0</span><h3>${E750(L750('V8 Preview checks','V8 Preview checks'))}</h3><p class="muted small">${E750(L750('Controleert dat de preview optioneel blijft en V7 niet verstoort.','Checks that the preview stays optional and does not disrupt V7.'))}</p></div><span class="pill ${r.score>=90?'good':'warn'}">${r.score}/100</span></div><div class="list mt"><div class="list-item compact"><span><strong>Adaptive Planner Preview</strong><br><span class="tiny muted">${E750(ap.status)} · ${ap.score}/100</span></span><span class="pill ${ap.tone}">OK</span></div>${r.checks.map(c=>`<div class="list-item compact"><span><strong>${E750(c.name)}</strong><br><span class="tiny muted">${E750(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><button class="btn mt" data-action="v750-copy-report">${E750(L750('Kopieer V8-previewrapport','Copy V8 preview report'))}</button></div>`; }
+
+    const prevPage750 = typeof renderPage==='function' ? renderPage : null;
+    if(prevPage750) renderPage = window.renderPage = function(){ return state.route==='v8preview' ? renderV8Preview750() : prevPage750(); };
+
+    const prevSidebar750 = typeof renderSidebar==='function' ? renderSidebar : null;
+    renderSidebar = window.renderSidebar = function(){
+      ensure750();
+      const groups = [
+        {id:'daily',title:L750('Dagelijks werk','Daily work'),desc:L750('AGF/HACCP-hoofdflow','Produce/HACCP main flow'),items:[['today','today',L750('Vandaag','Today'),L750('Wat Nu + dagroute','What Now + route')],['agf','leaf','AGF',L750('Kwaliteit + signalen','Quality + signals')],['haccp','check','HACCP',L750('Taken + urgenties','Tasks + urgencies')],['storemap','map','Store Map',L750('Route + risico','Route + risk')],['inventory','box',L750('Bestelbeheer','Ordering'),L750('Bestellijst + advies','Order list + advice')],['communication','message',L750('Communicatie','Communication'),L750('Opvolging + overdracht','Follow-up + handover')]]},
+        {id:'insight',title:L750('Inzicht & ontwikkeling','Insight & growth'),desc:L750('Visualisatie en leren','Visualization and learning'),items:[['visual','chart',L750('Visualisatie','Visualization'),L750('Insights Pro','Insights Pro')],['coaching','book',L750('Coaching','Coaching'),L750('Academy Pro','Academy Pro')]]},
+        {id:'optional',title:L750('Optioneel','Optional'),desc:L750('Losstaande Pro-modules','Standalone Pro modules'),items:[['shiftleader','dashboard',L750('Shiftleider Pro','Shift Lead Pro'),L750('Standalone','Standalone')]]},
+        {id:'system',title:L750('Systeem','System'),desc:L750('Roadmap, instellingen en checks','Roadmap, settings and checks'),items:[['v8preview','dashboard','V8 Preview',L750('Adaptive preview','Adaptive preview')],['v7preview','dashboard',L750('V7 status','V7 status'),L750('Readiness','Readiness')],['settings','gear',L750('Instellingen','Settings'),L750('Backup + PWA','Backup + PWA')],['diagnostics','pulse',L750('Diagnostiek','Diagnostics'),L750('Checks + herstel','Checks + repair')]]}
+      ];
+      return `<aside class="sidebar v750-sidebar ${state.ui.sidebarOpen?'open':''}" id="sidebar"><div class="brand"><div class="brand-logo">RC</div><div><h1>RICH CMD</h1><p>Retail Command Intelligence</p></div></div>${groups.map(g=>`<div class="nav-group"><button class="nav-head" data-action="v750-toggle-menu" data-group="${E750(g.id)}"><span><strong>${E750(g.title)}</strong><small>${E750(g.desc)}</small></span><span>${state.ui.menu[g.id]!==false?'−':'+'}</span></button><div class="nav-items ${state.ui.menu[g.id]!==false?'':'hidden'}">${g.items.map(it=>`<button class="nav-btn ${state.route===it[0]?'active':''}" data-route="${E750(it[0])}"><span class="nav-icon">${icon750(it[1])}</span><span><strong>${E750(it[2])}</strong><small>${E750(it[3])}</small></span></button>`).join('')}</div></div>`).join('')}<div class="card soft mt"><div class="small muted">${E750(APP.version)} · ${E750(APP.cache)}</div><div class="btn-row mt"><button class="btn small" data-route="v8preview">V8</button><button class="btn small" data-action="open-command">Ctrl K</button></div></div></aside>`;
+    };
+
+    const prevSettings750 = typeof renderSettings==='function' ? renderSettings : null;
+    if(prevSettings750) renderSettings = window.renderSettings = function(){ const base=prevSettings750()||''; return `${base}<div class="grid grid-2 mt v750-settings">${v8PreviewSmallCard750()}${readinessCard750()}</div>`; };
+    const prevDiagnostics750 = typeof renderDiagnostics==='function' ? renderDiagnostics : null;
+    if(prevDiagnostics750) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics750()||''; return `<div class="grid diagnostics-v750">${diagnosticsCard750()}</div>${base}`; };
+    const prevVisual750 = typeof renderVisual==='function' ? renderVisual : null;
+    if(prevVisual750) renderVisual = window.renderVisual = function(){ const base=prevVisual750()||''; return `<div class="grid grid-2 v750-visual">${adaptiveCard750()}${patternsCard750()}</div>${base}`; };
+    const prevV7Page750 = null;
+
+    const prevHandle750 = typeof handleAction==='function' ? handleAction : null;
+    if(prevHandle750) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v750-toggle-menu'){ const g=el && el.dataset && el.dataset.group; ensure750(); state.ui.menu[g]=state.ui.menu[g]===false?true:false; save750(); render750(); return; }
+      if(a==='v750-run-scan'){ const s=ensure750(); s.lastScan={at:now750(), score:readiness750().score, adaptive:adaptivePlanner750().score}; save750(); toast750(L750('V8 Preview scan uitgevoerd','V8 Preview scan completed'),'good'); render750(); return; }
+      if(a==='v750-copy-report'){ copy750(report750()); return; }
+      if(a==='v750-toggle-details'){ ensure750().showDetails=!ensure750().showDetails; save750(); render750(); return; }
+      return prevHandle750(a,el,e);
+    };
+
+    ensure750(); save750();
+  }catch(err){ console.error('v7.5.0 V8 Preview Layer patch failed', err); }
+})();
+
+
+/* ============================================================
+   RICH CMD v7.5.1 — V8 Preview Polish & Adaptive Advice Tuning
+   - V8 Preview remains optional.
+   - Advice is always shown with reason + confidence.
+   - Today/Wat Nu remain calm and V7-led.
+   ============================================================ */
+(function(){
+  try{
+    APP.version = 'v7.5.1';
+    APP.cache = 'rich-cmd-cache-v751';
+    const L751 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? en : nl;
+    const E751 = s => String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const A751 = v => Array.isArray(v) ? v : [];
+    const now751 = () => (typeof nowISO==='function' ? nowISO() : new Date().toISOString());
+    const fmt751 = iso => { try{ return new Date(iso||Date.now()).toLocaleString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{dateStyle:'short',timeStyle:'short'}); }catch(_){ return iso||''; } };
+    const save751 = () => { try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){ } };
+    const render751 = () => { try{ if(typeof render==='function') render(); }catch(_){ } };
+    const toast751 = (m,t='info') => { try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ } };
+    const icon751 = name => (typeof iconSvg==='function' ? iconSvg(name) : '');
+    function copy751(txt){
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast751(L751('Gekopieerd','Copied'),'good')).catch(()=>fallback751(txt));
+      else fallback751(txt);
+    }
+    function fallback751(txt){ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast751(L751('Gekopieerd','Copied'),'good'); }
+
+    if(typeof I18N==='object'){
+      I18N.nl = I18N.nl || {}; I18N.en = I18N.en || {};
+      Object.assign(I18N.nl,{v8preview:'V8 Preview', v751Title:'V8 Preview Polish'});
+      Object.assign(I18N.en,{v8preview:'V8 Preview', v751Title:'V8 Preview Polish'});
+    }
+
+    function ensure751(){
+      state.v751 = state.v751 && typeof state.v751==='object' ? state.v751 : {};
+      const s = state.v751;
+      s.schemaVersion = s.schemaVersion || 'v7.5.1';
+      s.lastScan = s.lastScan || null;
+      s.showDetails = !!s.showDetails;
+      s.lastCopied = s.lastCopied || null;
+      s.advicePolicy = s.advicePolicy || 'calm';
+      return s;
+    }
+    function text751(x){ try{return JSON.stringify(x||{}).toLowerCase();}catch(_){return String(x||'').toLowerCase();} }
+    function getAgfSignals751(){ return A751(state.agfPro&&state.agfPro.signals).concat(A751(state.agfSignals),A751(state.agfProductSignals),A751(state.agfAdviceSignals)).filter(Boolean); }
+    function getTasks751(){ return A751(state.tasks); }
+    function openTasks751(){ return getTasks751().filter(t=>!/voltooid|done|completed|overgeslagen|skipped/i.test(String(t.status||''))); }
+    function getCleaning751(){ return A751(state.cleaning&&state.cleaning.items).concat(A751(state.storeMap&&state.storeMap.items), A751(state.storeMap)).filter(Boolean); }
+    function getComms751(){ return A751(state.communications); }
+    function getOrders751(){ return A751(state.inventoryOrders).concat(A751(state.orderItems), A751(state.orders)).filter(Boolean); }
+    function getRoute751(){ return A751(state.workdayRoute||state.dayRoute||state.v684&&state.v684.route||state.v685&&state.v685.route||state.workdaySeq&&state.workdaySeq.tasks); }
+
+    function labelForCount751(total){
+      if(total>=6) return {label:L751('structureel','structural'), confidence:L751('hoog','high'), tone:'bad'};
+      if(total>=3) return {label:L751('terugkerend','recurring'), confidence:L751('middel','medium'), tone:'warn'};
+      if(total>=2) return {label:L751('monitoren','monitor'), confidence:L751('laag-middel','low-medium'), tone:'info'};
+      return {label:L751('eenmalig','single'), confidence:L751('laag','low'), tone:'neutral'};
+    }
+    function agfPatterns751(){
+      const map = {};
+      getAgfSignals751().slice(-500).forEach(sig=>{
+        const product = String(sig.product || sig.name || sig.item || sig.title || '').trim();
+        if(!product) return;
+        const t = text751(sig);
+        let kind = L751('algemeen signaal','general signal');
+        if(/leeg|nee|no.?sales|empty/.test(t)) kind=L751('leeg / nee-verkoop','empty / no-sales');
+        else if(/bijvul|hardloper|refill|fast/.test(t)) kind=L751('bijvullen / hardloper','refill / fast mover');
+        else if(/over|restant|overstock|leftover/.test(t)) kind=L751('overvoorraad / restanten','overstock / leftovers');
+        else if(/kwaliteit|quality|derving/.test(t)) kind=L751('kwaliteit','quality');
+        else if(/morgen|tomorrow/.test(t)) kind=L751('aandacht morgen','attention tomorrow');
+        map[product] = map[product] || {product,total:0,kinds:{},last:sig};
+        map[product].total += 1;
+        map[product].kinds[kind] = (map[product].kinds[kind]||0)+1;
+        map[product].last = sig;
+      });
+      return Object.values(map).map(row=>{
+        const top = Object.entries(row.kinds).sort((a,b)=>b[1]-a[1])[0] || [L751('algemeen signaal','general signal'),row.total];
+        const meta = labelForCount751(row.total);
+        const advice = top[0].toLowerCase().includes('leeg') ? L751('Controleer voorraad en bestelling; voorraadbeeld blijft leidend.','Check stock and order; actual stock remains leading.') :
+          top[0].toLowerCase().includes('bijvullen') ? L751('Plan eventueel een korte naloop voor hardlopers.','Optionally plan a short fast-mover refill check.') :
+          top[0].toLowerCase().includes('over') ? L751('Niet automatisch verhogen; monitor restanten en verkoopdruk.','Do not automatically increase; monitor leftovers and sales pressure.') :
+          top[0].toLowerCase().includes('kwaliteit') ? L751('Eerst kwaliteit beoordelen; besteladvies niet automatisch volgen.','Assess quality first; do not automatically follow order advice.') :
+          L751('Blijf monitoren en bouw meer data op.','Keep monitoring and build more data.');
+        return {...row, kind:top[0], count:top[1], label:meta.label, confidence:meta.confidence, tone:meta.tone, advice};
+      }).sort((a,b)=>b.total-a.total).slice(0,10);
+    }
+    function haccpSignals751(){
+      const open = openTasks751();
+      const urgent = open.filter(t=>/kritiek|urgent|hoog|critical|high/i.test(String(t.priority||t.status||'')) || /temperatuur|koeling|schimmel|nacontrole|veilig/i.test(text751(t)));
+      const deferred = getTasks751().filter(t=>/uitgesteld|deferred/i.test(String(t.status||'')));
+      return {open:open.length, urgent:urgent.length, deferred:deferred.length, confidence: open.length ? L751('middel','medium') : L751('laag','low')};
+    }
+    function storeRisks751(){
+      return getCleaning751().map(item=>{
+        const t = text751(item);
+        let level='baseline', tone='good', reason=L751('nieuw of normaal punt','new or normal point'), confidence=L751('laag','low');
+        if(/gradatie\s*3|mold3|schimmel.*3|kritiek|critical/.test(t)){ level='kritiek'; tone='bad'; reason=L751('schimmel gradatie 3 of kritiek signaal','mold gradation 3 or critical signal'); confidence=L751('hoog','high'); }
+        else if(/gradatie\s*2|mold2|schimmel.*2|urgent/.test(t)){ level='urgent'; tone='bad'; reason=L751('schimmel gradatie 2 of urgent signaal','mold gradation 2 or urgent signal'); confidence=L751('hoog','high'); }
+        else if(/nacontrole|follow.?up/.test(t)){ level='nacontrole'; tone='warn'; reason=L751('nacontrole nodig','follow-up check needed'); confidence=L751('middel','medium'); }
+        else if(/gradatie\s*1|mold1|schimmel.*1|monitor/.test(t)){ level='monitor'; tone='info'; reason=L751('gradatie 1 of monitorpunt','gradation 1 or monitoring point'); confidence=L751('laag-middel','low-medium'); }
+        else if(/aandacht|vuil|dirty|attention/.test(t)){ level='aandacht'; tone='warn'; reason=L751('aandacht of vervuiling','attention or dirty signal'); confidence=L751('middel','medium'); }
+        return {item, label:item.label||item.name||item.title||item.location||L751('Store Map punt','Store Map item'), level, tone, reason, confidence};
+      }).filter(x=>x.level!=='baseline').sort((a,b)=>({bad:0,warn:1,info:2,good:3}[a.tone]-({bad:0,warn:1,info:2,good:3}[b.tone]))).slice(0,8);
+    }
+    function routeStats751(){
+      const route = getRoute751();
+      const done = route.filter(x=>/done|voltooid|afgerond/i.test(String(x.status||''))).length;
+      const measured = route.filter(x=>x.measuredMinutes || x.actualMinutes || x.startedAt).length;
+      const open = route.length ? route.length-done : 0;
+      return {route:route.length, done, measured, open, confidence: measured>=3 ? L751('middel','medium') : L751('laag','low')};
+    }
+    function adaptivePlanner751(){
+      const agf = agfPatterns751();
+      const h = haccpSignals751();
+      const risks = storeRisks751();
+      const route = routeStats751();
+      let score = 84, tone='good', status=L751('normaal','normal'), advice=L751('Houd AGF/HACCP als hoofdroute aan en werk rustig volgens je dagroute.','Keep AGF/HACCP as your main route and work calmly through your day route.'), reason=L751('Geen sterke verstorende signalen gevonden.','No strong disruptive signals found.'), confidence=L751('laag','low');
+      if(h.urgent){ score-=Math.min(20,h.urgent*7); tone='warn'; status=L751('HACCP vraagt aandacht','HACCP needs attention'); advice=L751('Controleer eerst de echte HACCP-urgenties en houd Wat Nu rustig.','Check real HACCP urgencies first and keep What Now calm.'); reason=`${h.urgent} ${L751('urgente HACCP-taak/taken','urgent HACCP task(s)')}`; confidence=L751('middel','medium'); }
+      if(risks.some(r=>r.level==='kritiek'||r.level==='urgent')){ score-=12; tone='warn'; status=L751('Store Map vraagt aandacht','Store Map needs attention'); advice=L751('Pak alleen gradatie 2/3 of nacontrole direct op; baseline blijft rustig.','Only handle gradation 2/3 or follow-up immediately; baseline stays calm.'); reason=L751('Store Map heeft urgent/kritiek risicosignaal.','Store Map has an urgent/critical risk signal.'); confidence=L751('hoog','high'); }
+      const recurring = agf.filter(p=>p.total>=3);
+      if(recurring.length){ score-=4; if(tone==='good') tone='info'; status=L751('AGF heeft terugkerende signalen','AGF has recurring signals'); advice=L751('Gebruik dit als controleadvies, niet als automatisch bestelbesluit.','Use this as check advice, not an automatic ordering decision.'); reason=`${recurring.length} ${L751('terugkerend(e) AGF-signaal/signalen','recurring AGF signal(s)')}`; confidence=recurring.some(p=>p.total>=6)?L751('hoog','high'):L751('middel','medium'); }
+      if(route.measured<2 && route.route){ score-=1; }
+      return {score:Math.max(50,Math.min(98,score)), tone, status, advice, reason, confidence};
+    }
+    function measureTip751(){
+      const route = routeStats751();
+      const agf = agfPatterns751();
+      if(route.measured < 2) return {title:L751('Meetadvies','Measure tip'), text:L751('Meet eventueel één taak als je tijd hebt: AGF vullen of vracht lossen. Niet verplicht.','Optionally measure one task if you have time: AGF filling or truck unloading. Not required.'), reason:L751('Er is nog weinig gemeten data voor betrouwbare voorspellingen.','There is still little measured data for reliable predictions.'), confidence:L751('laag','low')};
+      if(agf.some(p=>p.total>=3)) return {title:L751('Meetadvies','Measure tip'), text:L751('Meet binnenkort één AGF-vulfase om het patroon beter te begrijpen.','Measure one AGF filling phase soon to better understand the pattern.'), reason:L751('AGF heeft terugkerende signalen.','AGF has recurring signals.'), confidence:L751('middel','medium')};
+      return {title:L751('Meetadvies','Measure tip'), text:L751('Geen meetdruk. Afvinken is genoeg voor normale werkdagen.','No measurement pressure. Checking off is enough for normal workdays.'), reason:L751('Er zijn geen sterke patronen die extra meting vragen.','There are no strong patterns requiring extra measurement.'), confidence:L751('laag','low')};
+    }
+    function v8Coach751(){
+      const agf=agfPatterns751(); const risks=storeRisks751(); const h=haccpSignals751();
+      if(risks.some(r=>/urgent|kritiek|nacontrole/.test(r.level))) return {title:L751('Leeradvies: Signaleren en opvolgen','Learning advice: Spotting and following up'), text:L751('Store Map-signalen vragen zorgvuldige opvolging zonder alles als achterstand te behandelen.','Store Map signals require careful follow-up without treating everything as overdue.'), route:'coaching', reason:L751('Store Map heeft actieve risicosignalen.','Store Map has active risk signals.'), confidence:L751('middel','medium')};
+      if(agf.some(p=>p.total>=3)) return {title:L751('Leeradvies: AGF patronen begrijpen','Learning advice: Understanding AGF patterns'), text:L751('AGF-signalen komen terug. Gebruik voorraad, kwaliteit en verkoopdruk samen.','AGF signals recur. Use stock, quality and sales pressure together.'), route:'coaching', reason:L751('Er zijn terugkerende AGF-signalen.','There are recurring AGF signals.'), confidence:L751('middel','medium')};
+      if(h.deferred) return {title:L751('Leeradvies: Prioriteren onder werkdruk','Learning advice: Prioritizing under pressure'), text:L751('Uitgestelde taken zijn normaal, maar vragen een duidelijke keuze en opvolging.','Deferred tasks are normal, but need a clear choice and follow-up.'), route:'coaching', reason:L751('Er zijn uitgestelde HACCP-taken.','There are deferred HACCP tasks.'), confidence:L751('laag-middel','low-medium')};
+      return {title:L751('Leeradvies: Sterke basis vasthouden','Learning advice: Keep a strong foundation'), text:L751('Je hoofdflow lijkt rustig. Blijf werken met kwaliteitsronde, HACCP en AGF-naloop.','Your main flow looks calm. Keep working with quality round, HACCP and AGF follow-up.'), route:'coaching', reason:L751('Geen dominante risico- of patroonwaarschuwing.','No dominant risk or pattern warning.'), confidence:L751('laag','low')};
+    }
+    function readiness751(){
+      const checks = [
+        {name:'V7 hoofdflow', ok:true, detail:L751('Vandaag/Wat Nu blijven leidend en rustig','Today/What Now remain leading and calm')},
+        {name:'Advies met reden', ok:true, detail:L751('Adaptive advies toont reden + zekerheid','Adaptive advice shows reason + confidence')},
+        {name:'AGF patronen', ok:true, detail:`${agfPatterns751().length} ${L751('patroonregels','pattern rows')}`},
+        {name:'HACCP prioriteit', ok:true, detail:`${haccpSignals751().urgent} ${L751('urgenties','urgencies')}`},
+        {name:'Store Map risico', ok:true, detail:`${storeRisks751().length} ${L751('risicosignalen','risk signals')}`},
+        {name:'Meetadvies subtiel', ok:true, detail:L751('timeren blijft optioneel','timing remains optional')},
+        {name:'Shiftleider standalone', ok:true, detail:L751('niet geïntegreerd in normale hoofdflow','not integrated into normal main flow')},
+        {name:'PWA/cache', ok:APP.cache==='rich-cmd-cache-v751', detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score = Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return {checks,score};
+    }
+    function report751(){
+      const ap=adaptivePlanner751(), tip=measureTip751(), coach=v8Coach751(), ready=readiness751();
+      const pats=agfPatterns751(), risks=storeRisks751(), h=haccpSignals751();
+      return `RICH CMD v7.5.1 — V8 Preview Polish & Adaptive Advice Tuning\nDatum: ${fmt751(now751())}\n\nAdaptive Planner\n- Status: ${ap.status}\n- Advies: ${ap.advice}\n- Reden: ${ap.reason}\n- Zekerheid: ${ap.confidence}\n- Score: ${ap.score}/100\n\nAGF patronen\n${pats.length?pats.slice(0,8).map(p=>`- ${p.product}: ${p.label} · ${p.kind} · ${p.total} signalen · zekerheid ${p.confidence} — ${p.advice}`).join('\n'):'- Nog geen duidelijke patronen'}\n\nHACCP\n- Open: ${h.open}\n- Urgent: ${h.urgent}\n- Uitgesteld: ${h.deferred}\n\nStore Map risico\n${risks.length?risks.map(r=>`- ${r.label}: ${r.level} — ${r.reason} · zekerheid ${r.confidence}`).join('\n'):'- Geen actieve risico-preview'}\n\n${tip.title}\n- ${tip.text}\n- Reden: ${tip.reason}\n- Zekerheid: ${tip.confidence}\n\n${coach.title}\n- ${coach.text}\n- Reden: ${coach.reason}\n- Zekerheid: ${coach.confidence}\n\nReadiness ${ready.score}/100\n${ready.checks.map(c=>`- ${c.name}: ${c.ok?'OK':'Check'} (${c.detail})`).join('\n')}\n\nBeleid:\n- V8 Preview blijft optioneel.\n- V7 Command Center blijft leidend.\n- Wat Nu blijft rustig en maximaal 3 stappen.\n- Adviezen zijn advies-light; jouw oordeel en protocol blijven leidend.`;
+    }
+
+    function hero751(){ const ap=adaptivePlanner751(); return `<div class="hero v751-hero"><div class="flex-line"><div><span class="chip">RICH CMD v7.5.1</span><h2>${E751(L751('V8 Preview Polish','V8 Preview Polish'))}</h2><p>${E751(L751('Adaptive Retail Intelligence als rustige preview: advies met reden, zekerheid en meettips zonder de V7-hoofdflow te verstoren.','Adaptive Retail Intelligence as a calm preview: advice with reason, confidence and measuring tips without disrupting the V7 main flow.'))}</p></div><div class="v751-score ${E751(ap.tone)}"><strong>${ap.score}</strong><span>V8 preview</span></div></div><div class="btn-row mt"><button class="btn primary" data-action="v751-run-scan">${E751(L751('Scan preview','Scan preview'))}</button><button class="btn" data-action="v751-copy-report">${E751(L751('Kopieer rapport','Copy report'))}</button><button class="btn" data-action="v751-toggle-details">${ensure751().showDetails?E751(L751('Details verbergen','Hide details')):E751(L751('Details tonen','Show details'))}</button></div></div>`; }
+    function adaptiveCard751(){ const ap=adaptivePlanner751(); return `<div class="card v751-card"><div class="flex-line"><div><span class="chip">${E751(L751('Vandaag voorspeld','Today predicted'))}</span><h3>${E751(ap.status)}</h3><p class="muted small">${E751(ap.advice)}</p></div><span class="pill ${E751(ap.tone)}">${ap.score}/100</span></div><div class="grid grid-2 mt"><div class="soft card"><strong>${E751(L751('Reden','Reason'))}</strong><p class="tiny muted">${E751(ap.reason)}</p></div><div class="soft card"><strong>${E751(L751('Zekerheid','Confidence'))}</strong><p class="tiny muted">${E751(ap.confidence)}</p></div></div></div>`; }
+    function patternsCard751(){ const pats=agfPatterns751(); const risks=storeRisks751(); const h=haccpSignals751(); return `<div class="card v751-card"><div class="flex-line"><div><span class="chip">${E751(L751('Patronen','Patterns'))}</span><h3>${E751(L751('Voorzichtig gelabeld','Cautiously labeled'))}</h3><p class="muted small">${E751(L751('De app maakt onderscheid tussen eenmalig, monitoren, terugkerend en structureel.','The app distinguishes single, monitor, recurring and structural.'))}</p></div><span class="pill info">${pats.length+risks.length+h.urgent}</span></div><div class="list mt">${pats.slice(0,5).map(p=>`<div class="list-item compact v751-row ${E751(p.tone)}"><span><strong>${E751(p.product)}</strong><br><span class="tiny muted">${E751(p.label)} · ${E751(p.kind)} · ${p.total} ${E751(L751('signalen','signals'))}</span><br><span class="tiny muted">${E751(L751('Zekerheid','Confidence'))}: ${E751(p.confidence)}</span></span><span class="pill ${E751(p.tone)}">${E751(p.label)}</span></div>`).join('') || `<div class="list-item compact"><span>${E751(L751('Nog te weinig AGF-data voor duidelijke patronen.','Not enough AGF data for clear patterns yet.'))}</span><span class="pill neutral">${E751(L751('te weinig data','too little data'))}</span></div>`}${risks.slice(0,3).map(r=>`<div class="list-item compact v751-row ${E751(r.tone)}"><span><strong>${E751(r.label)}</strong><br><span class="tiny muted">${E751(r.reason)} · ${E751(L751('zekerheid','confidence'))}: ${E751(r.confidence)}</span></span><span class="pill ${E751(r.tone)}">${E751(r.level)}</span></div>`).join('')}</div></div>`; }
+    function tipCoachCard751(){ const tip=measureTip751(), coach=v8Coach751(); return `<div class="grid grid-2"><div class="card v751-card"><span class="chip">${E751(L751('Meetadvies','Measuring tip'))}</span><h3>${E751(tip.title)}</h3><p class="muted small">${E751(tip.text)}</p><div class="soft card mt"><strong>${E751(L751('Waarom','Why'))}</strong><p class="tiny muted">${E751(tip.reason)} · ${E751(L751('zekerheid','confidence'))}: ${E751(tip.confidence)}</p></div></div><div class="card v751-card"><span class="chip">${E751(L751('V8 Coach Preview','V8 Coach Preview'))}</span><h3>${E751(coach.title)}</h3><p class="muted small">${E751(coach.text)}</p><div class="btn-row mt"><button class="btn" data-route="${E751(coach.route)}">${E751(L751('Open Coaching','Open Coaching'))}</button></div><p class="tiny muted mt">${E751(L751('Reden','Reason'))}: ${E751(coach.reason)} · ${E751(L751('Zekerheid','Confidence'))}: ${E751(coach.confidence)}</p></div></div>`; }
+    function readinessCard751(){ const r=readiness751(); return `<div class="card v751-card"><div class="flex-line"><div><span class="chip">${E751(L751('V8 readiness','V8 readiness'))}</span><h3>${r.score}/100</h3><p class="muted small">${E751(L751('Controleert of de preview rustig, optioneel en technisch voorbereid blijft.','Checks whether the preview remains calm, optional and technically prepared.'))}</p></div><span class="pill ${r.score>=90?'good':'warn'}">${r.score}/100</span></div><div class="list mt">${r.checks.map(c=>`<div class="list-item compact"><span><strong>${E751(c.name)}</strong><br><span class="tiny muted">${E751(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div></div>`; }
+    function explanationCard751(){ return `<div class="card v751-card"><h3>${E751(L751('Hoe V8 Preview werkt','How V8 Preview works'))}</h3><div class="list"><div class="list-item compact"><span>${E751(L751('V8 geeft advies-light. Het neemt geen automatische beslissingen over planning, bestellen of HACCP.','V8 gives light advice. It does not make automatic decisions about planning, ordering or HACCP.'))}</span></div><div class="list-item compact"><span>${E751(L751('Elk advies toont een reden en zekerheid, zodat je kunt zien of er genoeg data is.','Every advice shows a reason and confidence so you can see whether there is enough data.'))}</span></div><div class="list-item compact"><span>${E751(L751('Wat Nu blijft maximaal 3 stappen en blijft gericht op jouw AGF/HACCP-hoofdflow.','What Now stays at max 3 steps and remains focused on your AGF/HACCP main flow.'))}</span></div><div class="list-item compact"><span>${E751(L751('Meetadvies blijft optioneel: afvinken en notities zijn genoeg voor normale werkdagen.','Measuring advice stays optional: check-offs and notes are enough for normal workdays.'))}</span></div></div></div>`; }
+    function renderV8Preview751(){ ensure751(); return `<div class="page v751-page">${hero751()}${adaptiveCard751()}${patternsCard751()}${tipCoachCard751()}<div class="grid grid-2">${readinessCard751()}${explanationCard751()}</div>${ensure751().showDetails?`<div class="card v751-card"><h3>${E751(L751('Previewdetails','Preview details'))}</h3><pre class="pre-wrap small">${E751(report751())}</pre></div>`:''}</div>`; }
+    function smallV8Signal751(){ const ap=adaptivePlanner751(); if(ap.tone==='good' && ap.confidence===L751('laag','low')) return ''; return `<div class="card v751-small-signal"><div class="flex-line"><div><span class="chip">V8</span><strong>${E751(ap.status)}</strong><p class="tiny muted">${E751(ap.reason)}</p></div><button class="btn small" data-route="v8preview">${E751(L751('Open','Open'))}</button></div></div>`; }
+    function diagnosticsCard751(){ const r=readiness751(), ap=adaptivePlanner751(); return `<div class="card v751-card"><div class="flex-line"><div><span class="chip">v7.5.1</span><h3>${E751(L751('V8 Preview checks','V8 Preview checks'))}</h3><p class="muted small">${E751(L751('Controleert adviesdosering, reden/zekerheid, patronen en rustige V7-flow.','Checks advice dosing, reason/confidence, patterns and calm V7 flow.'))}</p></div><span class="pill ${r.score>=90?'good':'warn'}">${r.score}/100</span></div><div class="list mt"><div class="list-item compact"><span><strong>Adaptive Planner</strong><br><span class="tiny muted">${E751(ap.status)} · ${E751(ap.reason)} · ${E751(ap.confidence)}</span></span><span class="pill ${E751(ap.tone)}">OK</span></div>${r.checks.map(c=>`<div class="list-item compact"><span><strong>${E751(c.name)}</strong><br><span class="tiny muted">${E751(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><button class="btn mt" data-action="v751-copy-report">${E751(L751('Kopieer V8-polishrapport','Copy V8 polish report'))}</button></div>`; }
+
+    const prevPage751 = typeof renderPage==='function' ? renderPage : null;
+    if(prevPage751) renderPage = window.renderPage = function(){ return state.route==='v8preview' ? renderV8Preview751() : prevPage751(); };
+    const prevToday751 = typeof renderToday==='function' ? renderToday : null;
+    if(prevToday751) renderToday = window.renderToday = function(){ const base=prevToday751()||''; return `${base}${smallV8Signal751()}`; };
+    const prevSettings751 = typeof renderSettings==='function' ? renderSettings : null;
+    if(prevSettings751) renderSettings = window.renderSettings = function(){ const base=prevSettings751()||''; return `${base}<div class="grid grid-2 mt v751-settings">${readinessCard751()}${explanationCard751()}</div>`; };
+    const prevDiagnostics751 = typeof renderDiagnostics==='function' ? renderDiagnostics : null;
+    if(prevDiagnostics751) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics751()||''; return `<div class="grid diagnostics-v751">${diagnosticsCard751()}</div>${base}`; };
+    const prevVisual751 = typeof renderVisual==='function' ? renderVisual : null;
+    if(prevVisual751) renderVisual = window.renderVisual = function(){ const base=prevVisual751()||''; return `<div class="grid grid-2 v751-visual">${adaptiveCard751()}${patternsCard751()}</div>${base}`; };
+
+    const prevHandle751 = typeof handleAction==='function' ? handleAction : null;
+    if(prevHandle751) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v751-run-scan'){ const s=ensure751(); s.lastScan={at:now751(), readiness:readiness751().score, adaptive:adaptivePlanner751().score}; save751(); toast751(L751('V8 Preview Polish scan uitgevoerd','V8 Preview Polish scan completed'),'good'); render751(); return; }
+      if(a==='v751-copy-report'){ ensure751().lastCopied=now751(); save751(); copy751(report751()); return; }
+      if(a==='v751-toggle-details'){ ensure751().showDetails=!ensure751().showDetails; save751(); render751(); return; }
+      return prevHandle751(a,el,e);
+    };
+
+    ensure751(); save751();
+  }catch(err){ console.error('v7.5.1 V8 Preview Polish patch failed', err); }
+})();
+
+
+/* -----------------------------------------------------------------------------
+   RICH CMD v7.5.2 — PWA/Offline & Update Reliability Pro
+   Doel: updatecenter, offline-status, veilige updateflow, force-policy voorbereiding.
+----------------------------------------------------------------------------- */
+(function(){
+  try{
+    APP.version = 'v7.5.2';
+    APP.cache = 'rich-cmd-cache-v752';
+
+    const L752 = (nl,en)=> currentLang()==='en' ? (en||nl) : nl;
+    const E752 = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const now752 = () => new Date().toISOString();
+    const fmt752 = iso => { try{return new Date(iso).toLocaleString(currentLang()==='en'?'en-GB':'nl-NL',{dateStyle:'short',timeStyle:'short'});}catch(e){return '';} };
+    const toast752 = (m,type='good') => typeof toast==='function' ? toast(m,type) : console.log(m);
+    const render752 = () => typeof render==='function' ? render() : null;
+    const copy752 = (text) => {
+      if(typeof copyText==='function') return copyText(text);
+      if(navigator.clipboard) navigator.clipboard.writeText(text).then(()=>toast752(L752('Gekopieerd','Copied'),'good'));
+    };
+    const uid752 = (p='id') => (typeof uid==='function'?uid(p):(p+'_'+Math.random().toString(36).slice(2,8)+'_'+Date.now().toString(36)));
+    const clone752 = obj => JSON.parse(JSON.stringify(obj));
+
+    function ensure752(){
+      state.pwaPro = state.pwaPro || {};
+      const s = state.pwaPro;
+      s.schema = 'v7.5.2';
+      s.checks = Array.isArray(s.checks) ? s.checks : [];
+      s.restorePoints = Array.isArray(s.restorePoints) ? s.restorePoints : [];
+      s.policy = s.policy || { minSupportedVersion:'v7.0.0', forceBelowVersion:'', warnOldVersions:true, forceUpdate:false };
+      return s;
+    }
+    function save752(){ ensure752(); if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }
+
+    const ASSETS752 = ['./','./index.html','./index.html?v=752','./styles.css?v=752','./vro-data.js?v=752','./app.js?v=752','./manifest.json?v=752','./version.json','./icon-192.png','./icon-512.png'];
+
+    function versionCompare752(a,b){
+      const pa=String(a||'').replace(/^v/,'').split('.').map(n=>parseInt(n,10)||0);
+      const pb=String(b||'').replace(/^v/,'').split('.').map(n=>parseInt(n,10)||0);
+      for(let i=0;i<Math.max(pa.length,pb.length);i++){ const x=pa[i]||0,y=pb[i]||0; if(x>y) return 1; if(x<y) return -1; }
+      return 0;
+    }
+    function policyFromVersion752(v){
+      const base = ensure752().policy;
+      if(v){
+        base.minSupportedVersion = v.minSupportedVersion || base.minSupportedVersion || 'v7.0.0';
+        base.forceBelowVersion = v.forceBelowVersion || '';
+        base.forceUpdate = !!(v.forceBelowVersion && versionCompare752(APP.version, v.forceBelowVersion)<0);
+        base.channel = v.channel || 'stable';
+        base.latestVersion = v.latestVersion || v.version || '';
+        base.updatePolicy = v.updatePolicy || '';
+      }
+      return base;
+    }
+    function swState752(){
+      const active = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+      return {supported:'serviceWorker' in navigator, active};
+    }
+    async function inspectCaches752(){
+      const result = {supported:'caches' in window, keys:[], current:false, currentCount:0, old:[]};
+      if(!result.supported) return result;
+      try{
+        result.keys = await caches.keys();
+        result.current = result.keys.includes(APP.cache);
+        result.old = result.keys.filter(k=>k.includes('rich-cmd-cache') && k!==APP.cache);
+        if(result.current){
+          const c = await caches.open(APP.cache);
+          const requests = await c.keys();
+          result.currentCount = requests.length;
+        }
+      }catch(e){ result.error=String(e.message||e); }
+      return result;
+    }
+    async function pwaSnapshot752(){
+      const s = ensure752();
+      const cachesInfo = await inspectCaches752();
+      let regInfo = {hasRegistration:false, waiting:false, installing:false};
+      try{
+        if('serviceWorker' in navigator){
+          const reg = await navigator.serviceWorker.getRegistration();
+          regInfo = {hasRegistration:!!reg, waiting:!!(reg&&reg.waiting), installing:!!(reg&&reg.installing), scope:reg&&reg.scope};
+        }
+      }catch(e){ regInfo.error=String(e.message||e); }
+      const snap={
+        at: now752(),
+        appVersion: APP.version,
+        cache: APP.cache,
+        online: navigator.onLine,
+        sw: swState752(),
+        registration: regInfo,
+        caches: cachesInfo,
+        offlineReady: !!(cachesInfo.current && cachesInfo.currentCount>=5),
+        lastVersionCheck: s.lastVersionCheck||null,
+        latestVersion: (s.latestVersion && (s.latestVersion.latestVersion||s.latestVersion.version)) || '',
+        policy: s.policy
+      };
+      s.lastSnapshot=snap;
+      return snap;
+    }
+    async function checkUpdate752(){
+      const s=ensure752();
+      const out={at:now752(), ok:false, online:navigator.onLine, current:APP.version, cache:APP.cache};
+      try{
+        const res = await fetch('./version.json?check=' + Date.now(), {cache:'no-store'});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data = await res.json();
+        out.ok=true; out.version=data.version || data.latestVersion || ''; out.latestVersion=data.latestVersion||data.version||''; out.cacheOnline=data.cache||''; out.assetVersion=data.assetVersion||''; out.build=data.build||''; out.minSupportedVersion=data.minSupportedVersion||''; out.forceBelowVersion=data.forceBelowVersion||''; out.channel=data.channel||''; out.updatePolicy=data.updatePolicy||''; out.updateAvailable = !!out.latestVersion && versionCompare752(out.latestVersion, APP.version)>0; out.sameVersion = out.latestVersion===APP.version;
+        s.latestVersion=data;
+        policyFromVersion752(data);
+        try{ if('serviceWorker' in navigator){ const reg=await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); out.registrationUpdateChecked=true; out.waiting=!!reg.waiting; } }catch(e){ out.registrationError=String(e.message||e); }
+      }catch(e){ out.error=String(e.message||e); }
+      s.lastVersionCheck=out.at; s.checks.unshift(out); s.checks=s.checks.slice(0,20); save752(); return out;
+    }
+    async function prepareOffline752(){
+      const s=ensure752();
+      const run={at:now752(), type:'prepare-offline', ok:false, assets:ASSETS752.length};
+      try{
+        if('caches' in window){ const c=await caches.open(APP.cache); await c.addAll(ASSETS752); run.ok=true; }
+        if(navigator.serviceWorker && navigator.serviceWorker.controller){ navigator.serviceWorker.controller.postMessage({type:'CACHE_CORE'}); run.swMessage=true; }
+        s.offlinePreparedAt=run.at;
+      }catch(e){ run.error=String(e.message||e); }
+      s.checks.unshift(run); s.checks=s.checks.slice(0,20); save752(); return run;
+    }
+    async function cleanupCaches752(){
+      const s=ensure752();
+      const run={at:now752(), type:'cleanup-caches', deleted:0, ok:false};
+      try{
+        if('caches' in window){
+          const keys=await caches.keys();
+          await Promise.all(keys.filter(k=>k.includes('rich-cmd-cache') && k!==APP.cache).map(k=>{ run.deleted++; return caches.delete(k); }));
+          run.ok=true;
+        }
+        s.lastCacheCleanup=run.at;
+      }catch(e){ run.error=String(e.message||e); }
+      s.checks.unshift(run); s.checks=s.checks.slice(0,20); save752(); return run;
+    }
+    function makeRestorePoint752(label){
+      const s=ensure752();
+      const snapshot=clone752(state);
+      const rp={id:uid752('rp752'), label:label||L752('Herstelpunt vóór update','Restore point before update'), createdAt:now752(), version:APP.version, size:JSON.stringify(snapshot).length, snapshot};
+      s.restorePoints.unshift(rp); s.restorePoints=s.restorePoints.slice(0,8);
+      state.settings = state.settings || {}; state.settings.lastBackup=rp.createdAt;
+      save752(); return rp;
+    }
+    async function activateUpdate752(){
+      const s=ensure752();
+      const run={at:now752(), type:'activate-update', ok:false};
+      try{
+        if('serviceWorker' in navigator){
+          const reg=await navigator.serviceWorker.getRegistration();
+          if(reg && reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); run.ok=true; run.waiting=true; }
+          else { run.ok=true; run.waiting=false; run.message=L752('Geen wachtende service worker gevonden. Herladen kan genoeg zijn.','No waiting service worker found. Reloading may be enough.'); }
+        } else { run.message=L752('Service worker niet ondersteund.','Service worker not supported.'); }
+      }catch(e){ run.error=String(e.message||e); }
+      s.checks.unshift(run); s.checks=s.checks.slice(0,20); save752(); return run;
+    }
+    function pwaChecks752(snapshot){
+      const snap=snapshot || ensure752().lastSnapshot || {};
+      return [
+        {name:L752('Versie','Version'), ok:APP.version==='v7.5.2', detail:APP.version},
+        {name:L752('Cacheversie','Cache version'), ok:APP.cache==='rich-cmd-cache-v752', detail:APP.cache},
+        {name:L752('Service worker ondersteund','Service worker supported'), ok:!!(snap.sw?snap.sw.supported:('serviceWorker' in navigator)), detail:(snap.sw&&snap.sw.active)?L752('actief','active'):L752('ondersteund / mogelijk nog niet actief','supported / may not be active yet')},
+        {name:L752('Offline cache','Offline cache'), ok:!!snap.offlineReady, detail:snap.offlineReady?L752('offline voorbereid','offline prepared'):L752('offline voorbereiden aanbevolen','offline preparation recommended')},
+        {name:L752('Oude caches','Old caches'), ok:!((snap.caches&&snap.caches.old&&snap.caches.old.length)), detail:`${(snap.caches&&snap.caches.old&&snap.caches.old.length)||0} ${L752('oude cache(s)','old cache(s)')}`},
+        {name:L752('Version.json','Version.json'), ok:!!ensure752().lastVersionCheck, detail:ensure752().lastVersionCheck?fmt752(ensure752().lastVersionCheck):L752('nog niet gecontroleerd','not checked yet')},
+        {name:L752('Backupadvies','Backup advice'), ok:!!(state.settings&&state.settings.lastBackup), detail:(state.settings&&state.settings.lastBackup)?fmt752(state.settings.lastBackup):L752('maak herstelpunt vóór grote update','make a restore point before major update')},
+        {name:L752('Force-update beleid','Force-update policy'), ok:true, detail:ensure752().policy.forceBelowVersion?`${L752('force onder','force below')} ${ensure752().policy.forceBelowVersion}`:L752('voorbereid, niet actief','prepared, not active')}
+      ];
+    }
+    function score752(checks){ return Math.round((checks.filter(c=>c.ok).length / Math.max(1,checks.length))*100); }
+    function statusPill752(ok){ return `<span class="pill ${ok?'good':'warn'}">${ok?'OK':'Check'}</span>`; }
+    function pwaReport752(){
+      const s=ensure752(); const snap=s.lastSnapshot||{}; const checks=pwaChecks752(snap);
+      const latest=s.latestVersion||{};
+      return `RICH CMD v7.5.2 — PWA/Offline & Update Reliability Pro
+Datum: ${fmt752(now752())}
+
+Versie
+- Huidig: ${APP.version}
+- Cache: ${APP.cache}
+- Nieuwste online: ${latest.latestVersion||latest.version||'nog niet gecontroleerd'}
+- Laatste updatecheck: ${s.lastVersionCheck?fmt752(s.lastVersionCheck):'nog niet gecontroleerd'}
+
+Offline/PWA
+- Online: ${navigator.onLine?'ja':'nee'}
+- Service worker: ${(snap.sw&&snap.sw.active)?'actief':((snap.sw&&snap.sw.supported)?'ondersteund':'niet ondersteund')}
+- Offline gereed: ${snap.offlineReady?'ja':'nee'}
+- Oude caches: ${(snap.caches&&snap.caches.old&&snap.caches.old.length)||0}
+
+Versiebeleid
+- Minimaal ondersteund: ${s.policy.minSupportedVersion||'v7.0.0'}
+- Force below: ${s.policy.forceBelowVersion||'uit'}
+- Force update actief: ${s.policy.forceUpdate?'ja':'nee'}
+- Kanaal: ${s.policy.channel||'stable'}
+
+Checks (${score752(checks)}/100)
+${checks.map(c=>`- ${c.name}: ${c.ok?'OK':'Check'} (${c.detail})`).join('\n')}
+
+Advies
+- Maak vóór grote updates een herstelpunt.
+- Gebruik Update activeren pas nadat de nieuwe versie online geladen is.
+- Offline gebruik werkt pas goed nadat Offline voorbereiden één keer online is uitgevoerd.
+- Force-update beleid is voorbereid voor latere V8-versies, maar nu niet streng actief.`;
+    }
+    function pwaStatusCard752(){ const s=ensure752(); const snap=s.lastSnapshot||{}; const latest=s.latestVersion||{}; const checks=pwaChecks752(snap); const score=score752(checks); return `<div class="card v752-card"><div class="flex-line"><div><span class="chip">v7.5.2</span><h3>${E752(L752('PWA & Update Center Pro','PWA & Update Center Pro'))}</h3><p class="muted small">${E752(L752('Betrouwbare updateflow, offline-status en cacheherstel vóór richting V8.','Reliable update flow, offline status and cache recovery before moving toward V8.'))}</p></div><span class="pill ${score>=85?'good':'warn'}">${score}/100</span></div><div class="grid grid-2 mt"><div class="soft card"><strong>${E752(L752('Huidige versie','Current version'))}</strong><p class="tiny muted">${E752(APP.version)} · ${E752(APP.cache)}</p></div><div class="soft card"><strong>${E752(L752('Online versie','Online version'))}</strong><p class="tiny muted">${E752(latest.latestVersion||latest.version||L752('nog niet gecontroleerd','not checked yet'))}</p></div><div class="soft card"><strong>${E752(L752('Offline gereed','Offline ready'))}</strong><p class="tiny muted">${snap.offlineReady?E752(L752('Ja, app-shell is lokaal beschikbaar','Yes, app shell is locally available')):E752(L752('Nog voorbereiden aanbevolen','Prepare offline recommended'))}</p></div><div class="soft card"><strong>${E752(L752('Laatste check','Last check'))}</strong><p class="tiny muted">${s.lastVersionCheck?E752(fmt752(s.lastVersionCheck)):E752(L752('Nog niet uitgevoerd','Not run yet'))}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v752-check-update">${E752(L752('Zoek naar update','Check for update'))}</button><button class="btn" data-action="v752-activate-update">${E752(L752('Update activeren','Activate update'))}</button><button class="btn" data-action="v752-prepare-offline">${E752(L752('Offline voorbereiden','Prepare offline'))}</button><button class="btn" data-action="v752-clean-caches">${E752(L752('Oude caches opruimen','Clean old caches'))}</button><button class="btn" data-action="v752-reload">${E752(L752('App herladen','Reload app'))}</button></div></div>`; }
+    function offlineDetailsCard752(){ const s=ensure752(); const snap=s.lastSnapshot||{}; const cachesInfo=snap.caches||{}; const sw=snap.sw||swState752(); return `<div class="card v752-card"><h3>${E752(L752('Offline-status','Offline status'))}</h3><div class="list mt"><div class="list-item compact"><span><strong>${E752(L752('Online','Online'))}</strong><br><span class="tiny muted">${E752(L752('Tijdelijke offline status is geen fout als de app-shell klaarstaat.','Temporary offline status is not an error if the app shell is ready.'))}</span></span>${statusPill752(navigator.onLine)}</div><div class="list-item compact"><span><strong>Service worker</strong><br><span class="tiny muted">${E752(sw.supported?L752('ondersteund','supported'):L752('niet ondersteund','not supported'))}${sw.active?' · '+E752(L752('actief','active')):''}</span></span>${statusPill752(sw.supported)}</div><div class="list-item compact"><span><strong>${E752(L752('Cache actief','Cache active'))}</strong><br><span class="tiny muted">${E752(APP.cache)} · ${cachesInfo.currentCount||0} ${E752(L752('bestanden','files'))}</span></span>${statusPill752(!!cachesInfo.current)}</div><div class="list-item compact"><span><strong>${E752(L752('Oude caches','Old caches'))}</strong><br><span class="tiny muted">${E752((cachesInfo.old||[]).join(', ')||L752('geen oude caches gedetecteerd','no old caches detected'))}</span></span>${statusPill752(!((cachesInfo.old||[]).length))}</div><div class="list-item compact"><span><strong>VRO-data</strong><br><span class="tiny muted">${typeof window.VRO_PRODUCTS!=='undefined'?window.VRO_PRODUCTS.length:E752(L752('niet geladen','not loaded'))} ${E752(L752('items beschikbaar','items available'))}</span></span>${statusPill752(typeof window.VRO_PRODUCTS!=='undefined')}</div></div><div class="btn-row mt"><button class="btn" data-action="v752-refresh-pwa-snapshot">${E752(L752('Status verversen','Refresh status'))}</button><button class="btn" data-action="v752-copy-report">${E752(L752('Kopieer PWA-rapport','Copy PWA report'))}</button></div></div>`; }
+    function safeUpdateCard752(){ const s=ensure752(); const latest=s.latestVersion||{}; const available=!!(latest.latestVersion && versionCompare752(latest.latestVersion,APP.version)>0); return `<div class="card v752-card"><h3>${E752(L752('Veilige updateflow','Safe update flow'))}</h3><p class="muted small">${E752(L752('Voor grote updates kun je eerst een herstelpunt maken. Daarna update activeren of later herladen.','For major updates you can create a restore point first. Then activate update or reload later.'))}</p><div class="list mt"><div class="list-item compact"><span><strong>${E752(L752('Nieuwe versie','New version'))}</strong><br><span class="tiny muted">${E752(available?`${latest.latestVersion} · ${latest.build||''}`:L752('geen nieuwere versie gevonden of nog niet gecontroleerd','no newer version found or not checked yet'))}</span></span><span class="pill ${available?'info':'good'}">${available?E752(L752('beschikbaar','available')):'OK'}</span></div><div class="list-item compact"><span><strong>${E752(L752('Laatste herstelpunt/backup','Latest restore point/backup'))}</strong><br><span class="tiny muted">${state.settings&&state.settings.lastBackup?E752(fmt752(state.settings.lastBackup)):E752(L752('nog geen recente backup','no recent backup yet'))}</span></span>${statusPill752(!!(state.settings&&state.settings.lastBackup))}</div></div><div class="btn-row mt"><button class="btn" data-action="v752-make-restore">${E752(L752('Herstelpunt maken','Create restore point'))}</button><button class="btn primary" data-action="v752-check-update">${E752(L752('Zoek naar update','Check for update'))}</button><button class="btn" data-action="v752-activate-update">${E752(L752('Update activeren','Activate update'))}</button></div></div>`; }
+    function policyCard752(){ const p=ensure752().policy; return `<div class="card v752-card"><h3>${E752(L752('Versiebeleid','Version policy'))}</h3><div class="list mt"><div class="list-item compact"><span><strong>${E752(L752('Minimaal ondersteund','Minimum supported'))}</strong><br><span class="tiny muted">${E752(p.minSupportedVersion||'v7.0.0')}</span></span><span class="pill good">OK</span></div><div class="list-item compact"><span><strong>${E752(L752('Force-update','Force update'))}</strong><br><span class="tiny muted">${E752(p.forceBelowVersion?`${L752('force onder','force below')} ${p.forceBelowVersion}`:L752('uit, voorbereid voor later','off, prepared for later'))}</span></span><span class="pill ${p.forceUpdate?'warn':'info'}">${p.forceUpdate?E752(L752('actief','active')):E752(L752('voorbereid','prepared'))}</span></div><div class="list-item compact"><span><strong>${E752(L752('Waarschuwen bij oude versie','Warn on old version'))}</strong><br><span class="tiny muted">${E752(L752('Aanbevolen richting V8, zodat oude apps niet eeuwig blijven hangen.','Recommended toward V8 so old apps do not remain forever.'))}</span></span><span class="pill info">${p.warnOldVersions?E752(L752('aan','on')):E752(L752('uit','off'))}</span></div></div><p class="tiny muted mt">${E752(L752('Een gebruiker die volledig offline blijft kun je niet direct blokkeren. Zodra de app online komt, kan version.json het beleid afdwingen of waarschuwen.','A user who stays fully offline cannot be blocked immediately. Once the app comes online, version.json can enforce or warn about the policy.'))}</p></div>`; }
+    function pwaDiagnosticsCard752(){ const s=ensure752(); const snap=s.lastSnapshot||{}; const checks=pwaChecks752(snap); const sc=score752(checks); return `<div class="card v752-card"><div class="flex-line"><div><span class="chip">v7.5.2</span><h3>${E752(L752('PWA Reliability checks','PWA Reliability checks'))}</h3><p class="muted small">${E752(L752('Controleert update, offline, caches, backupadvies en versiebeleid.','Checks update, offline, caches, backup advice and version policy.'))}</p></div><span class="pill ${sc>=85?'good':'warn'}">${sc}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E752(c.name)}</strong><br><span class="tiny muted">${E752(c.detail)}</span></span>${statusPill752(c.ok)}</div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v752-run-pwa-diagnostics">${E752(L752('PWA-diagnostiek uitvoeren','Run PWA diagnostics'))}</button><button class="btn" data-action="v752-copy-report">${E752(L752('Kopieer rapport','Copy report'))}</button></div></div>`; }
+
+    async function runDiagnostics752(){ const s=ensure752(); const snap=await pwaSnapshot752(); const checks=pwaChecks752(snap); s.lastDiagnostics={at:now752(), score:score752(checks), checks}; s.checks.unshift({at:s.lastDiagnostics.at,type:'diagnostics',score:s.lastDiagnostics.score}); s.checks=s.checks.slice(0,20); save752(); return s.lastDiagnostics; }
+
+    const prevSettings752 = typeof renderSettings==='function' ? renderSettings : null;
+    if(prevSettings752) renderSettings = window.renderSettings = function(){ const base=prevSettings752()||''; return `${base}<div class="grid grid-2 mt settings-v752">${pwaStatusCard752()}${offlineDetailsCard752()}${safeUpdateCard752()}${policyCard752()}</div>`; };
+    const prevDiagnostics752 = typeof renderDiagnostics==='function' ? renderDiagnostics : null;
+    if(prevDiagnostics752) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics752()||''; return `<div class="grid grid-2 diagnostics-v752">${pwaDiagnosticsCard752()}${offlineDetailsCard752()}</div>${base}`; };
+    const prevVisual752 = typeof renderVisual==='function' ? renderVisual : null;
+    if(prevVisual752) renderVisual = window.renderVisual = function(){ const base=prevVisual752()||''; return `<div class="grid grid-2 visual-v752">${pwaStatusCard752()}${policyCard752()}</div>${base}`; };
+
+    const prevHandle752 = typeof handleAction==='function' ? handleAction : null;
+    if(prevHandle752) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v752-check-update'){ (async()=>{ const out=await checkUpdate752(); await pwaSnapshot752(); toast752(out.ok ? (out.updateAvailable?L752('Nieuwe versie gevonden','New version found'):L752('Updatecheck klaar','Update check complete')) : L752('Updatecheck mislukt; controleer internet','Update check failed; check internet'), out.ok?'good':'warn'); render752(); })(); return; }
+      if(a==='v752-prepare-offline'){ (async()=>{ const out=await prepareOffline752(); await pwaSnapshot752(); toast752(out.ok?L752('Offline voorbereiding voltooid','Offline preparation complete'):L752('Offline voorbereiding mislukt','Offline preparation failed'), out.ok?'good':'warn'); render752(); })(); return; }
+      if(a==='v752-clean-caches'){ (async()=>{ const out=await cleanupCaches752(); await pwaSnapshot752(); toast752(out.ok?`${L752('Oude caches opgeruimd','Old caches cleaned')}: ${out.deleted}`:L752('Cache opruimen mislukt','Cache cleanup failed'), out.ok?'good':'warn'); render752(); })(); return; }
+      if(a==='v752-make-restore'){ const rp=makeRestorePoint752(); toast752(`${L752('Herstelpunt gemaakt','Restore point created')}: ${fmt752(rp.createdAt)}`,'good'); render752(); return; }
+      if(a==='v752-activate-update'){ (async()=>{ const out=await activateUpdate752(); toast752(out.ok?L752('Update-activatie verstuurd','Update activation sent'):L752('Update activeren mislukt','Update activation failed'), out.ok?'good':'warn'); render752(); })(); return; }
+      if(a==='v752-reload'){ location.reload(); return; }
+      if(a==='v752-refresh-pwa-snapshot'){ (async()=>{ await pwaSnapshot752(); save752(); toast752(L752('PWA-status ververst','PWA status refreshed'),'good'); render752(); })(); return; }
+      if(a==='v752-run-pwa-diagnostics'){ (async()=>{ const d=await runDiagnostics752(); toast752(`${L752('PWA-diagnostiek uitgevoerd','PWA diagnostics completed')}: ${d.score}/100`, d.score>=85?'good':'warn'); render752(); })(); return; }
+      if(a==='v752-copy-report'){ copy752(pwaReport752()); return; }
+      return prevHandle752(a,el,e);
+    };
+
+    try{ pwaSnapshot752().then(()=>save752()).catch(()=>{}); }catch(e){}
+    ensure752(); save752();
+  }catch(err){ console.error('v7.5.2 PWA/Offline Update Reliability patch failed', err); }
+})();
+
+/* ============================================================
+   RICH CMD v7.5.3 — AGF/HACCP Pattern Accuracy
+   Refines intelligence reliability: AGF pattern thresholds, HACCP
+   priority reasons, Store Map risk accuracy, Besteladvies-light and
+   Visualisatie certainty without forcing conclusions or removing features.
+   ============================================================ */
+(function(){
+  'use strict';
+  try{
+    APP.version = 'v7.5.3';
+    APP.cache = 'rich-cmd-cache-v753';
+    APP.build = 'AGF/HACCP Pattern Accuracy';
+    APP.pwa = APP.pwa || {};
+    APP.pwa.assets = ['./','./index.html','./index.html?v=753','./styles.css?v=753','./vro-data.js?v=753','./app.js?v=753','./manifest.json?v=753','./version.json','./icon-192.png','./icon-512.png'];
+
+    const L753=(nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E753=v=> (typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>\"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch])));
+    const A753=v=>Array.isArray(v)?v:[];
+    const now753=()=>new Date().toISOString();
+    const fmt753=iso=>{ try{ return new Date(iso||Date.now()).toLocaleString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{dateStyle:'short',timeStyle:'short'}); }catch(_){ return String(iso||''); } };
+    const save753=()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage,JSON.stringify(state)); }catch(_){ } };
+    const render753=()=>{ try{ if(typeof render==='function') render(); }catch(_){ } };
+    const toast753=(m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); }catch(_){ console.log(m); } };
+    const copy753=txt=>{ try{ if(typeof copyText==='function') copyText(txt); else navigator.clipboard&&navigator.clipboard.writeText(txt); toast753(L753('Gekopieerd','Copied'),'good'); }catch(_){ toast753(L753('Kopiëren niet gelukt','Copy failed'),'warn'); } };
+
+    function ensure753(){
+      state.v753 = state.v753 || {};
+      if(state.v753.showAllPatterns == null) state.v753.showAllPatterns=false;
+      if(state.v753.showAllStoreRisks == null) state.v753.showAllStoreRisks=false;
+      state.v753.lastAccuracyCheck = state.v753.lastAccuracyCheck || null;
+      return state.v753;
+    }
+    function signalDate753(s){ const d=Date.parse(s&& (s.at||s.date||s.createdAt||s.time)); return isNaN(d)?Date.now():d; }
+    function recentSignals753(days=56){ const since=Date.now()-days*86400000; return A753(state.agfPro&&state.agfPro.signals).filter(s=>signalDate753(s)>=since); }
+    function normSignal753(v){
+      const x=String(v||'').toLowerCase();
+      if(/nee|leeg|empty|no.?sales|out/.test(x)) return 'leeg';
+      if(/bijvul|refill|hardloper|fast/.test(x)) return 'bijvullen';
+      if(/over|restant|leftover|overstock/.test(x)) return 'over';
+      if(/kwaliteit|quality|derving|waste|rot|slecht/.test(x)) return 'kwaliteit';
+      if(/morgen|tomorrow/.test(x)) return 'morgen';
+      if(/bestel|order/.test(x)) return 'bestellen';
+      return x||'signaal';
+    }
+    function sigProduct753(s){ return String((s&&(s.product||s.name||s.item||s.title||s.nasa))||'').trim(); }
+    function uniqDays753(items){ const set=new Set(); items.forEach(s=>{ try{ set.add(new Date(signalDate753(s)).toISOString().slice(0,10)); }catch(_){ } }); return set.size; }
+    function certaintyLabel753(score){ if(score>=75) return {label:L753('hoog','high'),tone:'good'}; if(score>=45) return {label:L753('middel','medium'),tone:'warn'}; return {label:L753('laag','low'),tone:'info'}; }
+    function groupAdvice753(type, strength){
+      const enough=strength!=='single' && strength!=='insufficient';
+      if(!enough) return {group:L753('Monitoren','Monitor'),focus:'monitor',tone:'info',advice:L753('Nog geen bestelconclusie. Gebruik dit als attentiesignaal en kijk naar actuele voorraad.','No ordering conclusion yet. Use this as an attention signal and check current stock.')};
+      if(type==='leeg') return {group:L753('Verhogen overwegen','Consider increasing'),focus:'raise',tone:'bad',advice:L753('Controleer voorraad achter, bonusdruk en bestelling. Pas verhogen als actuele voorraad en verkoopdruk dit bevestigen.','Check back stock, promotion pressure and order. Increase only if current stock and sales pressure confirm it.')};
+      if(type==='bijvullen') return {group:L753('Hardloper controleren','Check fast mover'),focus:'fast',tone:'warn',advice:L753('Plan een korte naloop en controleer of facing en bestelling passen bij de verkoopdruk.','Plan a short follow-up and check whether facing and order match sales pressure.')};
+      if(type==='over') return {group:L753('Niet verhogen / mogelijk verlagen','Do not increase / maybe lower'),focus:'lower',tone:'warn',advice:L753('Niet automatisch verhogen. Controleer restanten, houdbaarheid en presentatie voordat je bestelt.','Do not automatically increase. Check leftovers, shelf life and presentation before ordering.')};
+      if(type==='kwaliteit') return {group:L753('Kwaliteit eerst beoordelen','Assess quality first'),focus:'quality',tone:'bad',advice:L753('Eerst kwaliteit en derving beoordelen; besteladvies pas daarna aanpassen.','Assess quality and waste first; adjust order advice only after that.')};
+      if(type==='morgen') return {group:L753('Morgen controleren','Check tomorrow'),focus:'tomorrow',tone:'info',advice:L753('Zet dit product op morgenstart of overdracht.','Put this product on tomorrow start or handover.')};
+      return {group:L753('Controleren','Check'),focus:'check',tone:'info',advice:L753('Controleer dit signaal met de actuele situatie in het schap.','Check this signal against the current shelf situation.')};
+    }
+    function agfAccuracyRows753(){
+      const map={};
+      recentSignals753(56).forEach(s=>{
+        const product=sigProduct753(s); if(!product) return;
+        const type=normSignal753(s.type||s.status||s.signal||s.reason||s.kind);
+        map[product]=map[product]||{product,nasa:s.nasa||'',category:s.category||'',items:[],types:{}};
+        map[product].items.push(s); map[product].types[type]=(map[product].types[type]||0)+1;
+      });
+      return Object.values(map).map(p=>{
+        const total=p.items.length, days=uniqDays753(p.items);
+        const top=Object.entries(p.types).sort((a,b)=>b[1]-a[1])[0]||['signaal',0];
+        let strength='single', label=L753('Eenmalig signaal','Single signal'), score=20;
+        if(total<2 || days<2){ strength='single'; label=L753('Eenmalig signaal','Single signal'); score=20+Math.min(15,total*5); }
+        else if(total>=5 && days>=3 && top[1]>=3){ strength='structural'; label=L753('Structureel patroon','Structural pattern'); score=85; }
+        else if(total>=3 && days>=2){ strength='recurring'; label=L753('Terugkerend','Recurring'); score=60; }
+        else { strength='monitor'; label=L753('Monitoren','Monitor'); score=40; }
+        const cert=certaintyLabel753(score);
+        const g=groupAdvice753(top[0], strength);
+        const lastAt=p.items.map(signalDate753).sort((a,b)=>b-a)[0];
+        return {...p,total,days,topType:top[0],topCount:top[1],strength,label,score,certainty:cert.label,certaintyTone:cert.tone,...g,lastAt:new Date(lastAt||Date.now()).toISOString()};
+      }).sort((a,b)=>b.score-a.score || b.total-a.total || b.topCount-a.topCount);
+    }
+    function agfAccuracyCard753(compact=false){
+      const rows=agfAccuracyRows753();
+      const reliable=rows.filter(r=>r.strength==='recurring'||r.strength==='structural').length;
+      const list=(compact?rows.slice(0,4):rows.slice(0,ensure753().showAllPatterns?30:8));
+      return `<div class="card v753-card v753-agf-accuracy"><div class="flex-line"><div><span class="chip">v7.5.3 · AGF</span><h3>${E753(L753('Patroonzekerheid','Pattern accuracy'))}</h3><p class="muted small">${E753(L753('RICH CMD telt niet elk signaal als patroon. Er wordt gekeken naar aantal signalen, meerdere dagen en dominante oorzaak.','RICH CMD does not count every signal as a pattern. It checks number of signals, multiple days and dominant cause.'))}</p></div><span class="pill ${reliable?'warn':'good'}">${reliable} ${E753(L753('betrouwbaar','reliable'))}</span></div>${list.length?`<div class="list mt">${list.map(r=>`<div class="list-item compact v753-pattern ${r.tone}"><span><strong>${E753(r.product)}</strong><br><span class="tiny muted">${E753(r.label)} · ${r.total} ${E753(L753('signalen','signals'))} · ${r.days} ${E753(L753('dagen','days'))} · ${E753(L753('zekerheid','confidence'))}: ${E753(r.certainty)}</span><br><span class="small">${E753(r.advice)}</span></span><span class="pill ${r.certaintyTone}">${r.score}%</span></div>`).join('')}</div>`:`<p class="muted small mt">${E753(L753('Nog geen AGF-signalen om patronen te beoordelen.','No Produce signals to assess patterns yet.'))}</p>`}${!compact&&rows.length>8?`<button class="btn mt" data-action="v753-toggle-patterns">${ensure753().showAllPatterns?E753(L753('Minder tonen','Show less')):E753(L753('Meer tonen','Show more'))}</button>`:''}</div>`;
+    }
+
+    function haccpPriority753(task){
+      const text=`${task&&task.title||''} ${task&&task.category||''} ${task&&task.priority||''} ${task&&task.storeMapReason||''} ${task&&task.note||''}`.toLowerCase();
+      if(/gradatie\s*3|mold3|kritiek|koeling buiten|temperatuur buiten|glas|lekkage|voedselveilig/.test(text)) return {level:L753('Kritiek','Critical'),tone:'bad',score:100,reason:L753('Direct risico: voedselveiligheid, klantveiligheid of ernstige hygiëne. Meteen oppakken.','Direct risk: food safety, customer safety or serious hygiene. Handle immediately.')};
+      if(/gradatie\s*2|mold2|nacontrole|urgent|ernstige vervuil/.test(text)) return {level:L753('Urgent','Urgent'),tone:'bad',score:90,reason:L753('Directe opvolging nodig. Dit mag boven de dagelijkse basisroutine komen.','Immediate follow-up needed. This may come before the daily base routine.')};
+      if(/temperatuur|emballage|sinaasappelpers|winkelvloer|dagelijkse|basisroutine/.test(text)) return {level:L753('Dagelijkse basis','Daily base'),tone:'warn',score:70,reason:L753('Vaste startcontrole voor voedselveiligheid, zichtbare hygiëne en klantveiligheid.','Fixed start check for food safety, visible hygiene and customer safety.')};
+      if(/gradatie\s*1|mold1/.test(text)) return {level:L753('Monitoren','Monitor'),tone:'info',score:45,reason:L753('Klein/oppervlakkig signaal. Registreren en plannen, maar lager dan dagelijkse basistaken.','Small/surface signal. Register and plan, but lower than daily base tasks.')};
+      if(/week|maand|periodiek|template|halfjaar|jaar/.test(text)) return {level:L753('Planning','Planning'),tone:'info',score:35,reason:L753('Gepland werk. Belangrijk, maar normaal na urgenties en dagelijkse basis.','Planned work. Important, but normally after urgencies and daily base.')};
+      return {level:L753('Normaal','Normal'),tone:'info',score:30,reason:L753('Normale taak volgens planning en capaciteit.','Normal task based on planning and capacity.')};
+    }
+    function haccpOpen753(){ return A753(state.tasks).filter(t=>!['Voltooid','completed','Done'].includes(String(t.status||''))); }
+    function haccpPriorityCard753(){
+      const tasks=haccpOpen753().slice().sort((a,b)=>haccpPriority753(b).score-haccpPriority753(a).score).slice(0,8);
+      return `<div class="card v753-card"><div class="flex-line"><div><span class="chip">HACCP</span><h3>${E753(L753('Waarom staat dit hoog?','Why is this high?'))}</h3><p class="muted small">${E753(L753('Prioriteit wordt uitgelegd zonder je handmatige planning te overschrijven.','Priority is explained without overriding your manual planning.'))}</p></div><span class="pill info">${tasks.length}</span></div>${tasks.length?`<div class="list mt">${tasks.map(t=>{const p=haccpPriority753(t);return `<div class="list-item compact"><span><strong>${E753(t.title||L753('Taak','Task'))}</strong><br><span class="tiny muted">${E753(p.reason)}</span></span><span class="pill ${p.tone}">${E753(p.level)}</span></div>`;}).join('')}</div>`:`<p class="muted small mt">${E753(L753('Geen open HACCP-taken.','No open HACCP tasks.'))}</p>`}</div>`;
+    }
+
+    function cleanItems753(){ return A753(state.cleaning&&state.cleaning.items).filter(i=>!i.archived); }
+    function cleanName753(i){ return String(i.label||i.title||i.zone||i.department||'Store Map'); }
+    function storeRisk753(i){
+      const st=String(i.status||'neutral').toLowerCase();
+      const grade=Number(i.moldGrade||String(st).replace(/\D/g,''))||0;
+      if(st==='mold3'||grade===3) return {bucket:'critical',label:L753('Kritiek','Critical'),tone:'bad',score:100,reason:L753('Schimmel gradatie 3: direct oppakken en opvolgen.','Mould grade 3: handle and follow up immediately.')};
+      if(st==='mold2'||grade===2) return {bucket:'urgent',label:L753('Urgent','Urgent'),tone:'bad',score:85,reason:L753('Schimmel gradatie 2: directe opvolging in HACCP.','Mould grade 2: immediate HACCP follow-up.')};
+      if(st==='followup'||/nacontrole|follow/.test(st)||i.followUp) return {bucket:'urgent',label:L753('Nacontrole','Follow-up'),tone:'bad',score:80,reason:L753('Nacontrole nodig; vandaag controleren of afronden.','Follow-up needed; check or finish today.')};
+      if(st==='dirty'||/vuil|attention|aandacht/.test(st)||i.planned) return {bucket:'attention',label:L753('Aandacht','Attention'),tone:'warn',score:55,reason:L753('Aandachtspunt of ingepland. Controleer binnen de planning.','Attention point or planned. Check within planning.')};
+      if(st==='mold1'||grade===1) return {bucket:'monitor',label:L753('Monitoren','Monitor'),tone:'info',score:40,reason:L753('Schimmel gradatie 1: klein/oppervlakkig. Monitoren en plannen, niet boven dagtaken.','Mould grade 1: small/surface. Monitor and plan, not above daily tasks.')};
+      if(st==='due' && (i.lastChecked||i.lastCleaned||i.plannedAt)) return {bucket:'attention',label:L753('Controle nodig','Check needed'),tone:'warn',score:50,reason:L753('Controleperiode bereikt na eerdere controle/schoonmaak.','Check period reached after previous check/cleaning.')};
+      return {bucket:'baseline',label:L753('Baseline','Baseline'),tone:'good',score:10,reason:L753('Nieuw/neutraal punt. Geen achterstand zonder eerdere start of signaal.','New/neutral point. No overdue status without previous start or signal.')};
+    }
+    function storeRiskRows753(includeBaseline=false){
+      return cleanItems753().map(i=>({item:i,...storeRisk753(i)})).filter(r=>includeBaseline||r.bucket!=='baseline').sort((a,b)=>b.score-a.score||cleanName753(a.item).localeCompare(cleanName753(b.item)));
+    }
+    function storeRiskCard753(compact=false){
+      const rows=storeRiskRows753(false); const all=cleanItems753().map(i=>storeRisk753(i));
+      const counts=['critical','urgent','attention','monitor','baseline'].reduce((o,k)=>(o[k]=all.filter(r=>r.bucket===k).length,o),{});
+      const view=rows.slice(0,compact?5:(ensure753().showAllStoreRisks?40:8));
+      return `<div class="card v753-card v753-store-risk"><div class="flex-line"><div><span class="chip">Store Map</span><h3>${E753(L753('Risico-nauwkeurigheid','Risk accuracy'))}</h3><p class="muted small">${E753(L753('Baseline blijft baseline. Alleen echte signalen worden aandacht, urgent of kritiek.','Baseline stays baseline. Only real signals become attention, urgent or critical.'))}</p></div><span class="pill ${counts.critical||counts.urgent?'bad':counts.attention?'warn':'good'}">${counts.critical+counts.urgent} ${E753(L753('urgent','urgent'))}</span></div><div class="grid grid-5 mt v753-risk-counts"><div class="soft card"><strong>${counts.critical}</strong><p class="tiny muted">${E753(L753('Kritiek','Critical'))}</p></div><div class="soft card"><strong>${counts.urgent}</strong><p class="tiny muted">${E753(L753('Urgent','Urgent'))}</p></div><div class="soft card"><strong>${counts.attention}</strong><p class="tiny muted">${E753(L753('Aandacht','Attention'))}</p></div><div class="soft card"><strong>${counts.monitor}</strong><p class="tiny muted">${E753(L753('Monitor','Monitor'))}</p></div><div class="soft card"><strong>${counts.baseline}</strong><p class="tiny muted">Baseline</p></div></div>${view.length?`<div class="list mt">${view.map(r=>`<div class="list-item compact"><span><strong>${E753(cleanName753(r.item))}</strong><br><span class="tiny muted">${E753(r.reason)}</span></span><span class="pill ${r.tone}">${E753(r.label)}</span></div>`).join('')}</div>`:`<p class="muted small mt">${E753(L753('Geen actieve Store Map-risico’s.','No active Store Map risks.'))}</p>`}${!compact&&rows.length>8?`<button class="btn mt" data-action="v753-toggle-store-risks">${ensure753().showAllStoreRisks?E753(L753('Minder tonen','Show less')):E753(L753('Meer tonen','Show more'))}</button>`:''}</div>`;
+    }
+
+    function bestelRows753(){
+      return agfAccuracyRows753().filter(r=>r.strength!=='single' && r.strength!=='insufficient').slice(0,20).map(r=>({product:r.product,group:r.group,advice:r.advice,tone:r.tone,certainty:r.certainty,score:r.score,signals:r.total}));
+    }
+    function bestelAccuracyCard753(){
+      const rows=bestelRows753();
+      return `<div class="card v753-card"><div class="flex-line"><div><span class="chip">Besteladvies-light</span><h3>${E753(L753('AGF-context met zekerheid','Produce context with confidence'))}</h3><p class="muted small">${E753(L753('Advies helpt controleren, maar actuele voorraad, protocol en jouw oordeel blijven leidend.','Advice helps you check, but current stock, protocol and your judgment remain leading.'))}</p></div><span class="pill info">${rows.length}</span></div>${rows.length?`<div class="list mt">${rows.slice(0,8).map(r=>`<div class="list-item compact"><span><strong>${E753(r.product)}</strong><br><span class="tiny muted">${E753(r.group)} · ${r.signals} ${E753(L753('signalen','signals'))} · ${E753(L753('zekerheid','confidence'))}: ${E753(r.certainty)}</span><br><span class="small">${E753(r.advice)}</span></span><span class="pill ${r.tone}">${r.score}%</span></div>`).join('')}</div>`:`<p class="muted small mt">${E753(L753('Nog geen betrouwbare AGF-context voor bestellen.','No reliable Produce context for ordering yet.'))}</p>`}</div>`;
+    }
+
+    function richAdvice753(max=2){
+      const out=[];
+      const agf=agfAccuracyRows753().filter(r=>r.strength==='recurring'||r.strength==='structural')[0];
+      const risk=storeRiskRows753(false).find(r=>r.bucket==='critical'||r.bucket==='urgent');
+      const h=haccpOpen753().map(t=>({t,p:haccpPriority753(t)})).sort((a,b)=>b.p.score-a.p.score)[0];
+      if(risk) out.push({tone:risk.tone,title:L753('Store Map eerst','Store Map first'),text:`${cleanName753(risk.item)} — ${risk.label}`,reason:risk.reason,route:'storemap'});
+      if(agf) out.push({tone:agf.tone,title:L753('AGF patroon controleren','Check Produce pattern'),text:`${agf.product}: ${agf.label}`,reason:agf.advice,route:'agf'});
+      if(!out.length && h) out.push({tone:h.p.tone,title:L753('HACCP focus','HACCP focus'),text:h.t.title||L753('Open taak','Open task'),reason:h.p.reason,route:'haccp'});
+      if(!out.length) out.push({tone:'good',title:L753('Basis vasthouden','Keep the base strong'),text:L753('Geen sterke patronen of urgenties. Werk rustig volgens je dagroute.','No strong patterns or urgencies. Work calmly through your day route.'),reason:L753('Te weinig of rustige data; geen harde conclusie.','Little or calm data; no hard conclusion.'),route:'today'});
+      return out.slice(0,max);
+    }
+    function adviceCard753(place='today'){
+      const adv=richAdvice753(place==='today'?1:2);
+      return `<div class="card v753-card v753-advice"><div class="flex-line"><div><span class="chip">RICH advies</span><h3>${E753(place==='today'?L753('Hoofdadvies','Main advice'):L753('Advies met zekerheid','Advice with confidence'))}</h3></div><span class="pill info">${adv.length}</span></div><div class="list mt">${adv.map(a=>`<button class="list-item compact v753-advice-item ${a.tone}" data-route="${E753(a.route)}"><span><strong>${E753(a.title)}</strong><br><span class="small">${E753(a.text)}</span><br><span class="tiny muted">${E753(L753('Reden','Reason'))}: ${E753(a.reason)}</span></span><span class="pill ${a.tone}">→</span></button>`).join('')}</div></div>`;
+    }
+    function visualAccuracyCard753(){
+      const rows=agfAccuracyRows753(); const high=rows.filter(r=>r.score>=75).length, med=rows.filter(r=>r.score>=45&&r.score<75).length, low=rows.filter(r=>r.score<45).length;
+      const risks=storeRiskRows753(false), ctx=bestelRows753();
+      return `<div class="card v753-card v753-visual"><div class="flex-line"><div><span class="chip">v7.5.3</span><h3>${E753(L753('Intelligence Accuracy','Intelligence Accuracy'))}</h3><p class="muted small">${E753(L753('Toont hoeveel zekerheid er achter patronen zit. Bij weinig data blijft RICH CMD voorzichtig.','Shows how much confidence supports patterns. With little data RICH CMD stays cautious.'))}</p></div><button class="btn small" data-action="v753-copy-report">${E753(L753('Kopieer','Copy'))}</button></div><div class="grid grid-4 mt">${typeof kpi==='function'?`${kpi(L753('Zeker hoog','High confidence'),high,high?'good':'info')}${kpi(L753('Zeker middel','Medium confidence'),med,med?'warn':'info')}${kpi(L753('Lage zekerheid','Low confidence'),low,low?'info':'good')}${kpi(L753('Store Map risico','Store Map risk'),risks.length,risks.some(r=>r.bucket==='critical'||r.bucket==='urgent')?'bad':risks.length?'warn':'good')}`:`<p>${high}/${med}/${low}</p>`}</div><div class="card soft mt"><strong>${E753(L753('Focusadvies','Focus advice'))}</strong><p class="muted small">${E753(richAdvice753(1)[0].text)}<br><span class="tiny muted">${E753(richAdvice753(1)[0].reason)}</span></p></div><p class="tiny muted mt">${E753(L753('Bestelcontext','Ordering context'))}: ${ctx.length}. ${E753(L753('Actuele voorraad blijft leidend.','Current stock remains leading.'))}</p></div>`;
+    }
+    function accuracyReport753(){
+      const agf=agfAccuracyRows753().slice(0,12), risks=storeRiskRows753(false).slice(0,12), ctx=bestelRows753().slice(0,12), adv=richAdvice753(2);
+      return `RICH CMD v7.5.3 — AGF/HACCP Pattern Accuracy\nDatum: ${fmt753(now753())}\n\nHoofdadvi(e)s:\n${adv.map(a=>`- ${a.title}: ${a.text}\n  Reden: ${a.reason}`).join('\n')}\n\nAGF patroonzekerheid:\n${agf.length?agf.map(r=>`- ${r.product}: ${r.label} · ${r.total} signalen · ${r.days} dagen · zekerheid ${r.certainty} (${r.score}%) — ${r.advice}`).join('\n'):'- Geen AGF-patronen met voldoende data'}\n\nStore Map risico:\n${risks.length?risks.map(r=>`- ${cleanName753(r.item)}: ${r.label} — ${r.reason}`).join('\n'):'- Geen actieve Store Map-risico’s'}\n\nBesteladvies-light:\n${ctx.length?ctx.map(c=>`- ${c.product}: ${c.group} · zekerheid ${c.certainty} — ${c.advice}`).join('\n'):'- Geen betrouwbare bestelcontext'}\n\nBeleid: RICH CMD geeft advies-light. Actuele voorraad, protocol en jouw oordeel blijven leidend.`;
+    }
+    function accuracyChecks753(){
+      const agf=agfAccuracyRows753(); const reliable=agf.filter(r=>r.strength==='recurring'||r.strength==='structural'); const risks=storeRiskRows753(false); const h=haccpOpen753(); const ctx=bestelRows753();
+      return [
+        {name:'Versie/cache',ok:APP.version==='v7.5.3'&&APP.cache==='rich-cmd-cache-v753',detail:`${APP.version} · ${APP.cache}`},
+        {name:'AGF drempels',ok:reliable.every(r=>r.total>=3||r.days>=2),detail:`${reliable.length} ${L753('betrouwbare patronen','reliable patterns')}`},
+        {name:'Te weinig data blijft voorzichtig',ok:agf.filter(r=>r.total<2||r.days<2).every(r=>r.strength==='single'),detail:`${agf.filter(r=>r.strength==='single').length} ${L753('eenmalige signalen','single signals')}`},
+        {name:'HACCP prioriteitsredenen',ok:h.every(t=>!!haccpPriority753(t).reason),detail:`${h.length} ${L753('open taken','open tasks')}`},
+        {name:'Gradatie 2/3 urgent',ok:true,detail:L753('gradatie 1 = monitor, 2 = urgent, 3 = kritiek','grade 1 = monitor, 2 = urgent, 3 = critical')},
+        {name:'Store Map baseline bewaakt',ok:cleanItems753().filter(i=>storeRisk753(i).bucket==='baseline').every(i=>!['mold1','mold2','mold3','dirty','followup'].includes(String(i.status||''))),detail:`${cleanItems753().filter(i=>storeRisk753(i).bucket==='baseline').length} baseline`},
+        {name:'Besteladvies-light overschrijft niet',ok:true,detail:`${ctx.length} ${L753('contextregels','context rows')} · ${L753('voorraad blijft leidend','stock remains leading')}`},
+        {name:'Vandaag blijft rustig',ok:richAdvice753(1).length<=1,detail:L753('maximaal één hoofdadvies','max one main advice')},
+        {name:'Rustmodus compact',ok:true,detail:L753('geen extra verplichte interactie toegevoegd','no extra mandatory interaction added')},
+        {name:'Shiftleider standalone',ok:true,detail:L753('geen nieuwe integratie toegevoegd','no new integration added')}
+      ];
+    }
+    function diagnosticsCard753(){
+      const checks=accuracyChecks753(); const score=Math.round(checks.filter(c=>c.ok).length/Math.max(1,checks.length)*100);
+      return `<div class="card v753-card v753-diagnostics"><div class="flex-line"><div><span class="chip">v7.5.3</span><h3>${E753(L753('Intelligence Accuracy Check','Intelligence Accuracy Check'))}</h3><p class="muted small">${E753(L753('Controleert of patronen voorzichtig genoeg zijn en prioriteiten logisch blijven.','Checks whether patterns are cautious enough and priorities stay logical.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E753(c.name)}</strong><br><span class="tiny muted">${E753(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v753-run-accuracy-check">${E753(L753('Controle uitvoeren','Run check'))}</button><button class="btn" data-action="v753-copy-report">${E753(L753('Kopieer rapport','Copy report'))}</button></div></div>`;
+    }
+    function runAccuracy753(){ ensure753().lastAccuracyCheck={at:now753(),checks:accuracyChecks753(),patterns:agfAccuracyRows753().length,risks:storeRiskRows753(false).length}; save753(); toast753(L753('Intelligence accuracy check uitgevoerd','Intelligence accuracy check completed'),'good'); render753(); }
+
+    const prevToday753=typeof renderToday==='function'?renderToday:null;
+    if(prevToday753) renderToday=window.renderToday=function(){ const base=prevToday753()||''; return `${adviceCard753('today')}${base}`; };
+    const prevAgf753=typeof renderAgf==='function'?renderAgf:null;
+    if(prevAgf753) renderAgf=window.renderAgf=function(){ const base=prevAgf753()||''; return `<div class="grid v753-agf">${agfAccuracyCard753()}</div>${base}`; };
+    const prevHaccp753=typeof renderHaccp==='function'?renderHaccp:null;
+    if(prevHaccp753) renderHaccp=window.renderHaccp=function(){ const base=prevHaccp753()||''; return `<div class="grid grid-2 v753-haccp">${haccpPriorityCard753()}${storeRiskCard753(true)}</div>${base}`; };
+    const prevStore753=typeof renderStoreMap==='function'?renderStoreMap:null;
+    if(prevStore753) renderStoreMap=window.renderStoreMap=function(){ const base=prevStore753()||''; return `<div class="grid v753-store">${storeRiskCard753(false)}</div>${base}`; };
+    const prevInv753=typeof renderInventory==='function'?renderInventory:null;
+    if(prevInv753) renderInventory=window.renderInventory=function(){ const base=prevInv753()||''; return `<div class="grid v753-inventory">${bestelAccuracyCard753()}</div>${base}`; };
+    const prevVisual753=typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual753) renderVisual=window.renderVisual=function(){ const base=prevVisual753()||''; return `<div class="grid v753-visual">${visualAccuracyCard753()}</div>${base}`; };
+    const prevDiag753=typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiag753) renderDiagnostics=window.renderDiagnostics=function(){ const base=prevDiag753()||''; return `<div class="grid diagnostics-v753">${diagnosticsCard753()}<div class="grid grid-2">${agfAccuracyCard753(true)}${storeRiskCard753(true)}</div></div>${base}`; };
+    const prevSettings753=typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings753) renderSettings=window.renderSettings=function(){ const base=prevSettings753()||''; return `${base}<div class="grid grid-2 mt settings-v753">${diagnosticsCard753()}${visualAccuracyCard753()}</div>`; };
+
+    const prevHandle753=typeof handleAction==='function'?handleAction:null;
+    if(prevHandle753) handleAction=window.handleAction=function(a,el,e){
+      if(a==='v753-toggle-patterns'){ ensure753().showAllPatterns=!ensure753().showAllPatterns; save753(); render753(); return; }
+      if(a==='v753-toggle-store-risks'){ ensure753().showAllStoreRisks=!ensure753().showAllStoreRisks; save753(); render753(); return; }
+      if(a==='v753-run-accuracy-check'){ runAccuracy753(); return; }
+      if(a==='v753-copy-report'){ copy753(accuracyReport753()); return; }
+      return prevHandle753(a,el,e);
+    };
+
+    ensure753(); save753();
+  }catch(err){ console.error('v7.5.3 Pattern Accuracy patch failed', err); }
+})();
+
+
+/* ================================
+   RICH CMD v7.5.4 — Mobile Execution Polish
+   Faster shop-floor use: mobile execution card, universal quick note, broader after-the-fact registration, calm mode polish and mobile reliability checks.
+================================ */
+(function(){
+  try{
+    if(window.__richCmd754Applied) return;
+    window.__richCmd754Applied = true;
+    if(typeof APP === 'object'){
+      APP.version = 'v7.5.4';
+      APP.cache = 'rich-cmd-cache-v754';
+      APP.build = 'Mobile Execution Polish';
+      APP.pwa = APP.pwa || {};
+      APP.pwa.assets = ['./','./index.html','./index.html?v=754','./styles.css?v=754','./vro-data.js?v=754','./app.js?v=754','./manifest.json?v=754','./version.json','./icon-192.png','./icon-512.png'];
+    }
+    const L754 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E754 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const now754 = ()=> new Date().toISOString();
+    const today754 = ()=> new Date().toISOString().slice(0,10);
+    const toast754 = (m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const save754 = ()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){} };
+    const render754 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const close754 = ()=>{ try{ if(typeof closeModal==='function') closeModal(); }catch(_){} };
+    const modal754 = (title,html,wide='')=>{ try{ if(typeof modal==='function') modal(title,html,wide); else toast754(title); }catch(_){ toast754(title); } };
+    const minText754 = (m)=>{ m=Math.max(0,Math.round(+m||0)); const h=Math.floor(m/60), mm=m%60; return h?`${h}u ${mm}m`:`${mm}m`; };
+    const time754 = (iso)=>{ try{ return new Date(iso).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return '-'; } };
+    const uid754 = (p='q')=> p+'_'+Math.random().toString(36).slice(2,8)+'_'+Date.now().toString(36);
+
+    function ensure754(){
+      state.ui = state.ui || {};
+      state.quickNotes = Array.isArray(state.quickNotes) ? state.quickNotes : [];
+      state.mobileExecution = state.mobileExecution || {showQuick:true,lastCheck:null};
+      state.workdaySeq = state.workdaySeq || {date:today754(),startTime:state.settings?.shiftStart||'11:00',endTime:state.settings?.shiftEnd||'20:30',tasks:[]};
+      if(!Array.isArray(state.workdaySeq.tasks)) state.workdaySeq.tasks=[];
+      state.workdaySeq.tasks.forEach(t=>{ if(!t.status) t.status='open'; if(!t.timer) t.timer={totalMs:0,running:false,startedAt:null}; });
+      return state.workdaySeq;
+    }
+    function isDone754(t){ return /^(done|voltooid|voldaan|afgerond)$/i.test(String(t&&t.status||'')); }
+    function isOpen754(t){ return t && !isDone754(t); }
+    function isRunning754(t){ return !!(t && (t.status==='active' || t.timer&&t.timer.running)); }
+    function activeTask754(){ const s=ensure754(); return s.tasks.find(t=>isOpen754(t) && isRunning754(t)) || null; }
+    function openTasks754(){ return ensure754().tasks.filter(isOpen754).sort((a,b)=>(String(a.status)==='deferred')-(String(b.status)==='deferred')); }
+    function doneTasks754(){ return ensure754().tasks.filter(isDone754); }
+    function nextTask754(){ return activeTask754() || openTasks754().find(t=>String(t.status)!=='deferred') || openTasks754()[0] || null; }
+    function task754(id){ return ensure754().tasks.find(t=>String(t.id)===String(id)); }
+    function actualMin754(t){
+      if(!t) return 0; const timer=t.timer||{}; let ms=+timer.totalMs||0;
+      if(timer.running && timer.startedAt){ ms += Math.max(0, Date.now()-Date.parse(timer.startedAt)); }
+      return Math.round(ms/60000);
+    }
+    function riskCounts754(){
+      const tasks=Array.isArray(state.tasks)?state.tasks:[];
+      const h=tasks.filter(t=>!/(voltooid|voldaan|done|afgerond)/i.test(String(t.status||'')) && /(kritiek|hoog|urgent|gradatie 2|gradatie 3|nacontrole|temperatuur|risico)/i.test([t.title,t.priority,t.category,t.note].map(x=>String(x||'')).join(' '))).length;
+      const items=(state.cleaning&&Array.isArray(state.cleaning.items))?state.cleaning.items:[];
+      const sm=items.filter(i=>/(gradatie 2|gradatie 3|nacontrole|urgent|kritiek|risico)/i.test([i.name,i.title,i.status,i.note].map(x=>String(x||'')).join(' '))).length;
+      return {haccp:h, storemap:sm, total:h+sm};
+    }
+    function groupLabel754(g){ return ({start:'Start',haccp:'HACCP',agf:'AGF',freight:'Vracht',pause:'Pauzes',end:'Afronding'}[g]||g||'Algemeen'); }
+    function statusLabel754(t){
+      if(!t) return '-';
+      if(isDone754(t)) return L754('Gedaan','Done');
+      if(String(t.status)==='deferred') return L754('Uitgesteld','Deferred');
+      if(isRunning754(t)) return L754('Wordt gemeten','Measuring');
+      if(t.type==='break') return L754('Pauze','Break');
+      return L754('Open','Open');
+    }
+    function setDone754(id, when){
+      const t=task754(id); if(!t) return;
+      if(t.timer&&t.timer.running){ t.timer.totalMs=(+t.timer.totalMs||0)+Math.max(0,Date.now()-Date.parse(t.timer.startedAt||now754())); t.timer.running=false; t.timer.startedAt=null; t.measured=true; }
+      t.status='done'; t.doneAt=when || now754(); t.checkedOnly = !actualMin754(t); ensure754().activeTaskId=null;
+      ensure754().logs = Array.isArray(ensure754().logs)?ensure754().logs:[];
+      ensure754().logs.unshift({at:now754(),text:`${L754('Gedaan','Done')}: ${t.title}`});
+      save754(); toast754(`${L754('Gedaan','Done')}: ${t.title}`,'good'); render754();
+    }
+    function defer754(id){ const t=task754(id); if(!t) return; if(t.timer&&t.timer.running){ t.timer.totalMs=(+t.timer.totalMs||0)+Math.max(0,Date.now()-Date.parse(t.timer.startedAt||now754())); t.timer.running=false; t.timer.startedAt=null; } t.status='deferred'; t.deferredAt=now754(); save754(); toast754(`${L754('Uitgesteld','Deferred')}: ${t.title}`,'warn'); render754(); }
+    function measure754(id){ const t=task754(id); if(!t || isDone754(t)) return; const running=activeTask754(); if(running && running.id!==t.id && running.timer&&running.timer.running){ running.timer.totalMs=(+running.timer.totalMs||0)+Math.max(0,Date.now()-Date.parse(running.timer.startedAt||now754())); running.timer.running=false; running.timer.startedAt=null; running.status='open'; }
+      t.timer=t.timer||{totalMs:0};
+      if(t.timer.running){ t.timer.totalMs=(+t.timer.totalMs||0)+Math.max(0,Date.now()-Date.parse(t.timer.startedAt||now754())); t.timer.running=false; t.timer.startedAt=null; t.status='open'; t.measured=true; toast754(`${L754('Meting gepauzeerd','Measurement paused')}: ${t.title}`,'info'); }
+      else { t.status='active'; t.startedAt=t.startedAt||now754(); t.timer.running=true; t.timer.startedAt=now754(); ensure754().activeTaskId=t.id; toast754(`${L754('Meting gestart','Measurement started')}: ${t.title}`,'info'); }
+      save754(); render754();
+    }
+    function doneAtOffset754(id, min){ const d=new Date(Date.now()-Math.max(0,+min||0)*60000); setDone754(id,d.toISOString()); close754(); }
+    function doneCustom754(id){ const v=document.getElementById('v754DoneAt')?.value; if(v){ setDone754(id,new Date(v).toISOString()); close754(); } }
+    function saveTaskNote754(id){ const t=task754(id); if(!t) return; const v=(document.getElementById('v754TaskNote')?.value||'').trim(); t.note=v; save754(); toast754(L754('Notitie opgeslagen','Note saved'),'good'); close754(); render754(); }
+    function laterModal754(id){ const t=task754(id); if(!t) return; const val=new Date().toISOString().slice(0,16); modal754(L754('Achteraf registreren','Register afterwards'), `<div class="grid"><p class="muted small">${E754(L754('Gebruik dit als je niet meteen kon afvinken. Timers blijven optioneel.','Use this if you could not check off immediately. Timers remain optional.'))}</p><div class="btn-row"><button class="btn good" data-action="v754-done-offset" data-id="${E754(id)}" data-offset="0">✓ ${E754(L754('Nu gedaan','Done now'))}</button><button class="btn" data-action="v754-done-offset" data-id="${E754(id)}" data-offset="15">15 min</button><button class="btn" data-action="v754-done-offset" data-id="${E754(id)}" data-offset="30">30 min</button></div><label>${E754(L754('Rond tijdstip','Around time'))}<input class="input" id="v754DoneAt" type="datetime-local" value="${E754(val)}"></label><label>${E754(L754('Korte notitie','Short note'))}<textarea class="input" id="v754TaskNote" rows="3">${E754(t.note||'')}</textarea></label><div class="btn-row"><button class="btn primary" data-action="v754-done-custom" data-id="${E754(id)}">✓ ${E754(L754('Afvinken op tijdstip','Check off at time'))}</button><button class="btn" data-action="v754-save-task-note" data-id="${E754(id)}">✎ ${E754(L754('Notitie opslaan','Save note'))}</button></div></div>`, 'wide'); }
+    function openQuickNote754(cat='Algemeen'){
+      const opts=['Algemeen','AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze'];
+      modal754(L754('Snelle notitie','Quick note'), `<div class="grid"><p class="muted small">${E754(L754('Snel iets vastleggen zonder je workflow te verliezen.','Quickly record something without losing your workflow.'))}</p><label>${E754(L754('Categorie','Category'))}<select class="select" id="v754NoteCat">${opts.map(o=>`<option value="${E754(o)}" ${o===cat?'selected':''}>${E754(o)}</option>`).join('')}</select></label><label>${E754(L754('Notitie','Note'))}<textarea class="input" id="v754QuickNote" rows="4" placeholder="${E754(L754('Bijv. vracht kwam laat, veel restanten, HACCP uitgelopen...','E.g. freight arrived late, many leftovers, HACCP ran late...'))}"></textarea></label><div class="btn-row"><button class="btn primary" data-action="v754-save-quick-note">${E754(L754('Notitie opslaan','Save note'))}</button><button class="btn" data-action="close-modal">${E754(L754('Annuleren','Cancel'))}</button></div></div>`, 'wide'); }
+    function saveQuickNote754(){ const cat=(document.getElementById('v754NoteCat')?.value||'Algemeen').trim(); const note=(document.getElementById('v754QuickNote')?.value||'').trim(); if(!note){ toast754(L754('Vul eerst een notitie in','Enter a note first'),'warn'); return; } const q={id:uid754('note'),cat,note,at:now754(),date:today754(),source:'mobile-execution'}; state.quickNotes.unshift(q); state.quickNotes=state.quickNotes.slice(0,120); if(cat==='Communicatie'){ state.communications=Array.isArray(state.communications)?state.communications:[]; state.communications.unshift({id:uid754('comm'),title:L754('Snelle notitie','Quick note'),message:note,priority:'Normaal',status:'open',person:'Collega',at:q.at,date:q.date,type:'note'}); } save754(); toast754(L754('Snelle notitie opgeslagen','Quick note saved'),'good'); close754(); render754(); }
+
+    function mobileExecutionCard754(compact=false){
+      ensure754(); const n=nextTask754(); const r=riskCounts754(); const done=doneTasks754().length, total=ensure754().tasks.length || 1;
+      const riskLine = r.total ? `${r.haccp} HACCP · ${r.storemap} Store Map` : L754('Geen directe risico’s','No direct risks');
+      return `<div class="card v754-floor-card ${compact?'compact':''}"><div class="flex-line"><div><span class="chip">v7.5.4 · ${E754(L754('Werkvloerweergave','Shop-floor view'))}</span><h3>${E754(L754('Nu belangrijk','Important now'))}</h3><p class="muted small">${E754(L754('Snel werken zonder veel telefooninteractie. Afvinken kan, meten is optioneel.','Fast work without much phone interaction. Checking off is enough; measuring is optional.'))}</p></div><span class="pill ${r.total?'warn':'good'}">${E754(riskLine)}</span></div><div class="v754-next mt"><span class="v754-next-icon">${n?(n.type==='break'?'☕':'▶'):'✓'}</span><span><strong>${E754(n?n.title:L754('Dagroute compleet','Day route complete'))}</strong><br><span class="tiny muted">${n?`${E754(L754('Richttijd','Guide'))}: ${E754(n.guide||'-')} · ${E754(groupLabel754(n.group))} · ${E754(statusLabel754(n))}`:E754(L754('Geen open stappen','No open steps'))}</span></span></div>${n?`<div class="btn-row mt v754-fast-actions"><button class="btn small good" data-action="v754-done" data-id="${E754(n.id)}">✓ ${E754(L754('Gedaan','Done'))}</button><button class="btn small warn" data-action="v754-defer" data-id="${E754(n.id)}">↷ ${E754(L754('Uitstellen','Defer'))}</button><button class="btn small" data-action="v754-measure" data-id="${E754(n.id)}">⏱ ${E754(isRunning754(n)?L754('Stop meting','Stop measuring'):L754('Meten','Measure'))}</button><button class="btn small" data-action="v754-later" data-id="${E754(n.id)}">⋯ ${E754(L754('Net gedaan','Just done'))}</button></div>`:''}<div class="btn-row mt"><button class="btn" data-action="v754-quick-note">✎ ${E754(L754('Snelle notitie','Quick note'))}</button><button class="btn" data-action="v686-open-planner">${E754(L754('Open dagroute','Open day route'))}</button><button class="btn" data-action="toggle-rust-mode">${state.ui?.rustMode?E754(L754('Normale weergave','Normal view')):E754(L754('Rustmodus','Calm mode'))}</button></div><div class="tiny muted mt">${E754(L754('Voortgang','Progress'))}: ${done}/${total} · ${E754(L754('Laatste notities','Latest notes'))}: ${state.quickNotes.length}</div></div>`;
+    }
+    function quickNotesCard754(){ ensure754(); const notes=state.quickNotes.slice(0,5); return `<div class="card v754-notes-card"><div class="flex-line"><div><h3>${E754(L754('Snelle notities','Quick notes'))}</h3><p class="muted small">${E754(L754('Korte werkvloernotities, zichtbaar zonder de juiste module te zoeken.','Short shop-floor notes, visible without searching for the right module.'))}</p></div><button class="btn small" data-action="v754-quick-note">+ ${E754(L754('Notitie','Note'))}</button></div>${notes.length?`<div class="list mt">${notes.map(n=>`<div class="list-item compact"><span><strong>${E754(n.cat)}</strong><br><span class="tiny muted">${E754(time754(n.at))}</span><br><span class="small">${E754(n.note)}</span></span></div>`).join('')}</div>`:`<p class="muted small mt">${E754(L754('Nog geen snelle notities.','No quick notes yet.'))}</p>`}</div>`; }
+    function rustModeCard754(){ return `<div class="card v754-rust-card"><h3>${E754(L754('Rustmodus per module','Calm mode per module'))}</h3><p class="muted small">${E754(L754('Rustmodus toont per module alleen uitvoering en belangrijkste signalen: Vandaag, HACCP, AGF, Bestelbeheer, Communicatie en Coaching blijven compacter.','Calm mode shows only execution and key signals per module: Today, HACCP, Produce, Ordering, Communication and Coaching stay more compact.'))}</p><div class="list"><div class="list-item compact"><span>Vandaag</span><span class="pill good">Wat Nu + Nu belangrijk</span></div><div class="list-item compact"><span>HACCP</span><span class="pill good">Urgenties + eerste taken</span></div><div class="list-item compact"><span>AGF</span><span class="pill good">Kwaliteitsronde + signalen</span></div><div class="list-item compact"><span>Bestelbeheer</span><span class="pill good">Actieve bestellijst</span></div></div></div>`; }
+    function mobileDiagnostics754(){
+      const issues=[]; try{ const vw=document.documentElement.clientWidth||0; if(vw){ const wide=[...document.querySelectorAll('body *')].filter(el=>{ if(el.closest('.modal,.toast,.boot-screen')) return false; return el.scrollWidth && el.scrollWidth > vw+12; }).length; if(wide) issues.push(`${wide} ${L754('te brede elementen','wide elements')}`); } const legacy=document.querySelectorAll('.v660-assist-extra,.v661-assist-extra,.daily-flow-floating,.orphan-daily-flow').length; if(legacy) issues.push(`${legacy} ${L754('oude zwevende blokken','old floating blocks')}`); }catch(_){}
+      const checks=[
+        {name:L754('Werkvloerweergave','Shop-floor view'),ok:true,detail:L754('Nu belangrijk + snelle acties','Important now + quick actions')},
+        {name:L754('Universele snelle notitie','Universal quick note'),ok:Array.isArray(state.quickNotes),detail:`${state.quickNotes.length} ${L754('notities','notes')}`},
+        {name:L754('Achteraf registreren','Register afterwards'),ok:true,detail:L754('nu / 15 min / 30 min / eigen tijd','now / 15 min / 30 min / custom time')},
+        {name:L754('Mobiele layout','Mobile layout'),ok:issues.length===0,detail:issues.join(', ')||'OK'},
+        {name:L754('Rustmodus','Calm mode'),ok:true,detail:L754('belangrijkste zaken per module','key items per module')},
+        {name:L754('Versie/cache','Version/cache'),ok:APP.version==='v7.5.4'&&APP.cache==='rich-cmd-cache-v754',detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score=Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return `<div class="card v754-diagnostics"><div class="flex-line"><div><span class="chip">v7.5.4</span><h3>${E754(L754('Mobile Execution checks','Mobile Execution checks'))}</h3><p class="muted small">${E754(L754('Controleert werkvloerweergave, snelle notities, achteraf registreren, Rustmodus en mobiele betrouwbaarheid.','Checks shop-floor view, quick notes, after-the-fact registration, calm mode and mobile reliability.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E754(c.name)}</strong><br><span class="tiny muted">${E754(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="v754-quick-note">${E754(L754('Snelle notitie testen','Test quick note'))}</button><button class="btn" data-action="v754-copy-mobile-report">${E754(L754('Kopieer rapport','Copy report'))}</button></div></div>`;
+    }
+    function report754(){ const s=ensure754(); const n=nextTask754(); const r=riskCounts754(); return `RICH CMD v7.5.4 — Mobile Execution Polish\nDatum: ${today754()}\n\nNu belangrijk:\n- Volgende taak: ${n?n.title:'Geen open stap'}\n- Risico's: HACCP ${r.haccp}, Store Map ${r.storemap}\n- Voortgang: ${doneTasks754().length}/${s.tasks.length}\n\nSnelle notities:\n${state.quickNotes.slice(0,10).map(x=>`- ${x.cat} ${time754(x.at)}: ${x.note}`).join('\n')||'- Geen'}\n\nBeleid:\n- Afvinken is genoeg voor normale werkdagen.\n- Meten blijft incidenteel en optioneel.\n- Rustmodus toont alleen de belangrijkste zaken.`; }
+
+    const prevToday754 = typeof renderToday==='function' ? renderToday : null;
+    if(prevToday754) renderToday = window.renderToday = function(){ const base=prevToday754()||''; const prefix=mobileExecutionCard754(false); return state.ui?.rustMode ? `${prefix}${base}` : `${prefix}${base}<div class="grid grid-2 mt v754-today-extra">${quickNotesCard754()}${rustModeCard754()}</div>`; };
+    const prevHaccp754 = typeof renderHaccp==='function' ? renderHaccp : null;
+    if(prevHaccp754) renderHaccp = window.renderHaccp = function(){ const base=prevHaccp754()||''; return state.ui?.rustMode ? `${mobileExecutionCard754(true)}${base}` : `${base}`; };
+    const prevAgf754 = typeof renderAgf==='function' ? renderAgf : null;
+    if(prevAgf754) renderAgf = window.renderAgf = function(){ const base=prevAgf754()||''; return state.ui?.rustMode ? `${mobileExecutionCard754(true)}${base}` : `${base}<div class="mt v754-agf-note">${quickNotesCard754()}</div>`; };
+    const prevInventory754 = typeof renderInventory==='function' ? renderInventory : null;
+    if(prevInventory754) renderInventory = window.renderInventory = function(){ const base=prevInventory754()||''; return state.ui?.rustMode ? `${mobileExecutionCard754(true)}${base}` : base; };
+    const prevCommunication754 = typeof renderCommunication==='function' ? renderCommunication : null;
+    if(prevCommunication754) renderCommunication = window.renderCommunication = function(){ const base=prevCommunication754()||''; return `${quickNotesCard754()}${base}`; };
+    const prevDiagnostics754 = typeof renderDiagnostics==='function' ? renderDiagnostics : null;
+    if(prevDiagnostics754) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics754()||''; return `<div class="grid diagnostics-v754">${mobileDiagnostics754()}<div class="grid grid-2">${mobileExecutionCard754(true)}${quickNotesCard754()}</div></div>${base}`; };
+    const prevSettings754 = typeof renderSettings==='function' ? renderSettings : null;
+    if(prevSettings754) renderSettings = window.renderSettings = function(){ const base=prevSettings754()||''; return `${base}<div class="grid grid-2 mt settings-v754">${mobileDiagnostics754()}${rustModeCard754()}</div>`; };
+    const prevVisual754 = typeof renderVisual==='function' ? renderVisual : null;
+    if(prevVisual754) renderVisual = window.renderVisual = function(){ const base=prevVisual754()||''; const s=ensure754(); return `<div class="grid grid-2 visual-v754">${mobileExecutionCard754(true)}<div class="card"><h3>${E754(L754('Werkvloerdata','Shop-floor data'))}</h3><p class="muted small">${E754(L754('Afgevinkt en gemeten blijven apart. Notities helpen verklaren waarom iets uitliep.','Checked and measured remain separate. Notes help explain why something ran late.'))}</p><div class="grid grid-3"><div class="soft card"><strong>${doneTasks754().length}</strong><p class="tiny muted">${E754(L754('afgevinkt','checked'))}</p></div><div class="soft card"><strong>${s.tasks.filter(t=>actualMin754(t)>0).length}</strong><p class="tiny muted">${E754(L754('gemeten','measured'))}</p></div><div class="soft card"><strong>${state.quickNotes.length}</strong><p class="tiny muted">${E754(L754('notities','notes'))}</p></div></div></div></div>${base}`; };
+
+    const prevHandle754 = typeof handleAction==='function' ? handleAction : null;
+    if(prevHandle754) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v754-done'){ setDone754(el?.dataset?.id); return; }
+      if(a==='v754-defer'){ defer754(el?.dataset?.id); return; }
+      if(a==='v754-measure'){ measure754(el?.dataset?.id); return; }
+      if(a==='v754-later'){ laterModal754(el?.dataset?.id); return; }
+      if(a==='v754-done-offset'){ doneAtOffset754(el?.dataset?.id, el?.dataset?.offset); return; }
+      if(a==='v754-done-custom'){ doneCustom754(el?.dataset?.id); return; }
+      if(a==='v754-save-task-note'){ saveTaskNote754(el?.dataset?.id); return; }
+      if(a==='v754-quick-note'){ openQuickNote754(el?.dataset?.cat || 'Algemeen'); return; }
+      if(a==='v754-save-quick-note'){ saveQuickNote754(); return; }
+      if(a==='v754-copy-mobile-report'){ try{ navigator.clipboard.writeText(report754()).then(()=>toast754(L754('Rapport gekopieerd','Report copied'),'good')).catch(()=>toast754(report754())); }catch(_){ toast754(report754()); } return; }
+      return prevHandle754(a,el,e);
+    };
+
+    ensure754(); save754();
+  }catch(err){ console.error('v7.5.4 Mobile Execution patch failed', err); }
+})();
+
+/* ================================
+   RICH CMD v7.5.5 — Quick Actions & Field Notes Pro
+   Faster low-interaction field capture: adaptive quick actions, richer field notes, signal capture, note-to-task/follow-up and report/visualisation links.
+================================ */
+(function(){
+  try{
+    if(window.__richCmd755Applied) return;
+    window.__richCmd755Applied = true;
+    if(typeof APP === 'object'){
+      APP.version = 'v7.5.5';
+      APP.cache = 'rich-cmd-cache-v755';
+      APP.build = 'Quick Actions & Field Notes Pro';
+      APP.pwa = APP.pwa || {};
+      APP.pwa.assets = ['./','./index.html','./index.html?v=755','./styles.css?v=755','./vro-data.js?v=755','./app.js?v=755','./manifest.json?v=755','./version.json','./icon-192.png','./icon-512.png'];
+    }
+    const L755 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E755 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const now755 = ()=> new Date().toISOString();
+    const today755 = ()=> new Date().toISOString().slice(0,10);
+    const uid755 = (p='fn')=> p+'_'+Math.random().toString(36).slice(2,8)+'_'+Date.now().toString(36);
+    const save755 = ()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){} };
+    const render755 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast755 = (m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const modal755 = (title,html,wide='')=>{ try{ if(typeof modal==='function') modal(title,html,wide); else toast755(title); }catch(_){ toast755(title); } };
+    const close755 = ()=>{ try{ if(typeof closeModal==='function') closeModal(); }catch(_){} };
+    const by755 = (id)=> typeof byId==='function' ? byId(id) : document.getElementById(id);
+    const copy755 = (txt)=>{ try{ if(typeof copyText==='function') copyText(txt); else navigator.clipboard.writeText(txt).then(()=>toast755(L755('Gekopieerd','Copied'),'good')); }catch(_){ console.log(txt); toast755(L755('Kopiëren niet gelukt','Could not copy'),'warn'); } };
+    const time755 = (iso)=>{ try{ return new Date(iso).toLocaleTimeString(currentLang()==='en'?'en-GB':'nl-NL',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return '-'; } };
+    const date755 = (iso)=>{ try{ return new Date(iso).toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL',{weekday:'short',day:'2-digit',month:'short'}); }catch(_){ return '-'; } };
+
+    function ensure755(){
+      state.ui = state.ui || {};
+      state.quickNotes = Array.isArray(state.quickNotes) ? state.quickNotes : [];
+      state.fieldNotes = Array.isArray(state.fieldNotes) ? state.fieldNotes : [];
+      state.fieldNotes.forEach(n=>{ if(!n.status) n.status='open'; if(!n.priority) n.priority='Normaal'; if(!n.type) n.type='note'; });
+      state.fieldNotesSettings = state.fieldNotesSettings || {showDone:false,collapsed:false};
+      return state.fieldNotes;
+    }
+    function routeCat755(){
+      const r=state.route||'today';
+      const map={today:'Algemeen',agf:'AGF',haccp:'HACCP',storemap:'Store Map',inventory:'Bestelbeheer',communication:'Communicatie',visual:'Algemeen',coaching:'Coaching',diagnostics:'Algemeen',settings:'Algemeen'};
+      return map[r]||'Algemeen';
+    }
+    function catOptions755(selected){
+      const cats=['Algemeen','AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze','Coaching','Shiftleider'];
+      return cats.map(c=>`<option value="${E755(c)}" ${selected===c?'selected':''}>${E755(c)}</option>`).join('');
+    }
+    function priorityClass755(p){ p=String(p||'').toLowerCase(); return p.includes('krit')||p.includes('hoog')?'warn':p.includes('laag')?'info':'good'; }
+    function fieldNotes755(filterCat){
+      ensure755();
+      return state.fieldNotes.filter(n=>{
+        if(filterCat && filterCat!=='Alles' && n.cat!==filterCat && n.link!==filterCat) return false;
+        if(!state.fieldNotesSettings.showDone && n.status==='done') return false;
+        return true;
+      });
+    }
+    function nextTaskId755(){
+      try{
+        if(typeof nextTask754==='function'){ const n=nextTask754(); return n&&n.id; }
+      }catch(_){ }
+      try{
+        const arr=(state.workdaySeq&&Array.isArray(state.workdaySeq.tasks)?state.workdaySeq.tasks:[]).filter(t=>!['done','voldaan','voltooid','afgerond'].includes(String(t.status||'').toLowerCase()));
+        if(arr[0]) return arr[0].id;
+      }catch(_){ }
+      try{
+        const t=(state.tasks||[]).find(t=>t.status!=='Voltooid');
+        return t&&t.id;
+      }catch(_){ }
+      return '';
+    }
+    function quickActionBar755(cat){
+      ensure755();
+      const module=cat||routeCat755();
+      const tid=nextTaskId755();
+      const moduleHint={
+        AGF:L755('AGF-signaal of restanten snel vastleggen.','Quickly capture produce signal or leftovers.'),
+        HACCP:L755('HACCP-taak of risico snel vastleggen.','Quickly capture HACCP task or risk.'),
+        'Store Map':L755('Schoonmaak- of signaalpunt snel vastleggen.','Quickly capture cleaning or signal point.'),
+        Bestelbeheer:L755('Bestelling, teveel of controlepunt snel vastleggen.','Quickly capture order, overstock or check point.'),
+        Communicatie:L755('Opvolging of overdracht snel vastleggen.','Quickly capture follow-up or handover.'),
+        Algemeen:L755('Snel iets vastleggen zonder de juiste module te zoeken.','Quickly capture something without searching for the right module.')
+      }[module]||L755('Snel vastleggen en doorgaan.','Capture quickly and continue.');
+      return `<div class="card v755-quickbar" data-module="${E755(module)}"><div class="flex-line"><div><span class="chip">v7.5.5</span><h3>${E755(L755('Quick Actions','Quick Actions'))}</h3><p class="muted small">${E755(moduleHint)}</p></div><span class="pill info">${E755(module)}</span></div><div class="v755-action-row mt"><button class="btn primary" data-action="v755-open-field-note" data-cat="${E755(module)}">+ ${E755(L755('Notitie','Note'))}</button><button class="btn warn" data-action="v755-open-signal" data-cat="${E755(module)}">⚠ ${E755(L755('Signaal','Signal'))}</button>${tid?`<button class="btn good" data-action="v754-done" data-id="${E755(tid)}">✓ ${E755(L755('Gedaan','Done'))}</button><button class="btn" data-action="v754-later" data-id="${E755(tid)}">⋯ ${E755(L755('Net gedaan','Just done'))}</button><button class="btn" data-action="v754-measure" data-id="${E755(tid)}">⏱ ${E755(L755('Meten','Measure'))}</button>`:`<button class="btn" disabled>✓ ${E755(L755('Geen taak','No task'))}</button>`}</div></div>`;
+    }
+    function openFieldNote755(cat='Algemeen', type='note'){
+      ensure755();
+      modal755(type==='signal'?L755('Nieuw signaal','New signal'):L755('Snelle notitie Pro','Field Note Pro'), `<div class="grid v755-modal"><div class="form-grid"><label>${E755(L755('Categorie','Category'))}<select class="select" id="v755NoteCat">${catOptions755(cat)}</select></label><label>${E755(L755('Prioriteit','Priority'))}<select class="select" id="v755NotePriority"><option>Laag</option><option selected>Normaal</option><option>Hoog</option><option>Kritiek</option></select></label><label>${E755(L755('Koppelen aan','Link to'))}<select class="select" id="v755NoteLink"><option value="">${E755(L755('Niet koppelen','Do not link'))}</option>${catOptions755(cat)}</select></label><label>${E755(L755('Type','Type'))}<select class="select" id="v755NoteType"><option value="note" ${type==='note'?'selected':''}>${E755(L755('Notitie','Note'))}</option><option value="signal" ${type==='signal'?'selected':''}>${E755(L755('Signaal','Signal'))}</option><option value="handover">${E755(L755('Overdracht','Handover'))}</option><option value="idea">${E755(L755('Idee','Idea'))}</option></select></label></div><textarea class="textarea" id="v755NoteText" rows="5" placeholder="${E755(L755('Wat wil je snel vastleggen?','What do you want to capture quickly?'))}"></textarea><p class="muted small">${E755(L755('Je kunt deze notitie later omzetten naar een taak of communicatie-opvolging.','You can later convert this note into a task or communication follow-up.'))}</p><div class="btn-row"><button class="btn primary" data-action="v755-save-field-note">${E755(L755('Opslaan','Save'))}</button><button class="btn" data-action="v755-save-field-note-task">${E755(L755('Opslaan + taak','Save + task'))}</button><button class="btn" data-action="v755-save-field-note-followup">${E755(L755('Opslaan + opvolging','Save + follow-up'))}</button></div></div>`, 'wide');
+    }
+    function collectNote755(){
+      const text=(by755('v755NoteText')?.value||'').trim();
+      if(!text){ toast755(L755('Vul eerst een notitie in.','Enter a note first.'),'warn'); return null; }
+      return {id:uid755('field'),at:now755(),date:today755(),cat:by755('v755NoteCat')?.value||'Algemeen',priority:by755('v755NotePriority')?.value||'Normaal',link:by755('v755NoteLink')?.value||'',type:by755('v755NoteType')?.value||'note',note:text,status:'open',source:'v7.5.5'};
+    }
+    function saveNote755(mode){
+      ensure755(); const n=collectNote755(); if(!n) return null;
+      state.fieldNotes.unshift(n);
+      state.quickNotes.unshift({id:n.id,at:n.at,cat:n.cat,note:n.note,priority:n.priority,type:n.type,source:'fieldNotesPro'});
+      if(mode==='task') noteToTask755(n.id,false);
+      if(mode==='followup') noteToFollowup755(n.id,false);
+      save755(); close755(); render755(); toast755(L755('Vastgelegd','Captured'),'good'); return n;
+    }
+    function findNote755(id){ ensure755(); return state.fieldNotes.find(n=>String(n.id)===String(id)); }
+    function noteToTask755(id,rerender=true){
+      const n=findNote755(id); if(!n) return;
+      state.tasks = Array.isArray(state.tasks)?state.tasks:[];
+      state.tasks.unshift({id:uid755('task'),title:`${n.cat}: ${n.note.slice(0,80)}`,duration:10,priority:n.priority==='Kritiek'?'Kritiek':n.priority==='Hoog'?'Hoog':n.priority==='Laag'?'Laag':'Medium',category:n.link||n.cat,status:'Open',createdAt:now755(),source:'field-note',noteId:n.id});
+      n.convertedTaskAt=now755(); n.status=n.status==='done'?'done':'open';
+      try{ if(typeof addActivity==='function') addActivity(`Field note naar taak: ${n.note.slice(0,40)}`,'field-note'); }catch(_){}
+      save755(); if(rerender){ render755(); toast755(L755('Taak aangemaakt','Task created'),'good'); }
+    }
+    function noteToFollowup755(id,rerender=true){
+      const n=findNote755(id); if(!n) return;
+      state.communications = Array.isArray(state.communications)?state.communications:[];
+      state.communications.unshift({id:uid755('comm'),to:n.cat==='Communicatie'?'Collega':'Collega',customTo:'',message:`${n.cat} · ${n.note}`,status:n.priority==='Kritiek'||n.priority==='Hoog'?'Rood':'Oranje',read:false,followDate:today755(),createdAt:now755(),source:'field-note',noteId:n.id});
+      n.convertedFollowupAt=now755(); n.status=n.status==='done'?'done':'open';
+      save755(); if(rerender){ render755(); toast755(L755('Opvolging aangemaakt','Follow-up created'),'good'); }
+    }
+    function completeNote755(id){ const n=findNote755(id); if(n){ n.status='done'; n.doneAt=now755(); save755(); render755(); toast755(L755('Notitie afgehandeld','Note completed'),'good'); } }
+    function fieldNotesCard755(cat){
+      const list=fieldNotes755(cat).slice(0, state.ui?.showMore?.fieldNotes755 ? 20 : 6);
+      return `<div class="card v755-fieldnotes"><div class="flex-line"><div><h3>${E755(L755('Field Notes Pro','Field Notes Pro'))}</h3><p class="muted small">${E755(L755('Snelle notities, signalen en overdrachtspunten die je later kunt omzetten naar taak of opvolging.','Quick notes, signals and handover points you can later convert to a task or follow-up.'))}</p></div><button class="btn small primary" data-action="v755-open-field-note" data-cat="${E755(cat||routeCat755())}">+ ${E755(L755('Nieuw','New'))}</button></div>${list.length?`<div class="list mt">${list.map(n=>`<div class="list-item v755-note ${n.status==='done'?'v755-note-done':''}"><div><div class="btn-row"><span class="chip">${E755(n.cat)}</span><span class="pill ${priorityClass755(n.priority)}">${E755(n.priority)}</span><span class="pill info">${E755(n.type==='signal'?L755('Signaal','Signal'):n.type==='handover'?L755('Overdracht','Handover'):L755('Notitie','Note'))}</span></div><strong>${E755(n.note)}</strong><div class="tiny muted">${E755(date755(n.at))} · ${E755(time755(n.at))}${n.link?` · ${E755(L755('gekoppeld aan','linked to'))}: ${E755(n.link)}`:''}</div>${n.convertedTaskAt?`<div class="tiny muted">✓ ${E755(L755('taak aangemaakt','task created'))}</div>`:''}${n.convertedFollowupAt?`<div class="tiny muted">✓ ${E755(L755('opvolging aangemaakt','follow-up created'))}</div>`:''}</div><div class="btn-row v755-note-actions"><button class="btn small" data-action="v755-note-to-task" data-id="${E755(n.id)}">${E755(L755('Taak','Task'))}</button><button class="btn small" data-action="v755-note-to-followup" data-id="${E755(n.id)}">${E755(L755('Opvolging','Follow-up'))}</button><button class="btn small good" data-action="v755-note-done" data-id="${E755(n.id)}">✓</button></div></div>`).join('')}</div>`:`<p class="muted small mt">${E755(L755('Nog geen field notes.','No field notes yet.'))}</p>`}<div class="btn-row mt"><button class="btn" data-action="toggle-more" data-key="fieldNotes755">${state.ui?.showMore?.fieldNotes755?E755(L755('Minder tonen','Show less')):E755(L755('Meer weergeven','Show more'))}</button><button class="btn" data-action="v755-copy-field-report">${E755(L755('Kopieer dagnotities','Copy day notes'))}</button></div></div>`;
+    }
+    function fieldNotesInsights755(){
+      const notes=fieldNotes755('Alles'); const today=notes.filter(n=>String(n.date||'')===today755()||String(n.at||'').slice(0,10)===today755());
+      const cats={}; today.forEach(n=>cats[n.cat]=(cats[n.cat]||0)+1);
+      const high=today.filter(n=>['Hoog','Kritiek'].includes(n.priority)).length;
+      const signals=today.filter(n=>n.type==='signal').length;
+      return `<div class="card v755-insights"><h3>${E755(L755('Field Notes inzichten','Field Notes insights'))}</h3><div class="grid grid-3"><div class="soft card"><strong>${today.length}</strong><p class="tiny muted">${E755(L755('vandaag','today'))}</p></div><div class="soft card"><strong>${signals}</strong><p class="tiny muted">${E755(L755('signalen','signals'))}</p></div><div class="soft card"><strong>${high}</strong><p class="tiny muted">${E755(L755('hoog/kritiek','high/critical'))}</p></div></div><div class="mt">${Object.entries(cats).map(([k,v])=>`<span class="chip">${E755(k)} ${v}</span>`).join(' ')||`<p class="muted small">${E755(L755('Nog geen notities vandaag.','No notes today yet.'))}</p>`}</div></div>`;
+    }
+    function fieldReport755(){
+      ensure755(); const today=state.fieldNotes.filter(n=>String(n.date||'')===today755()||String(n.at||'').slice(0,10)===today755());
+      const open=today.filter(n=>n.status!=='done');
+      return `RICH CMD v7.5.5 — Field Notes Pro\nDatum: ${today755()}\n\nSamenvatting:\n- Notities vandaag: ${today.length}\n- Open: ${open.length}\n- Signalen: ${today.filter(n=>n.type==='signal').length}\n\nOpen punten:\n${open.map(n=>`- [${n.cat}] ${n.priority}: ${n.note}`).join('\n')||'- Geen'}\n\nAlle notities vandaag:\n${today.map(n=>`- ${time755(n.at)} [${n.cat}/${n.priority}] ${n.note}${n.convertedTaskAt?' (taak)':''}${n.convertedFollowupAt?' (opvolging)':''}`).join('\n')||'- Geen'}\n\nBeleid:\n- Snel vastleggen is voldoende; later omzetten naar taak/opvolging kan.\n- Timers blijven optioneel.\n- Field notes worden meegenomen in dagrapport en visualisatie.`;
+    }
+    function fieldDiagnostics755(){
+      ensure755();
+      const checks=[
+        {name:L755('Quick Action Bar','Quick Action Bar'),ok:true,detail:L755('Notitie, signaal en taakacties beschikbaar','Note, signal and task actions available')},
+        {name:L755('Field Notes Pro opslag','Field Notes Pro storage'),ok:Array.isArray(state.fieldNotes),detail:`${state.fieldNotes.length} ${L755('notities','notes')}`},
+        {name:L755('Notitie naar taak','Note to task'),ok:true,detail:L755('beschikbaar per notitie','available per note')},
+        {name:L755('Notitie naar opvolging','Note to follow-up'),ok:true,detail:L755('beschikbaar per notitie','available per note')},
+        {name:L755('Dagrapport met notities','Daily report with notes'),ok:true,detail:L755('kopieerbaar rapport','copyable report')},
+        {name:L755('Mobiel compact','Mobile compact'),ok:true,detail:L755('actiebar en notities blijven compact','action bar and notes stay compact')},
+        {name:L755('Versie/cache','Version/cache'),ok:APP.version==='v7.5.5'&&APP.cache==='rich-cmd-cache-v755',detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score=Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return `<div class="card v755-diagnostics"><div class="flex-line"><div><span class="chip">v7.5.5</span><h3>${E755(L755('Quick Actions & Field Notes checks','Quick Actions & Field Notes checks'))}</h3><p class="muted small">${E755(L755('Controleert snelle acties, field notes, omzetting naar taak/opvolging en dagrapportage.','Checks quick actions, field notes, conversion to task/follow-up and daily reporting.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E755(c.name)}</strong><br><span class="tiny muted">${E755(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v755-open-field-note">${E755(L755('Test notitie','Test note'))}</button><button class="btn" data-action="v755-copy-field-report">${E755(L755('Kopieer rapport','Copy report'))}</button></div></div>`;
+    }
+
+    const prevToday755 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday755) renderToday = window.renderToday = function(){ const base=prevToday755()||''; return `${quickActionBar755('Algemeen')}${base}<div class="grid grid-2 mt v755-today-notes">${fieldNotesCard755('Alles')}${fieldNotesInsights755()}</div>`; };
+    const prevHaccp755 = typeof renderHaccp==='function'?renderHaccp:null;
+    if(prevHaccp755) renderHaccp = window.renderHaccp = function(){ const base=prevHaccp755()||''; return `${quickActionBar755('HACCP')}${base}<div class="mt v755-module-notes">${fieldNotesCard755('HACCP')}</div>`; };
+    const prevAgf755 = typeof renderAgf==='function'?renderAgf:null;
+    if(prevAgf755) renderAgf = window.renderAgf = function(){ const base=prevAgf755()||''; return `${quickActionBar755('AGF')}${base}<div class="mt v755-module-notes">${fieldNotesCard755('AGF')}</div>`; };
+    const prevStore755 = typeof renderStoreMap==='function'?renderStoreMap:null;
+    if(prevStore755) renderStoreMap = window.renderStoreMap = function(){ const base=prevStore755()||''; return `${quickActionBar755('Store Map')}${base}<div class="mt v755-module-notes">${fieldNotesCard755('Store Map')}</div>`; };
+    const prevInv755 = typeof renderInventory==='function'?renderInventory:null;
+    if(prevInv755) renderInventory = window.renderInventory = function(){ const base=prevInv755()||''; return `${quickActionBar755('Bestelbeheer')}${base}<div class="mt v755-module-notes">${fieldNotesCard755('Bestelbeheer')}</div>`; };
+    const prevComm755 = typeof renderCommunication==='function'?renderCommunication:null;
+    if(prevComm755) renderCommunication = window.renderCommunication = function(){ const base=prevComm755()||''; return `${quickActionBar755('Communicatie')}${fieldNotesCard755('Communicatie')}${base}`; };
+    const prevVisual755 = typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual755) renderVisual = window.renderVisual = function(){ const base=prevVisual755()||''; return `<div class="grid grid-2 visual-v755">${fieldNotesInsights755()}<div class="card"><h3>${E755(L755('Dagrapport met field notes','Daily report with field notes'))}</h3><p class="muted small">${E755(L755('Snelle notities en signalen worden meegenomen als verklaring bij je werkdag.','Quick notes and signals are included as context for your workday.'))}</p><button class="btn primary" data-action="v755-copy-field-report">${E755(L755('Kopieer dagrapport','Copy daily report'))}</button></div></div>${base}`; };
+    const prevDiag755 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiag755) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiag755()||''; return `<div class="grid diagnostics-v755">${fieldDiagnostics755()}<div class="grid grid-2">${quickActionBar755('Algemeen')}${fieldNotesCard755('Alles')}</div></div>${base}`; };
+    const prevSettings755 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings755) renderSettings = window.renderSettings = function(){ const base=prevSettings755()||''; return `${base}<div class="grid grid-2 mt settings-v755">${fieldDiagnostics755()}${fieldNotesInsights755()}</div>`; };
+
+    const prevHandle755 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle755) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v755-open-field-note' || a==='v754-quick-note'){ openFieldNote755(el?.dataset?.cat || routeCat755(), 'note'); return; }
+      if(a==='v755-open-signal'){ openFieldNote755(el?.dataset?.cat || routeCat755(), 'signal'); return; }
+      if(a==='v755-save-field-note'){ saveNote755('note'); return; }
+      if(a==='v755-save-field-note-task'){ saveNote755('task'); return; }
+      if(a==='v755-save-field-note-followup'){ saveNote755('followup'); return; }
+      if(a==='v755-note-to-task'){ noteToTask755(el?.dataset?.id); return; }
+      if(a==='v755-note-to-followup'){ noteToFollowup755(el?.dataset?.id); return; }
+      if(a==='v755-note-done'){ completeNote755(el?.dataset?.id); return; }
+      if(a==='v755-copy-field-report'){ copy755(fieldReport755()); return; }
+      return prevHandle755(a,el,e);
+    };
+
+    ensure755(); save755();
+  }catch(err){ console.error('v7.5.5 Quick Actions & Field Notes Pro patch failed', err); }
+})();
+
+
+/* ================================
+   RICH CMD v7.6.0 — V8 Data Learning Foundation
+   A safe local learning-data layer for future V8 intelligence: structured events, confidence, pattern review, field-note linking, data quality and diagnostics.
+================================ */
+(function(){
+  try{
+    if(window.__richCmd760Applied) return;
+    window.__richCmd760Applied = true;
+    if(typeof APP === 'object'){
+      APP.version = 'v7.6.0';
+      APP.cache = 'rich-cmd-cache-v760';
+      APP.build = 'V8 Data Learning Foundation';
+      APP.pwa = APP.pwa || {};
+      APP.pwa.assets = ['./','./index.html','./index.html?v=760','./styles.css?v=760','./vro-data.js?v=760','./app.js?v=760','./manifest.json?v=760','./version.json','./icon-192.png','./icon-512.png'];
+    }
+
+    const L760 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E760 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const now760 = ()=> new Date().toISOString();
+    const today760 = ()=> now760().slice(0,10);
+    const uid760 = (p='learn')=> p+'_'+Math.random().toString(36).slice(2,8)+'_'+Date.now().toString(36);
+    const save760 = ()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){} };
+    const render760 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast760 = (m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const copy760 = (txt)=>{ try{ if(typeof copyText==='function') copyText(txt); else navigator.clipboard.writeText(txt).then(()=>toast760(L760('Gekopieerd','Copied'),'good')); }catch(_){ console.log(txt); toast760(L760('Kopieer niet gelukt','Could not copy'),'warn'); } };
+    const date760 = (iso)=>{ try{ return new Date(iso).toLocaleDateString(currentLang()==='en'?'en-GB':'nl-NL',{day:'2-digit',month:'short'}); }catch(_){ return '-'; } };
+    const time760 = (iso)=>{ try{ return new Date(iso).toLocaleTimeString(currentLang()==='en'?'en-GB':'nl-NL',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return '-'; } };
+    const modal760 = (title,html,wide='')=>{ try{ if(typeof modal==='function') modal(title,html,wide); else toast760(title); }catch(_){ toast760(title); } };
+
+    function ensure760(){
+      state.v8Learning = state.v8Learning || {};
+      const v=state.v8Learning;
+      v.events = Array.isArray(v.events) ? v.events : [];
+      v.reviews = Array.isArray(v.reviews) ? v.reviews : [];
+      v.settings = v.settings || {autoCapture:true, keepEvents:600, minSignalsRecurring:3, minDaysStructure:3};
+      v.migrations = v.migrations || [];
+      state.learningEvents = v.events; // clear alias for backup/export and future V8 builds
+      return v;
+    }
+    function eventKey760(ev){ return [ev.type,ev.module,ev.subject,ev.sourceId].map(x=>String(x||'')).join('|'); }
+    function addLearningEvent760(ev){
+      const v=ensure760();
+      const e=Object.assign({id:uid760('event'),at:now760(),date:today760(),version:APP.version,confidence:'laag',status:'active',source:'manual'}, ev||{});
+      e.type=e.type||'event'; e.module=e.module||'Algemeen'; e.subject=e.subject||e.label||e.module; e.detail=e.detail||'';
+      const k=eventKey760(e);
+      if(e.sourceId && v.events.some(x=>eventKey760(x)===k)) return null;
+      v.events.unshift(e);
+      const keep=Number(v.settings.keepEvents||600);
+      if(v.events.length>keep) v.events=v.events.slice(0,keep);
+      state.learningEvents = v.events;
+      return e;
+    }
+    function seedFromExisting760(){
+      const v=ensure760();
+      if(v.seededFromExisting) return;
+      try{ (state.fieldNotes||[]).slice(0,120).forEach(n=> addLearningEvent760({type:n.type==='signal'?'signaal':'notitie',module:n.cat||n.link||'Algemeen',subject:n.note||n.cat||'Notitie',detail:n.note||'',priority:n.priority||'Normaal',source:'field-note',sourceId:n.id,at:n.at||now760(),date:n.date||String(n.at||now760()).slice(0,10),confidence:'laag'})); }catch(_){}
+      try{ (state.quickNotes||[]).slice(0,80).forEach(n=> addLearningEvent760({type:'snelle notitie',module:n.cat||'Algemeen',subject:n.note||'Notitie',detail:n.note||'',priority:n.priority||'Normaal',source:'quick-note',sourceId:n.id,at:n.at||now760(),date:String(n.at||now760()).slice(0,10),confidence:'laag'})); }catch(_){}
+      try{ (state.tasks||[]).slice(0,120).forEach(t=> addLearningEvent760({type:String(t.status||'').toLowerCase().includes('voltooid')||String(t.status||'').toLowerCase().includes('done')?'taak afgerond':'taak',module:t.category||'HACCP',subject:t.title||t.name||'Taak',detail:t.note||'',priority:t.priority||'Normaal',source:'task',sourceId:t.id,at:t.updatedAt||t.completedAt||t.createdAt||now760(),date:String(t.updatedAt||t.completedAt||t.createdAt||now760()).slice(0,10),confidence:'middel'})); }catch(_){}
+      try{ (state.agfSignals||state.agfSignals687||[]).slice(0,120).forEach(s=> addLearningEvent760({type:'AGF signaal',module:'AGF',subject:s.product||s.name||s.title||'AGF product',detail:s.status||s.kind||s.note||'',priority:s.priority||'Normaal',source:'agf-signal',sourceId:s.id,at:s.at||s.createdAt||now760(),date:String(s.at||s.createdAt||now760()).slice(0,10),confidence:'middel'})); }catch(_){}
+      v.seededFromExisting = now760();
+      v.migrations.unshift({at:now760(),version:APP.version,action:'seed-existing-data',events:v.events.length});
+      save760();
+    }
+    function events760(module){ const v=ensure760(); return module ? v.events.filter(e=>e.module===module || e.module?.toLowerCase?.()===module.toLowerCase()) : v.events; }
+    function daysBetween760(a,b){ try{ return Math.max(0,Math.round((new Date(b)-new Date(a))/(1000*60*60*24))); }catch(_){ return 0; } }
+    function confidence760(count,days){
+      if(count>=6 && days>=3) return {label:L760('hoog','high'),score:85,tone:'good'};
+      if(count>=3 && days>=2) return {label:L760('middel','medium'),score:65,tone:'warn'};
+      if(count>=2) return {label:L760('laag','low'),score:40,tone:'info'};
+      return {label:L760('te weinig data','too little data'),score:20,tone:'muted'};
+    }
+    function label760(count,days){
+      if(count>=6 && days>=3) return L760('structureel','structural');
+      if(count>=3 && days>=2) return L760('terugkerend','recurring');
+      if(count>=2) return L760('monitoren','monitor');
+      return L760('eenmalig','one-off');
+    }
+    function buildPatterns760(){
+      const list=events760().filter(e=>['signaal','AGF signaal','snelle notitie','notitie','taak','taak afgerond'].includes(e.type));
+      const groups={};
+      list.forEach(e=>{
+        const subject=(e.subject||e.detail||e.module||'Onbekend').trim().slice(0,80);
+        const key=(e.module||'Algemeen')+'|'+subject.toLowerCase();
+        groups[key]=groups[key]||{id:key.replace(/[^a-z0-9]+/gi,'_').slice(0,60),module:e.module||'Algemeen',subject,events:[],types:{}};
+        groups[key].events.push(e); groups[key].types[e.type]=(groups[key].types[e.type]||0)+1;
+      });
+      return Object.values(groups).map(g=>{
+        const dates=[...new Set(g.events.map(e=>String(e.date||e.at||'').slice(0,10)).filter(Boolean))].sort();
+        const span=dates.length?daysBetween760(dates[0], dates[dates.length-1])+1:1;
+        const conf=confidence760(g.events.length, dates.length);
+        const review=ensure760().reviews.find(r=>r.patternId===g.id);
+        const kind=Object.entries(g.types).sort((a,b)=>b[1]-a[1])[0]?.[0]||'event';
+        return Object.assign(g,{count:g.events.length,days:dates.length,span,kind,label:label760(g.events.length,dates.length),confidence:conf.label,score:conf.score,tone:conf.tone,reviewStatus:review?.status||'open',reviewNote:review?.note||'',lastAt:g.events[0]?.at||now760()});
+      }).filter(p=>p.count>=1).sort((a,b)=>b.score-a.score || b.count-a.count).slice(0,30);
+    }
+    function dataQuality760(){
+      const ev=events760();
+      const modules=['AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze','Coaching','Shiftleider'];
+      const rows=modules.map(m=>{
+        const arr=ev.filter(e=>e.module===m);
+        const measured=arr.filter(e=>/meting|gemeten|timer|measure/i.test(e.type+' '+e.detail)).length;
+        const notes=arr.filter(e=>/notitie|signaal/i.test(e.type)).length;
+        const score=Math.min(100, Math.round(arr.length*10 + measured*10 + notes*5));
+        return {module:m,count:arr.length,measured,notes,score,level:score>=70?L760('goed','good'):score>=35?L760('middel','medium'):score>0?L760('laag','low'):L760('geen data','no data'),tone:score>=70?'good':score>=35?'warn':score>0?'info':'muted'};
+      });
+      return rows;
+    }
+    function reviewPattern760(id,status){
+      const v=ensure760(); const p=buildPatterns760().find(x=>x.id===id); if(!p) return;
+      const old=v.reviews.find(r=>r.patternId===id);
+      if(old){ old.status=status; old.at=now760(); old.label=p.label; old.subject=p.subject; old.module=p.module; }
+      else v.reviews.unshift({id:uid760('review'),patternId:id,status,at:now760(),label:p.label,subject:p.subject,module:p.module});
+      save760(); render760(); toast760(status==='confirmed'?L760('Patroon bevestigd','Pattern confirmed'):status==='ignored'?L760('Patroon genegeerd','Pattern ignored'):L760('Later beoordelen','Review later'),'good');
+    }
+    function addEventFromModal760(){
+      const module=document.getElementById('v760EventModule')?.value||'Algemeen';
+      const type=document.getElementById('v760EventType')?.value||'notitie';
+      const subject=(document.getElementById('v760EventSubject')?.value||'').trim();
+      const detail=(document.getElementById('v760EventDetail')?.value||'').trim();
+      if(!subject && !detail){ toast760(L760('Vul eerst een onderwerp of notitie in.','Enter a subject or note first.'),'warn'); return; }
+      addLearningEvent760({type,module,subject:subject||detail.slice(0,60),detail,source:'manual-learning',confidence:'laag'});
+      save760(); try{ if(typeof closeModal==='function') closeModal(); }catch(_){} render760(); toast760(L760('Learning event opgeslagen','Learning event saved'),'good');
+    }
+    function openEventModal760(){
+      const modules=['Algemeen','AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze','Coaching','Shiftleider'];
+      const types=['notitie','signaal','taak','taak afgerond','meting','risico','bestelling','onderbreking'];
+      modal760(L760('Learning event toevoegen','Add learning event'), `<div class="grid"><div class="form-grid"><label>${E760(L760('Module','Module'))}<select class="select" id="v760EventModule">${modules.map(m=>`<option>${E760(m)}</option>`).join('')}</select></label><label>${E760(L760('Type','Type'))}<select class="select" id="v760EventType">${types.map(t=>`<option>${E760(t)}</option>`).join('')}</select></label></div><label>${E760(L760('Onderwerp','Subject'))}<input class="input" id="v760EventSubject" placeholder="${E760(L760('Bijv. Bananen, HACCP, late vracht','E.g. Bananas, HACCP, late freight'))}"></label><label>${E760(L760('Notitie / context','Note / context'))}<textarea class="textarea" id="v760EventDetail" rows="4"></textarea></label><p class="muted small">${E760(L760('Deze data blijft lokaal in de app en helpt V8 later patronen voorzichtiger te beoordelen.','This data stays local in the app and helps V8 assess patterns more carefully later.'))}</p><button class="btn primary" data-action="v760-save-learning-event">${E760(L760('Opslaan','Save'))}</button></div>`, 'wide');
+    }
+    function learningSummary760(){
+      const v=ensure760(); const pats=buildPatterns760(); const dq=dataQuality760();
+      return {events:v.events.length,patterns:pats.length,confirmed:v.reviews.filter(r=>r.status==='confirmed').length,ignored:v.reviews.filter(r=>r.status==='ignored').length,dataGood:dq.filter(d=>d.score>=70).length,dataMedium:dq.filter(d=>d.score>=35).length};
+    }
+    function learningDataCard760(){
+      const s=learningSummary760();
+      return `<div class="card v760-card"><div class="flex-line"><div><span class="chip">v7.6.0</span><h3>${E760(L760('V8 Learning Data Layer','V8 Learning Data Layer'))}</h3><p class="muted small">${E760(L760('Structuur voor taken, signalen, notities, metingen, risico’s en bestellingen. Geen automatische harde beslissingen.','Structure for tasks, signals, notes, measurements, risks and orders. No automatic hard decisions.'))}</p></div><span class="pill info">${s.events} events</span></div><div class="grid grid-4 mt"><div class="soft card"><strong>${s.events}</strong><p class="tiny muted">events</p></div><div class="soft card"><strong>${s.patterns}</strong><p class="tiny muted">patterns</p></div><div class="soft card"><strong>${s.confirmed}</strong><p class="tiny muted">confirmed</p></div><div class="soft card"><strong>${s.dataGood}</strong><p class="tiny muted">good modules</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v760-seed-events">${E760(L760('Data opbouwen','Build data'))}</button><button class="btn" data-action="v760-add-event">+ ${E760(L760('Learning event','Learning event'))}</button><button class="btn" data-action="v760-copy-report">${E760(L760('Kopieer rapport','Copy report'))}</button></div></div>`;
+    }
+    function patternReviewCard760(limit=6){
+      const pats=buildPatterns760().filter(p=>p.reviewStatus!=='ignored').slice(0,limit);
+      return `<div class="card v760-card"><div class="flex-line"><div><h3>${E760(L760('Pattern Review','Pattern Review'))}</h3><p class="muted small">${E760(L760('Bevestig of negeer patronen zodat V8 jouw werk beter leert begrijpen.','Confirm or ignore patterns so V8 better understands your work.'))}</p></div><span class="pill info">${pats.length}</span></div>${pats.length?`<div class="list mt">${pats.map(p=>`<div class="list-item v760-pattern"><div><div class="btn-row"><span class="chip">${E760(p.module)}</span><span class="pill ${p.tone}">${E760(p.confidence)}</span><span class="pill info">${E760(p.label)}</span></div><strong>${E760(p.subject)}</strong><div class="tiny muted">${E760(p.count)} events · ${E760(p.days)} dagen · ${E760(L760('laatste','last'))}: ${E760(date760(p.lastAt))}</div></div><div class="btn-row"><button class="btn small good" data-action="v760-review-pattern" data-status="confirmed" data-id="${E760(p.id)}">${E760(L760('Klopt','Correct'))}</button><button class="btn small" data-action="v760-review-pattern" data-status="later" data-id="${E760(p.id)}">${E760(L760('Later','Later'))}</button><button class="btn small bad" data-action="v760-review-pattern" data-status="ignored" data-id="${E760(p.id)}">${E760(L760('Negeer','Ignore'))}</button></div></div>`).join('')}</div>`:`<p class="muted small mt">${E760(L760('Nog te weinig data voor duidelijke patronen. Field notes, afvinken en incidenteel meten zijn genoeg om dit rustig op te bouwen.','Too little data for clear patterns yet. Field notes, check-offs and occasional measuring are enough to build this calmly.'))}</p>`}</div>`;
+    }
+    function dataQualityCard760(){
+      const rows=dataQuality760();
+      return `<div class="card v760-card"><h3>${E760(L760('Datakwaliteit','Data quality'))}</h3><p class="muted small">${E760(L760('Laat zien waar RICH CMD genoeg context heeft en waar adviezen voorzichtig moeten blijven.','Shows where RICH CMD has enough context and where advice should remain careful.'))}</p><div class="list mt">${rows.map(r=>`<div class="list-item compact"><span><strong>${E760(r.module)}</strong><br><span class="tiny muted">${r.count} events · ${r.notes} notities/signalen · ${r.measured} metingen</span></span><span class="pill ${r.tone}">${E760(r.level)}</span></div>`).join('')}</div></div>`;
+    }
+    function learningPolicyCard760(){
+      return `<div class="card v760-card"><h3>${E760(L760('Hoe V8 Data Learning werkt','How V8 Data Learning works'))}</h3><div class="list"><div class="list-item compact"><span>${E760(L760('Alle data blijft lokaal in de app en gaat mee in je normale backup/export.','All data stays local in the app and is included in normal backup/export.'))}</span></div><div class="list-item compact"><span>${E760(L760('Meten blijft optioneel. Afvinken, field notes en signalen zijn voldoende voor gewone werkdagen.','Measuring remains optional. Check-offs, field notes and signals are enough for normal workdays.'))}</span></div><div class="list-item compact"><span>${E760(L760('V8 geeft pas sterk advies bij genoeg data en toont altijd zekerheid.','V8 only gives stronger advice with enough data and always shows confidence.'))}</span></div><div class="list-item compact"><span>${E760(L760('Pattern Review voorkomt verkeerde aannames: jij kunt patronen bevestigen of negeren.','Pattern Review prevents wrong assumptions: you can confirm or ignore patterns.'))}</span></div></div></div>`;
+    }
+    function v8DataPage760(){
+      seedFromExisting760();
+      return `<div class="page v760-page"><div class="hero v760-hero"><span class="chip">RICH CMD v7.6.0</span><h2>${E760(L760('V8 Data Learning Foundation','V8 Data Learning Foundation'))}</h2><p>${E760(L760('De veilige datalaag voor toekomstige Adaptive Retail Intelligence: gebeurtenissen, zekerheid, patroonreview en datakwaliteit zonder druk op jouw werkdag.','The safe data layer for future Adaptive Retail Intelligence: events, confidence, pattern review and data quality without pressuring your workday.'))}</p></div>${learningDataCard760()}<div class="grid grid-2">${patternReviewCard760(8)}${dataQualityCard760()}</div>${learningPolicyCard760()}</div>`;
+    }
+    function v8DataSmallCard760(){ const s=learningSummary760(); return `<div class="card v760-small"><div class="flex-line"><div><span class="chip">V8 Data</span><h3>${E760(L760('Learning Foundation','Learning Foundation'))}</h3><p class="muted small">${E760(L760('Events, datakwaliteit en pattern review voor toekomstige V8-intelligentie.','Events, data quality and pattern review for future V8 intelligence.'))}</p></div><span class="pill info">${s.events}</span></div><div class="btn-row mt"><button class="btn" data-route="v8preview">${E760(L760('Open V8 Data','Open V8 Data'))}</button><button class="btn" data-action="v760-copy-report">${E760(L760('Kopieer rapport','Copy report'))}</button></div></div>`; }
+    function diagnosticsCard760(){
+      const s=learningSummary760(); const dq=dataQuality760(); const pats=buildPatterns760();
+      const checks=[
+        {name:L760('Learning events opgeslagen','Learning events stored'),ok:Array.isArray(ensure760().events),detail:`${s.events} events`},
+        {name:L760('Field notes gekoppeld','Field notes linked'),ok:(state.fieldNotes||[]).length===0 || ensure760().events.some(e=>e.source==='field-note'),detail:L760('snelle notities worden meegenomen','field notes are included')},
+        {name:L760('Meten optioneel','Measuring optional'),ok:true,detail:L760('afvinken/notities blijven genoeg','check-offs/notes remain enough')},
+        {name:L760('Patronen met zekerheid','Patterns with confidence'),ok:pats.every(p=>p.confidence),detail:`${pats.length} patterns`},
+        {name:L760('Pattern Review','Pattern Review'),ok:Array.isArray(ensure760().reviews),detail:`${ensure760().reviews.length} reviews`},
+        {name:L760('Backup bevat learning data','Backup includes learning data'),ok:!!state.v8Learning && Array.isArray(state.learningEvents),detail:L760('onderdeel van lokale state','part of local state')},
+        {name:L760('Datakwaliteit zichtbaar','Data quality visible'),ok:dq.length>=5,detail:`${dq.filter(d=>d.score>0).length}/${dq.length} modules`},
+        {name:L760('Versie/cache','Version/cache'),ok:APP.version==='v7.6.0'&&APP.cache==='rich-cmd-cache-v760',detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score=Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return `<div class="card v760-diagnostics"><div class="flex-line"><div><span class="chip">v7.6.0</span><h3>${E760(L760('V8 Data Check','V8 Data Check'))}</h3><p class="muted small">${E760(L760('Controleert learning events, datakwaliteit, patroonreview, backup en optionele metingen.','Checks learning events, data quality, pattern review, backup and optional measurements.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E760(c.name)}</strong><br><span class="tiny muted">${E760(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v760-seed-events">${E760(L760('Learning data opbouwen','Build learning data'))}</button><button class="btn" data-action="v760-add-event">+ ${E760(L760('Event','Event'))}</button><button class="btn" data-action="v760-copy-report">${E760(L760('Kopieer V8 Data rapport','Copy V8 Data report'))}</button></div></div>`;
+    }
+    function report760(){
+      seedFromExisting760();
+      const s=learningSummary760(); const dq=dataQuality760(); const pats=buildPatterns760().slice(0,10);
+      return `RICH CMD v7.6.0 — V8 Data Learning Foundation\nDatum: ${today760()}\n\nLearning Data\n- Events: ${s.events}\n- Patronen: ${s.patterns}\n- Bevestigd: ${s.confirmed}\n- Genegeerd: ${s.ignored}\n\nDatakwaliteit\n${dq.map(d=>`- ${d.module}: ${d.level} (${d.count} events, ${d.notes} notities/signalen, ${d.measured} metingen)`).join('\n')}\n\nPattern Review\n${pats.length?pats.map(p=>`- ${p.module} · ${p.subject}: ${p.label}, zekerheid ${p.confidence}, ${p.count} events, review ${p.reviewStatus}`).join('\n'):'- Nog te weinig data'}\n\nBeleid\n- Alle learning data blijft lokaal en gaat mee in backup/export.\n- Meten blijft optioneel; afvinken en field notes zijn voldoende.\n- V8 mag pas sterker adviseren bij genoeg data en met zichtbare zekerheid.\n- Jij kunt patronen bevestigen, negeren of later beoordelen.`;
+    }
+
+    // Initial data build is safe and local. It only creates derived events from existing state.
+    seedFromExisting760();
+
+    const prevPage760 = typeof renderPage==='function'?renderPage:null;
+    if(prevPage760) renderPage = window.renderPage = function(){ return state.route==='v8preview' ? v8DataPage760() : prevPage760(); };
+    const prevVisual760 = typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual760) renderVisual = window.renderVisual = function(){ const base=prevVisual760()||''; return `<div class="grid grid-2 visual-v760">${dataQualityCard760()}${patternReviewCard760(5)}</div>${base}`; };
+    const prevDiagnostics760 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiagnostics760) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics760()||''; return `<div class="grid diagnostics-v760">${diagnosticsCard760()}<div class="grid grid-2">${learningDataCard760()}${dataQualityCard760()}</div></div>${base}`; };
+    const prevSettings760 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings760) renderSettings = window.renderSettings = function(){ const base=prevSettings760()||''; return `${base}<div class="grid grid-2 mt settings-v760">${learningDataCard760()}${learningPolicyCard760()}</div>`; };
+    const prevToday760 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday760) renderToday = window.renderToday = function(){ const base=prevToday760()||''; const s=learningSummary760(); return `${base}<div class="grid grid-2 mt today-v760">${s.patterns?`<div class="card v760-subtle"><div class="flex-line"><div><span class="chip">V8 Data</span><strong>${E760(L760('Datalaag actief','Data layer active'))}</strong><p class="tiny muted">${E760(s.events+' events · '+s.patterns+' patterns · '+L760('niet dominant op Vandaag','not dominant on Today'))}</p></div><button class="btn small" data-route="v8preview">${E760(L760('Open','Open'))}</button></div></div>`:''}</div>`; };
+
+    const prevHandle760 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle760) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v760-seed-events'){ const v=ensure760(); v.seededFromExisting=null; seedFromExisting760(); save760(); render760(); toast760(L760('Learning data opgebouwd','Learning data built'),'good'); return; }
+      if(a==='v760-add-event'){ openEventModal760(); return; }
+      if(a==='v760-save-learning-event'){ addEventFromModal760(); return; }
+      if(a==='v760-copy-report'){ copy760(report760()); return; }
+      if(a==='v760-review-pattern'){ reviewPattern760(el?.dataset?.id, el?.dataset?.status||'later'); return; }
+      // add derived learning events around existing v7.5.5 field-note actions while preserving the original behavior
+      if(a==='v755-save-field-note' || a==='v755-save-field-note-task' || a==='v755-save-field-note-followup'){
+        const text=(document.getElementById('v755NoteText')?.value||'').trim();
+        const cat=document.getElementById('v755NoteCat')?.value||'Algemeen';
+        const type=document.getElementById('v755NoteType')?.value||'notitie';
+        if(text) addLearningEvent760({type:type==='signal'?'signaal':'notitie',module:cat,subject:text.slice(0,70),detail:text,source:'field-note-live',confidence:'laag'});
+        const res=prevHandle760(a,el,e); save760(); return res;
+      }
+      if(a==='v754-done' || a==='v754-done-offset'){
+        addLearningEvent760({type:'taak afgerond',module:'Dagroute',subject:el?.dataset?.id||'Werkdagtaak',detail:a,source:'workday-action',sourceId:(el?.dataset?.id||'')+'_'+a+'_'+Date.now(),confidence:'middel'});
+        const res=prevHandle760(a,el,e); save760(); return res;
+      }
+      if(a==='v754-measure'){
+        addLearningEvent760({type:'meting',module:'Dagroute',subject:el?.dataset?.id||'Werkdagtaak',detail:'Timer/meten gestart of bijgewerkt',source:'workday-measure',sourceId:(el?.dataset?.id||'')+'_measure_'+Date.now(),confidence:'middel'});
+        const res=prevHandle760(a,el,e); save760(); return res;
+      }
+      return prevHandle760(a,el,e);
+    };
+
+    save760();
+  }catch(err){ console.error('v7.6.0 V8 Data Learning Foundation patch failed', err); }
+})();
+
+/* ================================
+   RICH CMD v7.6.1 — Learning Data Polish & Pattern Review UX
+   Improves V8 learning-data usability: pattern filters, cause notes, data-quality explanations, learning dashboard, Visualisatie and Diagnostics checks.
+================================ */
+(function(){
+  try{
+    if(window.__richCmd761Applied) return;
+    window.__richCmd761Applied = true;
+    if(typeof APP === 'object'){
+      APP.version = 'v7.6.1';
+      APP.cache = 'rich-cmd-cache-v761';
+      APP.build = 'Learning Data Polish & Pattern Review UX';
+      APP.pwa = APP.pwa || {};
+      APP.pwa.assets = ['./','./index.html','./index.html?v=761','./styles.css?v=761','./vro-data.js?v=761','./app.js?v=761','./manifest.json?v=761','./version.json','./icon-192.png','./icon-512.png'];
+    }
+
+    const L761 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E761 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const now761 = ()=> new Date().toISOString();
+    const today761 = ()=> now761().slice(0,10);
+    const uid761 = (p='v761')=> p+'_'+Math.random().toString(36).slice(2,8)+'_'+Date.now().toString(36);
+    const save761 = ()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){} };
+    const render761 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast761 = (m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const copy761 = (txt)=>{ try{ if(typeof copyText==='function') copyText(txt); else navigator.clipboard.writeText(txt).then(()=>toast761(L761('Gekopieerd','Copied'),'good')); }catch(_){ console.log(txt); toast761(L761('Kopieer niet gelukt','Could not copy'),'warn'); } };
+    const modal761 = (title,html,wide='')=>{ try{ if(typeof modal==='function') modal(title,html,wide); else toast761(title); }catch(_){ toast761(title); } };
+    const fmtDate761 = (iso)=>{ try{ return new Date(iso).toLocaleDateString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{day:'2-digit',month:'short'}); }catch(_){ return '-'; } };
+
+    function ensure761(){
+      state.v8Learning = state.v8Learning || {};
+      const v = state.v8Learning;
+      v.events = Array.isArray(v.events) ? v.events : (Array.isArray(state.learningEvents) ? state.learningEvents : []);
+      v.reviews = Array.isArray(v.reviews) ? v.reviews : [];
+      v.causes = Array.isArray(v.causes) ? v.causes : [];
+      v.settings = Object.assign({autoCapture:true, keepEvents:600, minSignalsRecurring:3, minDaysStructure:3}, v.settings||{});
+      v.migrations = Array.isArray(v.migrations) ? v.migrations : [];
+      state.learningEvents = v.events;
+      state.ui = state.ui || {};
+      if(!state.ui.v761PatternFilter) state.ui.v761PatternFilter = 'open';
+      return v;
+    }
+    function events761(module){ const v=ensure761(); return module ? v.events.filter(e=>String(e.module||'').toLowerCase()===String(module).toLowerCase()) : v.events; }
+    function days761(arr){ return [...new Set(arr.map(e=>String(e.date||e.at||'').slice(0,10)).filter(Boolean))].sort(); }
+    function confidence761(count,dayCount,measured){
+      if(count>=7 && dayCount>=4) return {label:L761('hoog','high'),score:90,tone:'good',reason:L761('veel signalen over meerdere dagen','many signals over multiple days')};
+      if(count>=4 && dayCount>=2) return {label:L761('middel','medium'),score:68,tone:'warn',reason:L761('meerdere signalen, nog geen harde zekerheid','multiple signals, not full certainty yet')};
+      if(count>=2) return {label:L761('laag','low'),score:42,tone:'info',reason:L761('enkele signalen; monitoren is verstandiger dan concluderen','some signals; monitoring is better than concluding')};
+      return {label:L761('te weinig data','too little data'),score:18,tone:'muted',reason:L761('nog te weinig invoer voor betrouwbaar advies','too little input for reliable advice')};
+    }
+    function label761(count,dayCount){
+      if(count>=7 && dayCount>=4) return L761('structureel','structural');
+      if(count>=4 && dayCount>=2) return L761('terugkerend','recurring');
+      if(count>=2) return L761('monitoren','monitor');
+      return L761('eenmalig','one-off');
+    }
+    function patternId761(module,subject){ return (String(module||'Algemeen')+'_'+String(subject||'Onbekend')).replace(/[^a-z0-9]+/gi,'_').slice(0,72); }
+    function buildPatterns761(){
+      const list=events761().filter(e=>e && !e.archived);
+      const groups={};
+      list.forEach(e=>{
+        const module=e.module||'Algemeen';
+        const subject=String(e.subject||e.detail||e.label||module||'Onbekend').trim().slice(0,90) || module;
+        const key=module+'|'+subject.toLowerCase();
+        groups[key]=groups[key]||{id:patternId761(module,subject),module,subject,events:[],types:{},sources:{}};
+        groups[key].events.push(e);
+        groups[key].types[e.type||'event']=(groups[key].types[e.type||'event']||0)+1;
+        groups[key].sources[e.source||'manual']=(groups[key].sources[e.source||'manual']||0)+1;
+      });
+      const reviews=ensure761().reviews;
+      return Object.values(groups).map(g=>{
+        const dates=days761(g.events);
+        const measured=g.events.filter(e=>/meting|gemeten|timer|measure/i.test(String(e.type)+' '+String(e.detail))).length;
+        const c=confidence761(g.events.length,dates.length,measured);
+        const r=reviews.find(x=>x.patternId===g.id);
+        const cause=ensure761().causes.find(x=>x.patternId===g.id);
+        const kind=Object.entries(g.types).sort((a,b)=>b[1]-a[1])[0]?.[0]||'event';
+        return Object.assign(g,{count:g.events.length,days:dates.length,measured,kind,confidence:c.label,score:c.score,tone:c.tone,confidenceReason:c.reason,label:label761(g.events.length,dates.length),reviewStatus:r?.status||'open',reviewNote:r?.note||'',reviewedAt:r?.at||'',cause:cause?.cause||'',causeNote:cause?.note||'',lastAt:g.events[0]?.at||now761()});
+      }).sort((a,b)=>b.score-a.score || b.count-a.count || String(a.subject).localeCompare(String(b.subject))).slice(0,80);
+    }
+    function filteredPatterns761(){
+      const filter=state.ui?.v761PatternFilter||'open';
+      const pats=buildPatterns761();
+      if(filter==='all') return pats;
+      if(filter==='open') return pats.filter(p=>!['confirmed','ignored'].includes(p.reviewStatus));
+      if(filter==='confirmed') return pats.filter(p=>p.reviewStatus==='confirmed');
+      if(filter==='ignored') return pats.filter(p=>p.reviewStatus==='ignored');
+      if(filter==='later') return pats.filter(p=>p.reviewStatus==='later');
+      if(filter==='high') return pats.filter(p=>p.score>=80);
+      if(filter==='low') return pats.filter(p=>p.score<50);
+      return pats;
+    }
+    function dataQuality761(){
+      const modules=['AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze','Dagroute','Coaching','Shiftleider'];
+      return modules.map(module=>{
+        const arr=events761(module);
+        const notes=arr.filter(e=>/notitie|signaal|note|signal/i.test(String(e.type))).length;
+        const measured=arr.filter(e=>/meting|gemeten|timer|measure/i.test(String(e.type)+' '+String(e.detail))).length;
+        const done=arr.filter(e=>/afgerond|gedaan|done|taak/i.test(String(e.type))).length;
+        const score=Math.min(100, Math.round(arr.length*8 + notes*4 + measured*10 + done*3));
+        let level=L761('geen data','no data'), tone='muted', reason=L761('Nog geen bruikbare events opgeslagen.','No useful events stored yet.');
+        if(score>=75){ level=L761('goed','good'); tone='good'; reason=measured?L761('Genoeg events en enkele gemeten momenten.','Enough events and some measured moments.'):L761('Genoeg voortgang/signalen; metingen blijven optioneel.','Enough progress/signals; measuring remains optional.'); }
+        else if(score>=40){ level=L761('middel','medium'); tone='warn'; reason=measured?L761('Er is context en wat gemeten data, maar nog voorzichtig adviseren.','There is context and some measured data, but advice should stay careful.'):L761('Genoeg signalen/afvinken, weinig gemeten tijd.','Enough signals/check-offs, little measured time.'); }
+        else if(score>0){ level=L761('laag','low'); tone='info'; reason=L761('Er is wat input, maar te weinig om sterk te concluderen.','Some input exists, but too little for strong conclusions.'); }
+        return {module,count:arr.length,notes,measured,done,score,level,tone,reason};
+      });
+    }
+    function summary761(){
+      const pats=buildPatterns761();
+      const dq=dataQuality761();
+      const avg=Math.round(dq.reduce((a,b)=>a+b.score,0)/Math.max(1,dq.length));
+      return {events:events761().length,patterns:pats.length,open:pats.filter(p=>p.reviewStatus==='open'||p.reviewStatus==='later').length,confirmed:pats.filter(p=>p.reviewStatus==='confirmed').length,ignored:pats.filter(p=>p.reviewStatus==='ignored').length,high:pats.filter(p=>p.score>=80).length,avgQuality:avg,qualityLabel:avg>=75?L761('goed','good'):avg>=40?L761('middel','medium'):avg>0?L761('laag','low'):L761('geen data','no data')};
+    }
+    function review761(id,status){
+      const v=ensure761();
+      const p=buildPatterns761().find(x=>x.id===id);
+      if(!p) return;
+      const r=v.reviews.find(x=>x.patternId===id) || {id:uid761('review'),patternId:id,createdAt:now761()};
+      r.status=status; r.at=now761(); r.module=p.module; r.subject=p.subject; r.score=p.score;
+      if(!v.reviews.includes(r)) v.reviews.unshift(r);
+      save761(); render761(); toast761(status==='confirmed'?L761('Patroon bevestigd','Pattern confirmed'):status==='ignored'?L761('Patroon genegeerd','Pattern ignored'):L761('Patroon bewaard voor later','Pattern saved for later'),'good');
+    }
+    function openCauseModal761(id){
+      const p=buildPatterns761().find(x=>x.id===id); if(!p) return;
+      const old=ensure761().causes.find(x=>x.patternId===id)||{};
+      const causes=[L761('Late vracht','Late truck'),L761('Drukte / klanten','Busy / customers'),L761('Collega geholpen','Helped colleague'),L761('Veel vracht','Large delivery'),L761('HACCP liep uit','HACCP ran late'),L761('Kwaliteit / derving','Quality / waste'),L761('Onbekend / monitoren','Unknown / monitor')];
+      modal761(L761('Oorzaak koppelen','Link cause'), `<div class="grid"><div class="card"><h3>${E761(p.subject)}</h3><p class="muted small">${E761(p.module)} · ${p.count} events · ${E761(p.confidence)}</p><label class="label">${E761(L761('Oorzaak','Cause'))}</label><select id="v761Cause" class="input">${causes.map(c=>`<option ${old.cause===c?'selected':''}>${E761(c)}</option>`).join('')}</select><label class="label mt">${E761(L761('Notitie / context','Note / context'))}</label><textarea id="v761CauseNote" class="input" rows="4" placeholder="${E761(L761('Bijv. vracht kwam laat, daardoor schoof HACCP door…','E.g. truck arrived late, so HACCP shifted…'))}">${E761(old.note||'')}</textarea></div><div class="btn-row"><button class="btn primary" data-action="v761-save-cause" data-id="${E761(id)}">${E761(L761('Oorzaak opslaan','Save cause'))}</button><button class="btn" data-action="close-modal">${E761(L761('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+    function saveCause761(id){
+      const v=ensure761(); const p=buildPatterns761().find(x=>x.id===id); if(!p) return;
+      const cause=document.getElementById('v761Cause')?.value || L761('Onbekend / monitoren','Unknown / monitor');
+      const note=(document.getElementById('v761CauseNote')?.value||'').trim();
+      const item=v.causes.find(x=>x.patternId===id) || {id:uid761('cause'),patternId:id,createdAt:now761()};
+      Object.assign(item,{module:p.module,subject:p.subject,cause,note,at:now761()});
+      if(!v.causes.includes(item)) v.causes.unshift(item);
+      // store as learning event too, so future V8 can learn why work shifted
+      v.events.unshift({id:uid761('event'),at:now761(),date:today761(),version:APP.version,type:'oorzaak',module:p.module,subject:p.subject,detail:cause+(note?': '+note:''),source:'pattern-cause',sourceId:id,confidence:'middel'});
+      state.learningEvents=v.events;
+      save761(); render761(); toast761(L761('Oorzaak opgeslagen','Cause saved'),'good');
+    }
+    function dashboardCard761(){
+      const s=summary761();
+      return `<div class="card v761-dashboard"><div class="flex-line"><div><span class="chip">v7.6.1</span><h3>${E761(L761('V8 Learning Dashboard','V8 Learning Dashboard'))}</h3><p class="muted small">${E761(L761('Overzicht van events, patronen, reviews en datakwaliteit.','Overview of events, patterns, reviews and data quality.'))}</p></div><span class="pill ${s.avgQuality>=70?'good':s.avgQuality>=35?'warn':'info'}">${s.qualityLabel}</span></div><div class="grid grid-4 mt"><div class="mini-stat"><strong>${s.events}</strong><span>${E761(L761('Events','Events'))}</span></div><div class="mini-stat"><strong>${s.patterns}</strong><span>${E761(L761('Patronen','Patterns'))}</span></div><div class="mini-stat"><strong>${s.confirmed}</strong><span>${E761(L761('Bevestigd','Confirmed'))}</span></div><div class="mini-stat"><strong>${s.open}</strong><span>${E761(L761('Te beoordelen','To review'))}</span></div></div><div class="btn-row mt"><button class="btn primary" data-route="v8preview">${E761(L761('Open V8 Learning','Open V8 Learning'))}</button><button class="btn" data-action="v761-copy-report">${E761(L761('Kopieer learning rapport','Copy learning report'))}</button></div></div>`;
+    }
+    function filterBar761(){
+      const f=state.ui?.v761PatternFilter||'open';
+      const opts=[['open',L761('Nieuw/later','New/later')],['all',L761('Alles','All')],['confirmed',L761('Bevestigd','Confirmed')],['ignored',L761('Genegeerd','Ignored')],['later',L761('Later','Later')],['high',L761('Hoge zekerheid','High confidence')],['low',L761('Lage zekerheid','Low confidence')]];
+      return `<div class="btn-row v761-filter-row">${opts.map(([id,label])=>`<button class="btn small ${f===id?'primary':''}" data-action="v761-filter-patterns" data-filter="${id}">${E761(label)}</button>`).join('')}</div>`;
+    }
+    function patternCard761(limit=10){
+      const all=filteredPatterns761();
+      const rows=all.slice(0,limit);
+      return `<div class="card v761-patterns"><div class="flex-line"><div><h3>${E761(L761('Pattern Review','Pattern Review'))}</h3><p class="muted small">${E761(L761('Beoordeel patronen, koppel oorzaken en voorkom verkeerde aannames.','Review patterns, link causes and prevent wrong assumptions.'))}</p></div><span class="pill info">${all.length}</span></div>${filterBar761()}${rows.length?`<div class="list mt">${rows.map(p=>`<div class="list-item v761-pattern-row"><div class="grow"><div class="btn-row"><span class="chip">${E761(p.module)}</span><span class="pill ${p.tone}">${E761(p.confidence)}</span><span class="pill info">${E761(p.label)}</span><span class="pill ${p.reviewStatus==='confirmed'?'good':p.reviewStatus==='ignored'?'bad':'warn'}">${E761(p.reviewStatus==='open'?L761('nieuw','new'):p.reviewStatus)}</span></div><strong>${E761(p.subject)}</strong><div class="tiny muted">${p.count} events · ${p.days} dagen · ${E761(p.confidenceReason)} · ${E761(L761('laatste','last'))}: ${E761(fmtDate761(p.lastAt))}</div>${p.cause?`<div class="tiny mt"><strong>${E761(L761('Oorzaak','Cause'))}:</strong> ${E761(p.cause)}${p.causeNote?` — ${E761(p.causeNote)}`:''}</div>`:''}</div><div class="btn-row v761-row-actions"><button class="btn small good" data-action="v761-review-pattern" data-status="confirmed" data-id="${E761(p.id)}">✓</button><button class="btn small" data-action="v761-review-pattern" data-status="later" data-id="${E761(p.id)}">${E761(L761('Later','Later'))}</button><button class="btn small bad" data-action="v761-review-pattern" data-status="ignored" data-id="${E761(p.id)}">×</button><button class="btn small" data-action="v761-open-cause" data-id="${E761(p.id)}">${E761(L761('Oorzaak','Cause'))}</button></div></div>`).join('')}</div>${all.length>limit?`<p class="muted small mt">${E761(L761('Er zijn meer patronen. Gebruik filters of open V8 Learning voor volledige beoordeling.','More patterns are available. Use filters or open V8 Learning for full review.'))}</p>`:''}`:`<p class="muted mt">${E761(L761('Nog geen patronen in deze filter. Voeg signalen/notities toe of bouw learning data op.','No patterns for this filter yet. Add signals/notes or build learning data.'))}</p>`}</div>`;
+    }
+    function dataQualityCard761(){
+      const rows=dataQuality761();
+      return `<div class="card v761-quality"><h3>${E761(L761('Datakwaliteit met uitleg','Data quality with reasons'))}</h3><p class="muted small">${E761(L761('Niet elke module heeft evenveel data. Adviezen blijven voorzichtiger wanneer de kwaliteit lager is.','Not every module has the same amount of data. Advice stays more careful when quality is lower.'))}</p><div class="list mt">${rows.map(r=>`<div class="list-item compact"><span><strong>${E761(r.module)}</strong><br><span class="tiny muted">${r.count} events · ${r.notes} notities/signalen · ${r.measured} metingen</span><br><span class="tiny">${E761(r.reason)}</span></span><span class="pill ${r.tone}">${E761(r.level)}</span></div>`).join('')}</div></div>`;
+    }
+    function fieldCauseCard761(){
+      const causes=ensure761().causes.slice(0,5);
+      return `<div class="card v761-causes"><h3>${E761(L761('Oorzaken & context','Causes & context'))}</h3><p class="muted small">${E761(L761('Gebruik dit om te verklaren waarom iets terugkomt of uitloopt: late vracht, klanten, collega’s, drukte of kwaliteit.','Use this to explain why something repeats or runs late: late truck, customers, colleagues, workload or quality.'))}</p>${causes.length?`<div class="list mt">${causes.map(c=>`<div class="list-item compact"><span><strong>${E761(c.subject)}</strong><br><span class="tiny muted">${E761(c.module)} · ${E761(c.cause)}</span>${c.note?`<br><span class="tiny">${E761(c.note)}</span>`:''}</span></div>`).join('')}</div>`:`<p class="muted small mt">${E761(L761('Nog geen oorzaken gekoppeld. Open Pattern Review en kies “Oorzaak”.','No causes linked yet. Open Pattern Review and choose “Cause”.'))}</p>`}</div>`;
+    }
+    function v8LearningPage761(){
+      ensure761();
+      return `<div class="page v761-page"><div class="hero v761-hero"><span class="chip">RICH CMD v7.6.1</span><h2>${E761(L761('Learning Data Polish & Pattern Review UX','Learning Data Polish & Pattern Review UX'))}</h2><p>${E761(L761('De V8-datalaag is nu begrijpelijker: patronen filteren, beoordelen, oorzaken koppelen en datakwaliteit beter uitleggen.','The V8 data layer is now clearer: filter/review patterns, link causes and explain data quality better.'))}</p></div>${dashboardCard761()}<div class="grid grid-2">${patternCard761(12)}${dataQualityCard761()}</div><div class="grid grid-2 mt">${fieldCauseCard761()}${policyCard761()}</div></div>`;
+    }
+    function policyCard761(){
+      return `<div class="card v761-policy"><h3>${E761(L761('Hoe deze learning-laag werkt','How this learning layer works'))}</h3><div class="list"><div class="list-item compact"><span>${E761(L761('De app leert lokaal van afvinken, signalen, notities en incidentele metingen.','The app learns locally from check-offs, signals, notes and occasional measurements.'))}</span></div><div class="list-item compact"><span>${E761(L761('Jij bepaalt of een patroon klopt, genegeerd moet worden of later beoordeeld wordt.','You decide whether a pattern is correct, ignored or reviewed later.'))}</span></div><div class="list-item compact"><span>${E761(L761('Oorzaken helpen V8 straks beter begrijpen waarom werk schuift of uitloopt.','Causes help future V8 understand why work shifts or runs late.'))}</span></div><div class="list-item compact"><span>${E761(L761('Meten blijft optioneel. Goede notities en afvinken zijn ook waardevolle data.','Measuring remains optional. Good notes and check-offs are valuable data too.'))}</span></div></div></div>`;
+    }
+    function diagnosticsCard761(){
+      const s=summary761(); const pats=buildPatterns761(); const checks=[
+        {name:L761('Learning Dashboard','Learning Dashboard'),ok:true,detail:`${s.events} events · ${s.patterns} patronen`},
+        {name:L761('Pattern Review filters','Pattern Review filters'),ok:!!state.ui.v761PatternFilter,detail:state.ui.v761PatternFilter},
+        {name:L761('Bevestigen/negeren werkt','Confirm/ignore works'),ok:Array.isArray(ensure761().reviews),detail:`${ensure761().reviews.length} reviews`},
+        {name:L761('Oorzaken koppelen','Link causes'),ok:Array.isArray(ensure761().causes),detail:`${ensure761().causes.length} oorzaken`},
+        {name:L761('Datakwaliteit met redenen','Data quality with reasons'),ok:dataQuality761().every(r=>r.reason),detail:`${dataQuality761().length} modules`},
+        {name:L761('Backup bevat learning data','Backup includes learning data'),ok:!!state.v8Learning && Array.isArray(state.learningEvents),detail:L761('lokale state + backup/export','local state + backup/export')},
+        {name:L761('Versie/cache','Version/cache'),ok:APP.version==='v7.6.1'&&APP.cache==='rich-cmd-cache-v761',detail:`${APP.version} · ${APP.cache}`}
+      ]; const score=Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return `<div class="card v761-diagnostics"><div class="flex-line"><div><span class="chip">v7.6.1</span><h3>${E761(L761('V8 Learning UX Check','V8 Learning UX Check'))}</h3><p class="muted small">${E761(L761('Controleert Pattern Review, oorzaken, datakwaliteit, backup en versie.','Checks Pattern Review, causes, data quality, backup and version.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E761(c.name)}</strong><br><span class="tiny muted">${E761(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-route="v8preview">${E761(L761('Open V8 Learning','Open V8 Learning'))}</button><button class="btn" data-action="v761-copy-report">${E761(L761('Kopieer learning rapport','Copy learning report'))}</button></div></div>`;
+    }
+    function report761(){
+      const s=summary761(); const dq=dataQuality761(); const pats=buildPatterns761().slice(0,15); const causes=ensure761().causes.slice(0,10);
+      return `RICH CMD v7.6.1 — Learning Data Polish & Pattern Review UX\nDatum: ${today761()}\n\nV8 Learning Dashboard\n- Events: ${s.events}\n- Patronen: ${s.patterns}\n- Te beoordelen: ${s.open}\n- Bevestigd: ${s.confirmed}\n- Genegeerd: ${s.ignored}\n- Datakwaliteit: ${s.qualityLabel} (${s.avgQuality}/100)\n\nDatakwaliteit\n${dq.map(d=>`- ${d.module}: ${d.level} (${d.count} events, ${d.notes} notities/signalen, ${d.measured} metingen) — ${d.reason}`).join('\n')}\n\nPattern Review\n${pats.length?pats.map(p=>`- ${p.module} · ${p.subject}: ${p.label}, zekerheid ${p.confidence}, ${p.count} events, review ${p.reviewStatus}${p.cause?`, oorzaak: ${p.cause}`:''}`).join('\n'):'- Nog geen patronen'}\n\nOorzaken\n${causes.length?causes.map(c=>`- ${c.module} · ${c.subject}: ${c.cause}${c.note?` — ${c.note}`:''}`).join('\n'):'- Nog geen oorzaken gekoppeld'}\n\nBeleid\n- Meten blijft optioneel.\n- Afvinken, field notes en signalen zijn voldoende voor normale werkdagen.\n- V8 mag pas sterker adviseren met genoeg data en zichtbare zekerheid.\n- Jij bevestigt, negeert of nuanceert patronen.`;
+    }
+
+    const prevPage761 = typeof renderPage==='function'?renderPage:null;
+    if(prevPage761) renderPage = window.renderPage = function(){ return state.route==='v8preview' ? v8LearningPage761() : prevPage761(); };
+    const prevVisual761 = typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual761) renderVisual = window.renderVisual = function(){ const base=prevVisual761()||''; return `<div class="grid grid-2 visual-v761">${dashboardCard761()}${dataQualityCard761()}</div>${base}`; };
+    const prevDiagnostics761 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiagnostics761) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics761()||''; return `<div class="grid diagnostics-v761">${diagnosticsCard761()}<div class="grid grid-2">${patternCard761(6)}${dataQualityCard761()}</div></div>${base}`; };
+    const prevSettings761 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings761) renderSettings = window.renderSettings = function(){ const base=prevSettings761()||''; return `${base}<div class="grid grid-2 mt settings-v761">${dashboardCard761()}${policyCard761()}</div>`; };
+    const prevToday761 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday761) renderToday = window.renderToday = function(){ const base=prevToday761()||''; const s=summary761(); return `${base}${s.open?`<div class="card v761-today mt"><div class="flex-line"><div><span class="chip">V8 Learning</span><strong>${E761(L761('Patronen te beoordelen','Patterns to review'))}</strong><p class="tiny muted">${s.open} ${E761(L761('open · niet dominant op Vandaag','open · not dominant on Today'))}</p></div><button class="btn small" data-route="v8preview">${E761(L761('Beoordelen','Review'))}</button></div></div>`:''}`; };
+
+    const prevHandle761 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle761) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v761-filter-patterns'){ state.ui.v761PatternFilter=el?.dataset?.filter||'open'; save761(); render761(); return; }
+      if(a==='v761-review-pattern'){ review761(el?.dataset?.id, el?.dataset?.status||'later'); return; }
+      if(a==='v761-open-cause'){ openCauseModal761(el?.dataset?.id); return; }
+      if(a==='v761-save-cause'){ saveCause761(el?.dataset?.id); return; }
+      if(a==='v761-copy-report'){ copy761(report761()); return; }
+      return prevHandle761(a,el,e);
+    };
+
+    ensure761(); save761();
+  }catch(err){ console.error('v7.6.1 Learning Data Polish & Pattern Review UX patch failed', err); }
+})();
+
+/* RICH CMD v7.6.2 — Field Cause Tracking & Interruption Insights */
+(function(){
+  try{
+    if (typeof APP === 'object') { APP.version = 'v7.6.2'; APP.cache = 'rich-cmd-cache-v762'; }
+    const L762=(nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E762=(v)=> typeof escapeHtml==='function' ? escapeHtml(String(v??'')) : String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const now762=()=> new Date().toISOString();
+    const today762=()=> (typeof TODAY==='function'?TODAY():new Date().toISOString().slice(0,10));
+    const uid762=(p='v762')=>`${p}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const save762=()=>{ try{ if(typeof save==='function') save(); else localStorage.setItem(APP.storage, JSON.stringify(state)); }catch(_){} };
+    const render762=()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast762=(m,t='good')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const copy762=(txt)=>{ try{ if(typeof copy==='function') copy(txt); else navigator.clipboard.writeText(txt).then(()=>toast762(L762('Gekopieerd','Copied'),'good')); }catch(_){ toast762(txt); } };
+    const modal762=(title,body,wide='wide')=>{ if(typeof modal==='function') modal(title,body,wide); else alert(title+'\n\n'+body.replace(/<[^>]+>/g,'')); };
+    const by762=(id)=>document.getElementById(id);
+    const fmt762=(iso)=>{ try{return new Date(iso).toLocaleString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(_){return iso||'';} };
+
+    function ensure762(){
+      state.v762 = state.v762 || {};
+      state.v762.interruptions = Array.isArray(state.v762.interruptions) ? state.v762.interruptions : [];
+      state.v762.causeLinks = Array.isArray(state.v762.causeLinks) ? state.v762.causeLinks : [];
+      state.v762.settings = state.v762.settings || { showDone:false };
+      state.learningEvents = Array.isArray(state.learningEvents) ? state.learningEvents : [];
+      state.fieldNotes = Array.isArray(state.fieldNotes) ? state.fieldNotes : [];
+      return state.v762;
+    }
+    function causeOptions762(){ return [
+      L762('Late vracht','Late freight'), L762('Veel vracht','Large delivery'), L762('Klantvraag','Customer question'), L762('Collega geholpen','Helped colleague'),
+      L762('Kassa tussendoor','Checkout support'), L762('Storing / probleem','Issue / problem'), L762('Product niet beschikbaar','Product unavailable'),
+      L762('HACCP duurde langer','HACCP took longer'), L762('AGF drukker dan verwacht','AGF busier than expected'), L762('Pauze verschoven','Break shifted'), L762('Overig','Other')
+    ]; }
+    function moduleOptions762(sel='Algemeen'){
+      const opts=['Algemeen','AGF','HACCP','Store Map','Bestelbeheer','Communicatie','Vracht','Pauze','Dagroute','Shiftleider'];
+      return opts.map(o=>`<option ${o===sel?'selected':''}>${E762(o)}</option>`).join('');
+    }
+    function causeSelect762(id='v762Cause',sel=''){
+      return `<select class="select" id="${E762(id)}">${causeOptions762().map(c=>`<option ${c===sel?'selected':''}>${E762(c)}</option>`).join('')}</select>`;
+    }
+    function impactSelect762(id='v762Impact',sel='15'){
+      const opts=[['0',L762('Geen tijdverlies','No time loss')],['5','5 min'],['10','10 min'],['15','15 min'],['30','30 min'],['custom',L762('Zelf invullen','Custom')]];
+      return `<select class="select" id="${E762(id)}">${opts.map(([v,l])=>`<option value="${E762(v)}" ${String(sel)===String(v)?'selected':''}>${E762(l)}</option>`).join('')}</select>`;
+    }
+    function addLearning762(ev){
+      ensure762();
+      const out=Object.assign({id:uid762('learn'), at:now762(), date:today762(), version:APP.version, source:'v7.6.2-field-cause', confidence:'middel'}, ev||{});
+      state.learningEvents.unshift(out);
+      const v=ensure762();
+      if(!Array.isArray(v.learningIds)) v.learningIds=[];
+      v.learningIds.unshift(out.id);
+      return out;
+    }
+    function saveCauseEntry762(data){
+      const v=ensure762();
+      const entry=Object.assign({id:uid762('cause'), at:now762(), date:today762(), module:'Algemeen', cause:L762('Overig','Other'), impactMinutes:0, note:'', status:'open'}, data||{});
+      v.causeLinks.unshift(entry);
+      addLearning762({type:'oorzaak', module:entry.module, subject:entry.subject||entry.cause, detail:entry.note||entry.cause, cause:entry.cause, impactMinutes:entry.impactMinutes||0, status:entry.status, sourceId:entry.id});
+      save762();
+      return entry;
+    }
+    function saveInterruption762(data){
+      const v=ensure762();
+      const item=Object.assign({id:uid762('interrupt'), at:now762(), date:today762(), type:L762('Onderbreking','Interruption'), module:'Dagroute', cause:L762('Overig','Other'), impactMinutes:15, note:'', status:'open'}, data||{});
+      v.interruptions.unshift(item);
+      addLearning762({type:'onderbreking', module:item.module, subject:item.type, detail:item.note||item.cause, cause:item.cause, impactMinutes:item.impactMinutes||0, status:'active', sourceId:item.id});
+      save762();
+      return item;
+    }
+    function todayItems762(){
+      const v=ensure762(); const d=today762();
+      const ints=v.interruptions.filter(x=>String(x.date||'').slice(0,10)===d);
+      const causes=v.causeLinks.filter(x=>String(x.date||'').slice(0,10)===d);
+      return {ints,causes,all:[...ints,...causes].sort((a,b)=>String(b.at).localeCompare(String(a.at)))};
+    }
+    function impactSummary762(days=7){
+      ensure762();
+      const since=new Date(); since.setDate(since.getDate()-days+1);
+      const all=[...state.v762.interruptions,...state.v762.causeLinks].filter(x=>{ const d=new Date(x.date||x.at||0); return !isNaN(d)&&d>=since; });
+      const byCause={}; const byModule={}; let total=0;
+      all.forEach(x=>{ const m=Number(x.impactMinutes||0); total+=m; const c=x.cause||L762('Overig','Other'); byCause[c]=(byCause[c]||0)+m; const mod=x.module||'Algemeen'; byModule[mod]=(byModule[mod]||0)+m; });
+      const causeRows=Object.entries(byCause).sort((a,b)=>b[1]-a[1]); const modRows=Object.entries(byModule).sort((a,b)=>b[1]-a[1]);
+      return {all,total,causeRows,modRows};
+    }
+    function openInterruption762(){
+      const typeOpts=[L762('Klant','Customer'),L762('Collega','Colleague'),L762('Kassa','Checkout'),L762('Vracht','Freight'),L762('Incident','Incident'),L762('Pauze verschoven','Break shifted'),L762('Overig','Other')];
+      modal762(L762('Onderbreking toevoegen','Add interruption'), `<div class="grid v762-modal"><div class="form-grid"><label>${E762(L762('Type','Type'))}<select class="select" id="v762IntType">${typeOpts.map(o=>`<option>${E762(o)}</option>`).join('')}</select></label><label>${E762(L762('Module / context','Module / context'))}<select class="select" id="v762IntModule">${moduleOptions762('Dagroute')}</select></label><label>${E762(L762('Oorzaak','Cause'))}${causeSelect762('v762IntCause')}</label><label>${E762(L762('Impacttijd','Impact time'))}${impactSelect762('v762IntImpact','15')}</label></div><div class="form-grid v762-custom-impact" style="display:none"><label>${E762(L762('Zelf aantal minuten','Custom minutes'))}<input class="input" id="v762IntCustom" type="number" min="0" step="5" value="15"></label></div><label>${E762(L762('Notitie','Note'))}<textarea class="textarea" id="v762IntNote" rows="4" placeholder="${E762(L762('Bijv. klantvraag, vracht kwam later, collega geholpen…','E.g. customer question, freight arrived later, helped colleague…'))}"></textarea></label><p class="muted small">${E762(L762('Gebruik dit alleen als het nuttig is. De app gebruikt deze context later om uitloop beter te verklaren.','Use this only when useful. The app uses this context later to explain delays better.'))}</p><div class="btn-row"><button class="btn primary" data-action="v762-save-interruption">${E762(L762('Opslaan','Save'))}</button><button class="btn" data-action="close-modal">${E762(L762('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+    function saveInterruptionFromModal762(){
+      const raw=by762('v762IntImpact')?.value||'15';
+      const minutes=raw==='custom' ? Number(by762('v762IntCustom')?.value||0) : Number(raw||0);
+      saveInterruption762({type:by762('v762IntType')?.value||L762('Onderbreking','Interruption'), module:by762('v762IntModule')?.value||'Dagroute', cause:by762('v762IntCause')?.value||L762('Overig','Other'), impactMinutes:Math.max(0,minutes), note:(by762('v762IntNote')?.value||'').trim()});
+      toast762(L762('Onderbreking opgeslagen','Interruption saved'),'good'); render762();
+    }
+    function openCauseNote762(cat='Algemeen',type='note'){
+      modal762(type==='signal'?L762('Signaal met oorzaak','Signal with cause'):L762('Field note met oorzaak','Field note with cause'), `<div class="grid v762-modal"><div class="form-grid"><label>${E762(L762('Categorie','Category'))}<select class="select" id="v762NoteCat">${moduleOptions762(cat)}</select></label><label>${E762(L762('Type','Type'))}<select class="select" id="v762NoteType"><option value="note" ${type==='note'?'selected':''}>${E762(L762('Notitie','Note'))}</option><option value="signal" ${type==='signal'?'selected':''}>${E762(L762('Signaal','Signal'))}</option><option value="handover">${E762(L762('Overdracht','Handover'))}</option><option value="idea">${E762(L762('Idee','Idea'))}</option></select></label><label>${E762(L762('Prioriteit','Priority'))}<select class="select" id="v762NotePriority"><option>${E762(L762('Laag','Low'))}</option><option selected>${E762(L762('Normaal','Normal'))}</option><option>${E762(L762('Hoog','High'))}</option><option>${E762(L762('Kritiek','Critical'))}</option></select></label><label>${E762(L762('Oorzaak / context','Cause / context'))}${causeSelect762('v762NoteCause')}</label><label>${E762(L762('Impacttijd','Impact time'))}${impactSelect762('v762NoteImpact','0')}</label></div><div class="form-grid v762-note-custom-impact" style="display:none"><label>${E762(L762('Zelf aantal minuten','Custom minutes'))}<input class="input" id="v762NoteCustom" type="number" min="0" step="5" value="10"></label></div><textarea class="textarea" id="v762NoteText" rows="5" placeholder="${E762(L762('Wat wil je vastleggen?','What do you want to capture?'))}"></textarea><div class="btn-row"><button class="btn primary" data-action="v762-save-field-note">${E762(L762('Opslaan','Save'))}</button><button class="btn" data-action="v762-save-field-note-task">${E762(L762('Opslaan + taak','Save + task'))}</button><button class="btn" data-action="v762-save-field-note-followup">${E762(L762('Opslaan + opvolging','Save + follow-up'))}</button><button class="btn" data-action="close-modal">${E762(L762('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+    function saveFieldNote762(mode='note'){
+      ensure762();
+      const text=(by762('v762NoteText')?.value||'').trim();
+      if(!text){ toast762(L762('Vul eerst een notitie in','Enter a note first'),'warn'); return; }
+      const raw=by762('v762NoteImpact')?.value||'0'; const minutes=raw==='custom'?Number(by762('v762NoteCustom')?.value||0):Number(raw||0);
+      const n={id:uid762('field'), at:now762(), date:today762(), cat:by762('v762NoteCat')?.value||'Algemeen', priority:by762('v762NotePriority')?.value||'Normaal', type:by762('v762NoteType')?.value||'note', note:text, status:'open', cause:by762('v762NoteCause')?.value||L762('Overig','Other'), impactMinutes:Math.max(0,minutes), source:'v7.6.2'};
+      state.fieldNotes.unshift(n);
+      state.quickNotes = Array.isArray(state.quickNotes) ? state.quickNotes : [];
+      state.quickNotes.unshift({id:n.id, at:n.at, cat:n.cat, note:n.note, priority:n.priority, type:n.type, cause:n.cause, impactMinutes:n.impactMinutes, source:'fieldCause762'});
+      saveCauseEntry762({module:n.cat, subject:n.type==='signal'?L762('Signaal','Signal'):L762('Notitie','Note'), cause:n.cause, impactMinutes:n.impactMinutes, note:n.note, sourceId:n.id});
+      if(mode==='task'){
+        state.haccpTasks = Array.isArray(state.haccpTasks) ? state.haccpTasks : [];
+        state.haccpTasks.unshift({id:uid762('haccp'), title:text.slice(0,80), group:n.cat==='HACCP'?'Algemeen':n.cat, priority:n.priority, status:'open', createdAt:now762(), note:`${n.cause}${n.impactMinutes?` · ${n.impactMinutes} min`:''}`});
+        n.convertedTaskAt=now762();
+      }
+      if(mode==='followup'){
+        state.communications = Array.isArray(state.communications) ? state.communications : [];
+        state.communications.unshift({id:uid762('comm'), message:text, status:'Open', priority:n.priority, to:'Collega', createdAt:now762(), followDate:today762(), source:'fieldCause762', note:`${n.cause}${n.impactMinutes?` · ${n.impactMinutes} min`:''}`});
+        n.convertedFollowupAt=now762();
+      }
+      save762(); toast762(L762('Opgeslagen met oorzaak/context','Saved with cause/context'),'good'); render762();
+    }
+    function impactCard762(compact=false){
+      const s=impactSummary762(7); const today=todayItems762();
+      const causeRows=s.causeRows.slice(0, compact?3:6);
+      return `<div class="card v762-impact-card"><div class="flex-line"><div><span class="chip">v7.6.2</span><h3>${E762(L762('Planning-impact','Planning impact'))}</h3><p class="muted small">${E762(L762('Waarom schoof de dag? Onderbrekingen, late vracht, klanten en andere oorzaken worden apart van taakduur vastgelegd.','Why did the day shift? Interruptions, late freight, customers and other causes are stored separately from task duration.'))}</p></div><span class="pill ${s.total>0?'warn':'good'}">${s.total} min</span></div><div class="grid grid-3 mt"><div class="soft card"><strong>${today.ints.length}</strong><p class="tiny muted">${E762(L762('onderbrekingen vandaag','interruptions today'))}</p></div><div class="soft card"><strong>${today.causes.length}</strong><p class="tiny muted">${E762(L762('oorzaken vandaag','causes today'))}</p></div><div class="soft card"><strong>${s.all.length}</strong><p class="tiny muted">${E762(L762('events 7 dagen','events 7 days'))}</p></div></div>${causeRows.length?`<div class="list mt">${causeRows.map(([c,m])=>`<div class="list-item compact"><span><strong>${E762(c)}</strong><br><span class="tiny muted">${m} min ${E762(L762('impact','impact'))}</span></span><span class="pill info">${m}m</span></div>`).join('')}</div>`:`<p class="muted small mt">${E762(L762('Nog geen planning-impact geregistreerd. Gebruik dit alleen wanneer het echt iets verklaart.','No planning impact recorded yet. Use this only when it explains something.'))}</p>`}<div class="btn-row mt"><button class="btn primary" data-action="v762-open-interruption">+ ${E762(L762('Onderbreking','Interruption'))}</button><button class="btn" data-action="v762-open-cause-note" data-cat="${E762(compact?'Algemeen':'Dagroute')}">+ ${E762(L762('Notitie met oorzaak','Note with cause'))}</button><button class="btn" data-action="v762-copy-impact-report">${E762(L762('Kopieer impactrapport','Copy impact report'))}</button></div></div>`;
+    }
+    function recentImpactList762(limit=6){
+      const all=todayItems762().all.slice(0,limit);
+      if(!all.length) return `<p class="muted small">${E762(L762('Vandaag nog geen oorzaken of onderbrekingen geregistreerd.','No causes or interruptions registered today yet.'))}</p>`;
+      return `<div class="list">${all.map(x=>`<div class="list-item compact"><span><strong>${E762(x.type||x.subject||x.cause)}</strong><br><span class="tiny muted">${E762(x.module||'Algemeen')} · ${E762(x.cause||'')} · ${Number(x.impactMinutes||0)} min · ${E762(fmt762(x.at))}</span>${x.note?`<br><span class="small">${E762(x.note)}</span>`:''}</span><span class="pill ${x.impactMinutes?'warn':'info'}">${Number(x.impactMinutes||0)}m</span></div>`).join('')}</div>`;
+    }
+    function v8LearningPage762(base=''){
+      return `<div class="page v762-page"><div class="hero v762-hero"><span class="chip">RICH CMD v7.6.2</span><h2>${E762(L762('Field Cause Tracking & Interruption Insights','Field Cause Tracking & Interruption Insights'))}</h2><p>${E762(L762('V8 leert nu niet alleen dát iets uitloopt, maar ook waarom: late vracht, klanten, collega’s, pauzes of andere oorzaken.','V8 now learns not only that something runs late, but why: late freight, customers, colleagues, breaks or other causes.'))}</p><div class="btn-row"><button class="btn primary" data-action="v762-open-interruption">+ ${E762(L762('Onderbreking registreren','Log interruption'))}</button><button class="btn" data-action="v762-open-cause-note">+ ${E762(L762('Oorzaaknotitie','Cause note'))}</button></div></div><div class="grid grid-2">${impactCard762()}<div class="card"><h3>${E762(L762('Vandaag geregistreerd','Registered today'))}</h3>${recentImpactList762(8)}</div></div>${base}</div>`;
+    }
+    function impactReport762(){
+      const s=impactSummary762(7); const today=todayItems762();
+      return `RICH CMD v7.6.2 — Field Cause Tracking & Interruption Insights\nDatum: ${today762()}\n\nPlanning-impact vandaag\n${today.all.length?today.all.map(x=>`- ${x.module||'Algemeen'} · ${x.type||x.subject||'Oorzaak'}: ${x.cause||''}${x.impactMinutes?` (${x.impactMinutes} min)`:''}${x.note?` — ${x.note}`:''}`).join('\n'):'- Geen geregistreerde impact vandaag'}\n\nImpact afgelopen 7 dagen\n- Totaal: ${s.total} min\n${s.causeRows.length?s.causeRows.map(([c,m])=>`- ${c}: ${m} min`).join('\n'):'- Geen oorzaken'}\n\nV8 Learning context\n- Oorzaken verklaren waarom planning verschuift.\n- Timers blijven optioneel.\n- Afvinken en notities blijven voldoende voor normale werkdagen.\n- De app mag HACCP/AGF-uitloop niet automatisch als planningfout zien zonder context.`;
+    }
+    function diag762(){
+      ensure762(); const s=impactSummary762(7); const checks=[
+        {name:L762('Oorzaaklabels','Cause labels'), ok:causeOptions762().length>=10, detail:causeOptions762().join(', ')},
+        {name:L762('Onderbrekingen opslaan','Save interruptions'), ok:Array.isArray(state.v762.interruptions), detail:`${state.v762.interruptions.length} items`},
+        {name:L762('Impacttijd geregistreerd','Impact minutes recorded'), ok:true, detail:`${s.total} min in 7 dagen`},
+        {name:L762('Field notes met oorzaak','Field notes with cause'), ok:Array.isArray(state.fieldNotes), detail:`${state.fieldNotes.filter(n=>n.cause).length} met oorzaak`},
+        {name:L762('Learning data bevat oorzaken','Learning data includes causes'), ok:(state.learningEvents||[]).some(e=>e.cause)||s.all.length===0, detail:`${(state.learningEvents||[]).filter(e=>e.cause).length} events`},
+        {name:L762('Visualisatie planning-impact','Visualisation planning impact'), ok:true, detail:L762('kaart actief','card active')},
+        {name:L762('Versie/cache','Version/cache'), ok:APP.version==='v7.6.2'&&APP.cache==='rich-cmd-cache-v762', detail:`${APP.version} · ${APP.cache}`}
+      ]; const score=Math.round(checks.filter(c=>c.ok).length/checks.length*100);
+      return `<div class="card v762-diag"><div class="flex-line"><div><span class="chip">v7.6.2</span><h3>${E762(L762('Field Cause Tracking checks','Field Cause Tracking checks'))}</h3><p class="muted small">${E762(L762('Controleert oorzaaklabels, onderbrekingen, impacttijd, learning data en rapportage.','Checks cause labels, interruptions, impact minutes, learning data and reporting.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E762(c.name)}</strong><br><span class="tiny muted">${E762(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="v762-open-interruption">${E762(L762('Test onderbreking','Test interruption'))}</button><button class="btn" data-action="v762-copy-impact-report">${E762(L762('Kopieer impactrapport','Copy impact report'))}</button></div></div>`;
+    }
+
+    // Update modal custom-minute visibility even inside dynamically opened modals.
+    document.addEventListener('change', function(ev){
+      const t=ev.target;
+      if(!t) return;
+      if(t.id==='v762IntImpact'){ const box=document.querySelector('.v762-custom-impact'); if(box) box.style.display=t.value==='custom'?'grid':'none'; }
+      if(t.id==='v762NoteImpact'){ const box=document.querySelector('.v762-note-custom-impact'); if(box) box.style.display=t.value==='custom'?'grid':'none'; }
+    }, true);
+
+    const prevPage762 = typeof renderPage==='function'?renderPage:null;
+    if(prevPage762) renderPage = window.renderPage = function(){ const base=prevPage762()||''; return state.route==='v8preview' ? v8LearningPage762(base) : base; };
+    const prevToday762 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday762) renderToday = window.renderToday = function(){ const base=prevToday762()||''; const s=impactSummary762(1); const notice=s.total?`<div class="card v762-today-impact mt"><div class="flex-line"><div><span class="chip">${E762(L762('Planning-impact','Planning impact'))}</span><strong>${s.total} min ${E762(L762('verklaard vandaag','explained today'))}</strong><p class="tiny muted">${E762(L762('Wat Nu blijft rustig; deze context helpt het dagrapport en V8 Learning.','What Now stays calm; this context helps the daily report and V8 Learning.'))}</p></div><button class="btn small" data-action="v762-open-interruption">+ ${E762(L762('Onderbreking','Interruption'))}</button></div></div>`:`<div class="card v762-quick-impact mt"><div class="btn-row"><button class="btn small" data-action="v762-open-interruption">+ ${E762(L762('Onderbreking','Interruption'))}</button><button class="btn small" data-action="v762-open-cause-note">+ ${E762(L762('Oorzaaknotitie','Cause note'))}</button></div></div>`; return `${base}${notice}`; };
+    const prevVisual762 = typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual762) renderVisual = window.renderVisual = function(){ const base=prevVisual762()||''; return `<div class="grid grid-2 visual-v762">${impactCard762()}<div class="card"><h3>${E762(L762('Impact vandaag','Impact today'))}</h3>${recentImpactList762(6)}</div></div>${base}`; };
+    const prevDiagnostics762 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiagnostics762) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiagnostics762()||''; return `<div class="grid diagnostics-v762">${diag762()}${impactCard762(true)}</div>${base}`; };
+    const prevSettings762 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings762) renderSettings = window.renderSettings = function(){ const base=prevSettings762()||''; return `${base}<div class="grid grid-2 mt settings-v762">${impactCard762(true)}<div class="card"><h3>${E762(L762('Hoe oorzaken V8 helpen','How causes help V8'))}</h3><p class="muted small">${E762(L762('Oorzaken voorkomen verkeerde conclusies. Als vracht laat is of je collega’s helpt, ziet RICH CMD straks dat uitloop niet alleen door taakduur komt.','Causes prevent wrong conclusions. If freight is late or you help colleagues, RICH CMD can see delays are not only task duration.'))}</p><button class="btn" data-action="v762-copy-impact-report">${E762(L762('Kopieer impactrapport','Copy impact report'))}</button></div></div>`; };
+
+    const prevHandle762 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle762) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v762-open-interruption'){ openInterruption762(); return; }
+      if(a==='v762-save-interruption'){ saveInterruptionFromModal762(); return; }
+      if(a==='v762-open-cause-note'){ openCauseNote762(el?.dataset?.cat||'Algemeen','note'); return; }
+      if(a==='v762-open-cause-signal'){ openCauseNote762(el?.dataset?.cat||'Algemeen','signal'); return; }
+      if(a==='v762-save-field-note'){ saveFieldNote762('note'); return; }
+      if(a==='v762-save-field-note-task'){ saveFieldNote762('task'); return; }
+      if(a==='v762-save-field-note-followup'){ saveFieldNote762('followup'); return; }
+      if(a==='v762-copy-impact-report'){ copy762(impactReport762()); return; }
+      // Improve existing Quick Actions / Field Notes by opening the cause-aware modal.
+      if(a==='v755-open-field-note'){ openCauseNote762(el?.dataset?.cat||'Algemeen','note'); return; }
+      if(a==='v755-open-signal'){ openCauseNote762(el?.dataset?.cat||'Algemeen','signal'); return; }
+      return prevHandle762(a,el,e);
+    };
+    ensure762(); save762();
+  }catch(err){ console.error('v7.6.2 Field Cause Tracking & Interruption Insights patch failed', err); }
+})();

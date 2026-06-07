@@ -1,8 +1,8 @@
 {
-  "name": "RICH CMD v7.4.1",
-  "short_name": "RICH CMD",
-  "description": "RICH CMD v7.4.1 — Coaching UX Polish & Learning Quality",
-  "start_url": "./index.html?v=741",
+  "name": "RICH CMD v7.6.2 — Field Cause Tracking",
+  "short_name": "RICH CMD 7.6.2",
+  "description": "RICH CMD — Field Cause Tracking & Interruption Insights for planning impact, causes and V8 learning.",
+  "start_url": "./index.html?v=762",
   "display": "standalone",
   "background_color": "#f7fafc",
   "theme_color": "#0f766e",
@@ -17,5 +17,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "scope": "./"
 }
