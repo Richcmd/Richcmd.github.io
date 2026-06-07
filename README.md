@@ -1,64 +1,20 @@
-# RICH CMD v6.7.20 — Shiftleider Pro & UX Stability Polish
+# RICH CMD v7.4.1 — Coaching UX Polish & Learning Quality
 
-Deze update maakt de Shiftleider Vers Avondshift-module volwassener met teamprofielen, vaste/passende paden, productiviteitsberekening, presets, Live Assist, eindfase-modus, incidentimpact en betere Engelse teksten.
+Post-v7.4 Coaching polish update. This build keeps Coaching Academy Pro intact, but makes the learning environment calmer, more readable and more motivating.
 
-Belangrijk: bestaande Shiftleider-functies blijven behouden en zijn compacter/overzichtelijker geplaatst.
+## Highlights
+- Calmer Coaching page structure with progress at the top
+- Collapsible sections for recommended lessons, skill tree, lessons, exams and badges
+- Improved lesson detail reading with clear MBO/vocational sections
+- Better test/exam UX with score, feedback, retake and learning advice
+- Compact badge gallery with filters for earned, nearly earned and locked badges
+- Coaching advice is more calmly dosed and remains linked to work signals
+- Coaching Rustmodus shows only progress, one recommended lesson and one advice card
 
-# RICH CMD v6.7.20 — Shiftleider Dropdown Stability Hotfix
+## Version
+- Version: v7.4.1
+- Cache: rich-cmd-cache-v741
+- Assets: ?v=741
 
-Deze build voegt een aparte Shiftleider-module toe voor de Vers Avondshift.
-
-## Nieuw
-
-- Shiftleider-dashboard met datum, weeknummer, beschikbare uren, geplande vuluren en ruimte/tekort.
-- Teamplanning met naam, werktijd, pauze, beschikbare tijd en toegewezen paden.
-- Vulplanning per vast pad: AGF, Panklaar, Maaltijden, Vlees/Vis/Kip, Zuivel en Delicatesse.
-- Overige takenlijst met standaard shiftleider-taken en snelle taaktoevoeging.
-- Automatische taak: Nee-verkoop houdbaar op dinsdag en donderdag.
-- Onderbrekingen & bijzonderheden-log voor klanten, collega’s, incidenten, kassa en overig.
-- Shiftklaar report met kopiëren en opslaan naar Communicatie.
-- Vandaag toont een compacte Shiftleider-kaart zodra de module actief is.
-- Diagnostiek bevat v6.7.16-checks.
-
-## Technisch
-
-- Versie: v6.7.16
-- Cache: rich-cmd-cache-v6716
-- Assets: ?v=6716
-
-
-## v6.7.16 — Shiftleider Planning Polish
-
-- Shiftplanning per pad staat nu onder elkaar in één venster in plaats van losse padblokken.
-- Medewerkerstijden hebben standaardkeuzes: start 16:00/17:00 en eind 19:00/20:00, met optioneel een andere tijd.
-- Pauze wordt automatisch berekend: 4 uur werken = 15 minuten, 6 uur werken = 30 minuten.
-- Maaltijdvergoeding wordt gesignaleerd bij starten om/rond 16:00 en werken na 19:00.
-- Overige taken verdwijnen niet meer na afronden: ze kleuren groen en schuiven naar onderen.
-
-
-## v6.7.18 — Shiftleider Compact Planning & Extra Tools
-
-- Shiftplanning per pad compacter en mobielvriendelijker gemaakt.
-- Paden tonen padnaam, status, persoon, automatisch gegenereerde start/eindtijd en vulduur.
-- Vuluren/minuten worden aangepast via een compact ⏱-icoon.
-- Notities worden aangepast via ✎ en zijn alleen zichtbaar wanneer gevuld.
-- Status wijzig je via de statuspill; dubbele statusvelden zijn verwijderd.
-- Extra features: Kopieer vulplanning, Planningcheck en Wijzigingslog.
-
-
-## v6.7.18 — Shiftleider Pad & Planning Extras
-
-- Pad **Kaas/Vleeswaren** toegevoegd na **Vlees/Vis/Kip**.
-- Shiftplanning blijft compact in één venster met 7 vaste paden.
-- Nieuwe feature: **Auto-verdeel vrije paden** op basis van resterende ruimte per medewerker.
-- Nieuwe feature: **Kopieer open punten** voor snelle overdracht.
-- Nieuwe feature: **Eindcheck** met open paden, open taken en planningchecks vóór het shiftklaar report.
-- Versie/cache/assets bijgewerkt naar v6.7.20 / rich-cmd-cache-v6720 / ?v=6719.
-
-
-## v6.7.20 — Shiftleider Dropdown Stability Hotfix
-
-- Persoon-dropdown in Shiftplanning sluit niet meer direct bij openen.
-- Oorzaak opgelost: de select gebruikt nu change-handling in plaats van click-rendering.
-- Kaas/Vleeswaren, Auto-verdeel vrije paden, Kopieer open punten en Eindcheck blijven behouden.
-- Versie/cache/assets bijgewerkt naar v6.7.20 / rich-cmd-cache-v6720 / ?v=6719.
+## Test focus
+Open Coaching on mobile and desktop, open a lesson, mark practice done, complete a lesson, start a test, open badge details, toggle Rustmodus and run Diagnostics → Coaching UX checks.

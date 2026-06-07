@@ -1,25 +1,21 @@
 {
-  "name": "RICH CMD v6.7.20",
+  "name": "RICH CMD v7.4.1",
   "short_name": "RICH CMD",
-  "description": "RICH CMD v6.7.20 — Shiftleider Pro & UX Stability Polish",
-  "start_url": "./index.html?v=6720",
-  "scope": "./",
+  "description": "RICH CMD v7.4.1 — Coaching UX Polish & Learning Quality",
+  "start_url": "./index.html?v=741",
   "display": "standalone",
   "background_color": "#f7fafc",
-  "theme_color": "#f7fafc",
-  "orientation": "portrait-primary",
+  "theme_color": "#0f766e",
   "icons": [
     {
       "src": "./icon-192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     },
     {
       "src": "./icon-512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/png"
     }
   ]
 }
