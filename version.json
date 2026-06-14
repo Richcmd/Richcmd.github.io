@@ -1,14 +1,14 @@
 {
-  "latestVersion": "v7.6.3",
-  "version": "v7.6.3",
-  "build": "AGF Groenten NASA Shelf Data",
-  "cache": "rich-cmd-cache-v763",
-  "assetVersion": "763",
-  "releaseDate": "2026-06-07",
+  "latestVersion": "v7.6.4",
+  "version": "v7.6.4",
+  "build": "One-Minute Command Center & NASA Safety",
+  "cache": "rich-cmd-cache-v764",
+  "assetVersion": "764",
+  "releaseDate": "2026-06-15",
   "minSupportedVersion": "v7.0.0",
   "forceBelowVersion": "",
   "channel": "stable-preview",
-  "updatePolicy": "Normal update; no forced migration. Adds AGF Groenten shelf data from store plan photos with NASA numbers and confidence markers.",
+  "updatePolicy": "Normal update; no forced migration. Makes Today calmer for one-minute use and marks photo-import NASA data as concept/unsafe for advice until verified.",
   "modules": [
     "Vandaag",
     "AGF",
@@ -24,9 +24,11 @@
     "Diagnostiek"
   ],
   "highlights": [
-    "AGF Groenten shelf list from uploaded plan photos",
-    "Load vegetables into AGF product catalog with NASA numbers",
-    "Confidence labels for entries that should be checked against the paper plan",
-    "Diagnostics include AGF shelf data checks"
+    "One-Minute Command Center on Today",
+    "Quick Actions moved behind a compact button",
+    "Pause and important signals shown calmly",
+    "AGF NASA photo import marked as concept/unsafe",
+    "Concept NASA data excluded from advice/patterns until verified",
+    "Diagnostics include Today calm and NASA safety checks"
   ]
 }

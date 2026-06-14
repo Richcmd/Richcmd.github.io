@@ -1828,3 +1828,40 @@ html[data-v670-cleaning="1"] .assist-extra.v661-assist-extra { display:none!impo
   .v762-impact-card .btn-row { gap: .45rem; }
   .v762-impact-card .btn-row .btn { flex: 1 1 100%; }
 }
+
+/* v7.6.4 — One-Minute Command Center & NASA Safety */
+.today-v764{display:grid;gap:1rem;}
+.today-v764 .v764-hero{padding:1.1rem 1.2rem;}
+.today-v764 .v764-hero h2{margin:.25rem 0 .15rem;font-size:clamp(1.3rem,2.2vw,1.9rem);}
+.v764-whatnow{border-left:4px solid rgba(15,118,110,.75);}
+.v764-action{align-items:center;transition:background .16s ease, transform .16s ease;}
+.v764-action:hover{transform:translateY(-1px);}
+.v764-top-grid{gap:.85rem;}
+.v764-quick-panel summary,.v764-route-compact summary,.v764-more-dashboard summary{cursor:pointer;font-weight:750;}
+.v764-quick-panel[open],.v764-route-compact[open]{background:rgba(15,118,110,.04);}
+.v764-more-dashboard{margin-top:.25rem;border-style:dashed;}
+.v764-more-dashboard:not([open]){opacity:.92;}
+.v764-pause{min-height:100%;}
+.v764-signals .soft.card{padding:.7rem;text-align:center;}
+.v764-nasa-safety{border-left:4px solid rgba(245,158,11,.9);}
+.v764-diagnostics .list-item{align-items:flex-start;}
+.today-v764-base .v755-quickbar,
+.today-v764-base .v755-today-notes,
+.today-v764-base .v760-today,
+.today-v764-base .v761-today,
+.today-v764-base .v762-quick-impact,
+.today-v764-base .v762-today-impact,
+.today-v764-base .agf-groenten-v763,
+.today-v764-base .v686-today,
+.today-v764-base .v685-today,
+.today-v764-base .v684-today-wrap,
+.today-v764-base .v683-today-wrap{display:none!important;}
+@media (max-width: 760px){
+  .today-v764{gap:.75rem;}
+  .today-v764 .card{padding:.85rem;}
+  .v764-top-grid,.visual-v764{grid-template-columns:1fr!important;}
+  .v764-whatnow .btn-row .btn,.v764-quick-panel .btn-row .btn,.v764-pause .btn-row .btn{flex:1 1 100%;}
+  .v764-action{display:grid!important;grid-template-columns:1fr auto;gap:.55rem;}
+  .v764-signals .grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .v764-more-dashboard summary{font-size:.95rem;}
+}

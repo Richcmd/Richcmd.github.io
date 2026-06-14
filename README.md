@@ -1,26 +1,20 @@
-# RICH CMD v7.6.3 — AGF Groenten NASA Shelf Data
+# RICH CMD v7.6.4 — One-Minute Command Center & NASA Safety
 
-Deze update verwerkt de nieuw aangeleverde foto's van de groenten-afdeling in een AGF-groenten schaplijst met NASA-nummers.
+Deze update maakt Vandaag rustiger en bruikbaar binnen ongeveer één minuut, zonder functies weg te halen.
 
-## Nieuw
+## Belangrijk
+De AGF Groenten/NASA-data uit v7.6.3 is gemarkeerd als conceptdata. De foto-import is niet betrouwbaar genoeg voor automatische logica en wordt niet gebruikt voor besteladvies, patronen of V8-learning totdat de data opnieuw is gecontroleerd.
 
-- Nieuwe AGF-kaart: **Groenten schaplijst / NASA**.
-- Knop **Groentenlijst inladen** op de AGF-pagina.
-- 45 groenten-/schapartikelen verwerkt uit de foto’s.
-- NASA-nummers worden aan AGF-productprofielen toegevoegd.
-- Duplicaten worden voorkomen op basis van NASA-nummer of productnaam.
-- Minder scherp leesbare entries krijgen het label **controle**.
-- CSV-bestand toegevoegd: `agf-groenten-schaplijst-v763.csv`.
-- Diagnostiek bevat AGF Groenten NASA checks.
-
-## Belangrijk beleid
-
-- Bestaande AGF-data wordt niet gewist.
-- Bestaande producten worden alleen aangevuld als NASA/categorie ontbreekt.
-- Items met label **controle** kun je later handmatig corrigeren op basis van het papieren schapplan.
-- De hoofdflow blijft AGF/HACCP-gericht.
-- Shiftleider Pro blijft standalone.
+## Nieuw in v7.6.4
+- Vandaag opent met een rustiger One-Minute Command Center.
+- Wat Nu blijft maximaal 3 stappen.
+- Quick Actions staan achter een compacte knop.
+- Pauzeweergave is sneller en rustiger.
+- Belangrijke signalen blijven zichtbaar maar compacter.
+- Uitgebreide dashboards, V8-preview en learning-informatie staan lager/ingeklapt.
+- Rustmodus blijft gericht op de belangrijkste werkvloeracties.
+- NASA-conceptdata kan worden uitgeschakeld of gewist.
+- Diagnostiek bevat checks voor Vandaag-rust en NASA Safety.
 
 ## Testadvies
-
-Test na upload vooral: AGF → Groenten schaplijst / NASA → Groentenlijst inladen, zoeken op NASA/productnaam, Bonus/Quick Check, Bestelbeheer-context en Diagnostiek → AGF Groenten NASA checks.
+Test vooral: Vandaag, Snelle actie, Pauze, Meer dashboard, AGF NASA Safety, Bestelbeheer, Diagnostiek en offline/PWA update.

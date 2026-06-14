@@ -20722,3 +20722,175 @@ Advies
     try{ window.RICH_AGF_GROENTEN_763 = GROENTEN_763; }catch(e){}
   } catch(err) { console.error('v7.6.3 AGF Groenten NASA Shelf Data patch failed', err); }
 })();
+
+/* ================================
+   RICH CMD v7.6.4 — One-Minute Command Center & NASA Safety
+   Makes Today usable within 30–60 seconds and marks photo-import NASA data as concept/unsafe for advice.
+================================ */
+(function(){
+  try{
+    if(window.__richCmd764Applied) return;
+    window.__richCmd764Applied = true;
+    if(typeof APP === 'object'){
+      APP.version = 'v7.6.4';
+      APP.cache = 'rich-cmd-cache-v764';
+      APP.build = 'One-Minute Command Center & NASA Safety';
+      APP.pwa = APP.pwa || {};
+      APP.pwa.assets = ['./','./index.html','./index.html?v=764','./styles.css?v=764','./vro-data.js?v=764','./app.js?v=764','./manifest.json?v=764','./version.json','./agf-groenten-schaplijst-v763.csv','./icon-192.png','./icon-512.png'];
+    }
+    const L764 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E764 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v==null?'':v)) : String(v==null?'':v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const save764 = ()=>{ try{ if(typeof save==='function') save(); }catch(_){} };
+    const render764 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast764 = (m,t='info')=>{ try{ if(typeof toast==='function') toast(m,t); else console.log(m); }catch(_){ console.log(m); } };
+    const modal764 = (title,html,wide='')=>{ try{ if(typeof modal==='function') modal(title,html,wide); else toast764(title); }catch(_){ toast764(title); } };
+    const close764 = ()=>{ try{ if(typeof closeModal==='function') closeModal(); }catch(_){} };
+    const today764 = ()=> new Date().toISOString().slice(0,10);
+    const time764 = ()=> new Date().toLocaleTimeString((typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL',{hour:'2-digit',minute:'2-digit'});
+    const dateChip764 = ()=>{
+      try{
+        const d=new Date();
+        const loc=(typeof currentLang==='function'&&currentLang()==='en')?'en-GB':'nl-NL';
+        const dt=d.toLocaleDateString(loc,{weekday:'long',day:'numeric',month:'long'});
+        const tmp=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+        tmp.setUTCDate(tmp.getUTCDate()+4-(tmp.getUTCDay()||7));
+        const yearStart=new Date(Date.UTC(tmp.getUTCFullYear(),0,1));
+        const week=Math.ceil((((tmp-yearStart)/86400000)+1)/7);
+        return `${dt} · week ${week}`;
+      }catch(_){ return new Date().toLocaleDateString(); }
+    };
+    function isRust764(){ return !!(state && state.ui && (state.ui.rustMode || state.ui.calmMode)); }
+    function ensureNasa764(){
+      state.agfNasaConceptSafety = state.agfNasaConceptSafety || {disabled:true, status:'concept', source:'photo-import-v763', updatedAt:new Date().toISOString()};
+      state.agfProducts = Array.isArray(state.agfProducts)?state.agfProducts:[];
+      state.agfProducts.forEach(p=>{
+        const src=String(p.source||'');
+        const aliases=String(p.aliases||'');
+        if(src==='foto-schapplan-v763' || aliases.includes('groenten schaplijst')){
+          p.nasaConcept = true;
+          p.nasaStatus = 'concept';
+          p.excludeFromAdvice = true;
+          p.confidence = p.confidence || 'concept';
+        }
+      });
+      return state.agfNasaConceptSafety;
+    }
+    function isConceptProduct764(p){ return !!(p && (p.nasaConcept || p.excludeFromAdvice || p.nasaStatus==='concept' || p.source==='foto-schapplan-v763')); }
+    function conceptProducts764(){ ensureNasa764(); return (state.agfProducts||[]).filter(isConceptProduct764); }
+
+    const prevAgfAttention764 = typeof agfAttention==='function' ? agfAttention : null;
+    if(prevAgfAttention764) agfAttention = window.agfAttention = function(){
+      const arr = prevAgfAttention764() || [];
+      return arr.filter(x=>!isConceptProduct764(x));
+    };
+
+    function nextRouteTask764(){
+      const s = state.workdaySeq || {};
+      const tasks = Array.isArray(s.tasks) ? s.tasks : [];
+      return tasks.find(t=>t && t.status!=='done' && t.status!=='completed' && t.status!=='Voltooid') || null;
+    }
+    function openHaccp764(){
+      try{ return (state.tasks||[]).filter(t=>!['Voltooid','Voldaan','done','completed'].includes(t.status)).length; }catch(_){ return 0; }
+    }
+    function agfSignals764(){
+      try{ return typeof agfAttention==='function' ? (agfAttention()||[]).length : 0; }catch(_){ return 0; }
+    }
+    function orderCount764(){
+      try{ return (state.inventory||[]).filter(i=>(+i.orderQty||0)>0 || i.order || i.status==='Bijbestellen').length; }catch(_){ return 0; }
+    }
+    function workdayProgress764(){
+      const tasks=Array.isArray(state.workdaySeq?.tasks)?state.workdaySeq.tasks:[];
+      const done=tasks.filter(t=>['done','completed','Voltooid','Voldaan'].includes(t.status)).length;
+      return {done,total:tasks.length,next:nextRouteTask764()};
+    }
+    function oneMinuteActions764(){
+      const actions=[];
+      const next=nextRouteTask764();
+      if(!state.shift?.active) actions.push({label:L764('Start je werkdag','Start your workday'), detail:L764('Daarna blijft de dagroute stap voor stap volgen.','Then the day route follows step by step.'), action:'start-shift-now', tone:'good'});
+      if(next) actions.push({label:L764('Volgende stap','Next step'), detail:`${next.title||next.name||L764('Dagroute','Day route')} ${next.guide?`· ${L764('richttijd','guide')} ${next.guide}`:''}`, action:'v686-open-planner', tone:next.type==='break'?'info':'primary'});
+      const h=openHaccp764(); if(h && actions.length<3) actions.push({label:L764('Open HACCP wanneer nodig','Open HACCP when needed'), detail:`${h} ${L764('open punten','open items')}`, route:'haccp', tone:'warn'});
+      const a=agfSignals764(); if(a && actions.length<3) actions.push({label:L764('Bekijk AGF-aandacht','Review Produce attention'), detail:`${a} ${L764('signalen','signals')}`, route:'agf', tone:'warn'});
+      const o=orderCount764(); if(o && actions.length<3) actions.push({label:L764('Bestellijst controleren','Check order list'), detail:`${o} ${L764('artikelen','items')}`, route:'inventory', tone:'info'});
+      if(actions.length<3) actions.push({label:L764('Snelle notitie of signaal','Quick note or signal'), detail:L764('Leg iets vast zonder te zoeken.','Capture something without searching.'), action:'v764-open-quick-actions', tone:'neutral'});
+      return actions.slice(0,3);
+    }
+    function quickActionsPanel764(){
+      return `<details class="card v764-quick-panel"><summary>+ ${E764(L764('Snelle actie','Quick action'))}</summary><div class="btn-row mt"><button class="btn" data-action="v755-open-field-note" data-cat="Algemeen">+ ${E764(L764('Notitie','Note'))}</button><button class="btn" data-action="v755-open-signal" data-cat="Algemeen">⚠ ${E764(L764('Signaal','Signal'))}</button><button class="btn" data-action="v762-open-interruption">+ ${E764(L764('Onderbreking','Interruption'))}</button><button class="btn" data-action="v686-open-planner">${E764(L764('Dagroute','Day route'))}</button><button class="btn" data-route="haccp">HACCP</button><button class="btn" data-route="agf">AGF</button></div><p class="tiny muted mt">${E764(L764('Alle snelle opties blijven bereikbaar, maar staan niet meer als drukke balk bovenaan.','All quick options remain available, but no longer as a busy bar at the top.'))}</p></details>`;
+    }
+    function pauseCard764(){
+      const active=!!state.shift?.breakActive;
+      return `<div class="card v764-pause"><div class="flex-line"><div><h3>${E764(active?L764('Pauze bezig','Break active'):L764('Pauze / hervatten','Break / resume'))}</h3><p class="muted small">${E764(active?L764('Rond je pauze af wanneer je teruggaat naar de vloer.','End your break when you return to the floor.'):L764('Snel pauze starten of hervatten zonder veel te tikken.','Quickly start or end a break without many taps.'))}</p></div><span class="pill ${active?'warn':'info'}">${active?E764(time764()):E764(L764('snel','quick'))}</span></div><div class="btn-row mt"><button class="btn ${active?'good':'primary'}" data-action="toggle-break" ${!state.shift?.active?'disabled':''}>${active?E764(L764('Pauze klaar','End break')):E764(L764('Pauze starten','Start break'))}</button><button class="btn" data-action="v755-open-field-note" data-cat="Pauze">+ ${E764(L764('Pauzenotitie','Break note'))}</button></div></div>`;
+    }
+    function signalsCard764(){
+      const h=openHaccp764(), a=agfSignals764(), o=orderCount764(), c=conceptProducts764().length;
+      if(!h && !a && !o && !c) return '';
+      return `<details class="card v764-signals" ${isRust764()?'':'open'}><summary>${E764(L764('Belangrijke signalen','Important signals'))}</summary><div class="grid grid-4 mt"><div class="soft card"><strong>${h}</strong><p class="tiny muted">HACCP</p></div><div class="soft card"><strong>${a}</strong><p class="tiny muted">AGF</p></div><div class="soft card"><strong>${o}</strong><p class="tiny muted">${E764(L764('Bestellijst','Order list'))}</p></div><div class="soft card"><strong>${c}</strong><p class="tiny muted">NASA concept</p></div></div>${c?`<p class="tiny muted mt">${E764(L764('NASA-foto-import staat veilig uit voor advies/logica.','NASA photo import is safely disabled for advice/logic.'))}</p>`:''}</details>`;
+    }
+    function oneMinuteToday764(){
+      const prog=workdayProgress764(); const acts=oneMinuteActions764();
+      const name=state.settings?.name || L764('Richard','Richard');
+      return `<div class="today-v764-top"><div class="card hero v764-hero"><div class="flex-line"><div><span class="chip">RICH CMD v7.6.4</span><h2>${E764(L764('Goedemorgen','Good morning'))}, ${E764(name)}</h2><p class="muted small">${E764(dateChip764())}</p></div><span class="pill info">${prog.done}/${prog.total||0}</span></div></div><div class="card v764-whatnow"><div class="flex-line"><div><h3>${E764(L764('Wat nu?','What now?'))}</h3><p class="muted small">${E764(L764('Binnen één minuut zien wat belangrijk is. Maximaal drie stappen.','See what matters within one minute. Maximum three steps.'))}</p></div><button class="btn small" data-action="v686-open-planner">${E764(L764('Dagroute','Day route'))}</button></div><div class="list mt">${acts.map((x,i)=>`<button class="list-item compact v764-action" ${x.action?`data-action="${E764(x.action)}"`:`data-route="${E764(x.route)}"`}><span><strong>${i+1}. ${E764(x.label)}</strong><br><span class="tiny muted">${E764(x.detail)}</span></span><span class="pill ${x.tone==='primary'?'info':x.tone}">${E764(L764('Open','Open'))}</span></button>`).join('')}</div><div class="btn-row mt"><button class="btn primary" ${prog.next?`data-action="v686-open-planner"`:`data-route="agf"`}>${E764(prog.next?L764('Volgende stap openen','Open next step'):L764('Start AGF','Start Produce'))}</button><button class="btn" data-action="v764-open-quick-actions">+ ${E764(L764('Snelle actie','Quick action'))}</button></div></div><div class="grid grid-2 v764-top-grid">${pauseCard764()}${signalsCard764()||quickActionsPanel764()}</div>${signalsCard764()?quickActionsPanel764():''}<details class="card v764-route-compact"><summary>${E764(L764('Dagroute, inzichten en V8-preview later bekijken','View day route, insights and V8 preview later'))}</summary><p class="muted small mt">${E764(L764('Alle uitgebreide kaarten en opties staan hieronder, zodat Vandaag rustig opent op de werkvloer.','All expanded cards and options are below, so Today opens calmly on the floor.'))}</p></details></div>`;
+    }
+    function nasaSafetyCard764(){
+      ensureNasa764(); const c=conceptProducts764().length; const disabled=state.agfNasaConceptSafety?.disabled!==false;
+      return `<div class="card v764-nasa-safety"><div class="flex-line"><div><span class="chip">v7.6.4 · NASA Safety</span><h3>${E764(L764('AGF NASA-foto-import is conceptdata','Produce NASA photo import is concept data'))}</h3><p class="muted small">${E764(L764('De groentenlijst uit foto’s is niet betrouwbaar genoeg. Deze data wordt niet gebruikt voor besteladvies, patronen of V8-learning tot ze opnieuw gecontroleerd is.','The vegetable list from photos is not reliable enough. This data is not used for ordering advice, patterns or V8 learning until it is checked again.'))}</p></div><span class="pill ${disabled?'warn':'bad'}">${disabled?E764(L764('uitgeschakeld','disabled')):E764(L764('controle nodig','needs check'))}</span></div><div class="grid grid-3 mt"><div class="soft card"><strong>${c}</strong><p class="tiny muted">${E764(L764('conceptproducten','concept products'))}</p></div><div class="soft card"><strong>${disabled?'0':'?'}</strong><p class="tiny muted">${E764(L764('actief voor advies','active for advice'))}</p></div><div class="soft card"><strong>${E764(L764('foto','photo'))}</strong><p class="tiny muted">${E764(L764('bronstatus','source status'))}</p></div></div><div class="btn-row mt"><button class="btn primary" data-action="v764-disable-nasa-concept">${E764(L764('Conceptlijst uitschakelen','Disable concept list'))}</button><button class="btn bad" data-action="v764-clear-nasa-concept">${E764(L764('Conceptlijst wissen','Clear concept list'))}</button><button class="btn" data-action="v764-copy-nasa-warning">${E764(L764('Kopieer waarschuwing','Copy warning'))}</button></div></div>`;
+    }
+    function nasaWarningText764(){ return `RICH CMD v7.6.4 — AGF NASA Data Safety\n\nDe AGF groenten/NASA-data uit v7.6.3 is conceptdata uit foto's en is niet betrouwbaar genoeg.\nBeleid:\n- Niet gebruiken voor besteladvies.\n- Niet gebruiken voor patroonherkenning/V8-learning.\n- Alleen opnieuw activeren na gecontroleerde brondata of handmatige validatie.\nConceptproducten gevonden: ${conceptProducts764().length}`; }
+    function disableNasaConcept764(){ const s=ensureNasa764(); s.disabled=true; s.status='disabled'; s.updatedAt=new Date().toISOString(); (state.agfProducts||[]).forEach(p=>{ if(isConceptProduct764(p)){ p.excludeFromAdvice=true; p.nasaStatus='concept'; p.nasaConcept=true; }}); save764(); toast764(L764('NASA-conceptdata uitgeschakeld voor advies/logica','NASA concept data disabled for advice/logic'),'good'); render764(); }
+    function clearNasaConcept764(){
+      if(!confirm(L764('Conceptproducten uit de foto-import verwijderen? Permanente, gecontroleerde data blijft alleen veilig als die niet als foto-import gemarkeerd is.','Remove concept products from the photo import? Permanent verified data is only safe if it is not marked as photo import.'))) return;
+      const before=(state.agfProducts||[]).length;
+      state.agfProducts=(state.agfProducts||[]).filter(p=>!isConceptProduct764(p));
+      const removed=before-state.agfProducts.length;
+      state.agfNasaConceptSafety={disabled:true,status:'cleared',clearedAt:new Date().toISOString(),removed};
+      save764(); toast764(`${removed} ${L764('conceptproducten verwijderd','concept products removed')}`,'good'); render764();
+    }
+    function openQuick764(){
+      modal764(L764('Snelle actie','Quick action'), `<div class="v764-quick-modal"><p class="muted small">${E764(L764('Kies één snelle actie. Dit is bedoeld voor momenten waarop je weinig tijd hebt.','Choose one quick action. This is for moments when you have little time.'))}</p><div class="grid grid-2"><button class="btn primary" data-action="v755-open-field-note" data-cat="Algemeen">+ ${E764(L764('Notitie','Note'))}</button><button class="btn" data-action="v755-open-signal" data-cat="AGF">⚠ AGF ${E764(L764('signaal','signal'))}</button><button class="btn" data-action="v762-open-interruption">+ ${E764(L764('Onderbreking','Interruption'))}</button><button class="btn" data-action="v686-open-planner">${E764(L764('Dagroute','Day route'))}</button><button class="btn" data-route="haccp">HACCP</button><button class="btn" data-route="agf">AGF</button></div><div class="btn-row mt"><button class="btn" data-action="close-modal">${E764(L764('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+    function diagnostics764(){
+      const c=conceptProducts764().length;
+      const checks=[
+        {name:L764('Vandaag opent rustig','Today opens calmly'),ok:true,detail:L764('One-Minute Command Center staat bovenaan','One-Minute Command Center is at the top')},
+        {name:L764('Quick Actions niet meer dominant','Quick Actions no longer dominant'),ok:true,detail:L764('beschikbaar via compacte knop','available through compact button')},
+        {name:L764('Wat Nu maximaal 3 stappen','What Now maximum 3 steps'),ok:oneMinuteActions764().length<=3,detail:`${oneMinuteActions764().length}/3`},
+        {name:L764('NASA conceptdata veilig','NASA concept data safe'),ok:state.agfNasaConceptSafety?.disabled!==false,detail:`${c} ${L764('conceptproducten','concept products')}`},
+        {name:L764('Versie/cache','Version/cache'),ok:APP.version==='v7.6.4'&&APP.cache==='rich-cmd-cache-v764',detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score=Math.round(checks.filter(x=>x.ok).length/checks.length*100);
+      return `<div class="card v764-diagnostics"><div class="flex-line"><div><span class="chip">v7.6.4</span><h3>${E764(L764('One-Minute Command Center checks','One-Minute Command Center checks'))}</h3><p class="muted small">${E764(L764('Controleert rust op Vandaag en veilige behandeling van NASA-conceptdata.','Checks calm Today layout and safe handling of NASA concept data.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(x=>`<div class="list-item compact"><span><strong>${E764(x.name)}</strong><br><span class="tiny muted">${E764(x.detail)}</span></span><span class="pill ${x.ok?'good':'warn'}">${x.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="v764-disable-nasa-concept">${E764(L764('NASA concept uitschakelen','Disable NASA concept'))}</button><button class="btn" data-action="v764-copy-nasa-warning">${E764(L764('Kopieer NASA-waarschuwing','Copy NASA warning'))}</button></div></div>`;
+    }
+
+    const prevToday764 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday764) renderToday = window.renderToday = function(){
+      ensureNasa764();
+      const base = prevToday764() || '';
+      return `<div class="today-v764">${oneMinuteToday764()}<details class="card v764-more-dashboard"><summary>${E764(L764('Meer dashboard en uitgebreide opties','More dashboard and expanded options'))}</summary><div class="today-v764-base mt">${base}</div></details></div>`;
+    };
+    const prevAgf764 = typeof renderAgf==='function'?renderAgf:null;
+    if(prevAgf764) renderAgf = window.renderAgf = function(){ ensureNasa764(); const base=prevAgf764()||''; return `${nasaSafetyCard764()}${base}`; };
+    const prevInv764 = typeof renderInventory==='function'?renderInventory:null;
+    if(prevInv764) renderInventory = window.renderInventory = function(){ ensureNasa764(); const base=prevInv764()||''; return `${nasaSafetyCard764()}${base}`; };
+    const prevDiag764 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiag764) renderDiagnostics = window.renderDiagnostics = function(){ ensureNasa764(); const base=prevDiag764()||''; return `${diagnostics764()}${nasaSafetyCard764()}${base}`; };
+    const prevSettings764 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings764) renderSettings = window.renderSettings = function(){ ensureNasa764(); const base=prevSettings764()||''; return `${base}<div class="mt settings-v764">${nasaSafetyCard764()}${diagnostics764()}</div>`; };
+    const prevVisual764 = typeof renderVisual==='function'?renderVisual:null;
+    if(prevVisual764) renderVisual = window.renderVisual = function(){ ensureNasa764(); const base=prevVisual764()||''; return `<div class="grid grid-2 visual-v764"><div class="card"><h3>${E764(L764('One-Minute gebruik','One-minute use'))}</h3><p class="muted small">${E764(L764('Vandaag is teruggebracht naar Wat Nu, pauze en belangrijke signalen. Uitgebreide kaarten staan lager/ingeklapt.','Today is reduced to What Now, break and important signals. Expanded cards are lower/collapsed.'))}</p></div>${nasaSafetyCard764()}</div>${base}`; };
+
+    const prevHandle764 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle764) handleAction = window.handleAction = function(a,el,e){
+      if(a==='v764-open-quick-actions'){ openQuick764(); return; }
+      if(a==='v764-disable-nasa-concept'){ disableNasaConcept764(); return; }
+      if(a==='v764-clear-nasa-concept'){ clearNasaConcept764(); return; }
+      if(a==='v764-copy-nasa-warning'){ try{ if(typeof copyText==='function') copyText(nasaWarningText764()); else navigator.clipboard.writeText(nasaWarningText764()); toast764(L764('Waarschuwing gekopieerd','Warning copied'),'good'); }catch(_){ toast764(nasaWarningText764()); } return; }
+      if(a==='v763-load-groenten'){
+        modal764(L764('NASA-foto-import niet betrouwbaar','NASA photo import not reliable'), `<div class="card"><h3>${E764(L764('Niet inladen als actieve data','Do not load as active data'))}</h3><p>${E764(L764('De NASA-nummers uit de foto’s zijn als concept gemarkeerd. Gebruik deze import niet voor besteladvies of patronen totdat we correcte brongegevens hebben.','The NASA numbers from photos are marked as concept. Do not use this import for ordering advice or patterns until we have verified source data.'))}</p><div class="btn-row mt"><button class="btn primary" data-action="v764-disable-nasa-concept">${E764(L764('Concept veilig houden','Keep concept safe'))}</button><button class="btn" data-action="close-modal">${E764(L764('Sluiten','Close'))}</button></div></div>`, 'wide');
+        return;
+      }
+      return prevHandle764(a,el,e);
+    };
+    ensureNasa764();
+    save764();
+  }catch(err){ console.error('v7.6.4 One-Minute Command Center & NASA Safety patch failed', err); }
+})();
