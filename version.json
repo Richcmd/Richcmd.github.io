@@ -1,14 +1,14 @@
 {
-  "latestVersion": "v7.6.2",
-  "version": "v7.6.2",
-  "build": "Field Cause Tracking & Interruption Insights",
-  "cache": "rich-cmd-cache-v762",
-  "assetVersion": "762",
+  "latestVersion": "v7.6.3",
+  "version": "v7.6.3",
+  "build": "AGF Groenten NASA Shelf Data",
+  "cache": "rich-cmd-cache-v763",
+  "assetVersion": "763",
   "releaseDate": "2026-06-07",
   "minSupportedVersion": "v7.0.0",
   "forceBelowVersion": "",
   "channel": "stable-preview",
-  "updatePolicy": "Normal update; no forced migration. Field Cause Tracking & Interruption Insights adds cause labels, interruption impact, planning-impact visualisation and V8 learning context while keeping timers optional.",
+  "updatePolicy": "Normal update; no forced migration. Adds AGF Groenten shelf data from store plan photos with NASA numbers and confidence markers.",
   "modules": [
     "Vandaag",
     "AGF",
@@ -24,10 +24,9 @@
     "Diagnostiek"
   ],
   "highlights": [
-    "Cause labels for field notes, signals and day-shift explanations",
-    "Quick interruption logging with impact minutes",
-    "Planning-impact overview in Visualisation and reports",
-    "V8 Learning now distinguishes task delays from real causes such as late freight or interruptions",
-    "Diagnostics include Field Cause Tracking and Interruption Insights checks"
+    "AGF Groenten shelf list from uploaded plan photos",
+    "Load vegetables into AGF product catalog with NASA numbers",
+    "Confidence labels for entries that should be checked against the paper plan",
+    "Diagnostics include AGF shelf data checks"
   ]
 }

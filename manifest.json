@@ -1,8 +1,8 @@
 {
-  "name": "RICH CMD v7.6.2 — Field Cause Tracking",
-  "short_name": "RICH CMD 7.6.2",
-  "description": "RICH CMD — Field Cause Tracking & Interruption Insights for planning impact, causes and V8 learning.",
-  "start_url": "./index.html?v=762",
+  "name": "RICH CMD v7.6.3 — AGF Groenten NASA",
+  "short_name": "RICH CMD 7.6.3",
+  "description": "RICH CMD — AGF Groenten NASA Shelf Data for AGF groenten schapdata en NASA-nummers.",
+  "start_url": "./index.html?v=763",
   "display": "standalone",
   "background_color": "#f7fafc",
   "theme_color": "#0f766e",

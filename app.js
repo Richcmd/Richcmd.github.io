@@ -20405,3 +20405,320 @@ Advies
     ensure762(); save762();
   }catch(err){ console.error('v7.6.2 Field Cause Tracking & Interruption Insights patch failed', err); }
 })();
+
+
+/* v7.6.3 — AGF Groenten NASA Shelf Data */
+(function(){
+  try {
+    if (typeof APP === 'object') { APP.version = 'v7.6.3'; APP.cache = 'rich-cmd-cache-v763'; }
+    const GROENTEN_763 = [
+  {
+    "name": "ah ijsbergsla 1,00 ST",
+    "nasa": "20952",
+    "category": "Groenten > Sla",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah prei 1,00 ST",
+    "nasa": "767852",
+    "category": "Groenten > Prei",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah kropsla 1,00 ST",
+    "nasa": "842312",
+    "category": "Groenten > Sla",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah crispy green sla 1,00 ST",
+    "nasa": "717741",
+    "category": "Groenten > Sla",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah specialebonen los 1,00 KG",
+    "nasa": "20074",
+    "category": "Groenten > Bonen",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah specialebonen 500,00 GR",
+    "nasa": "562663",
+    "category": "Groenten > Bonen",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah snijbonen 400,00 GR",
+    "nasa": "559681",
+    "category": "Groenten > Bonen",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah paksoi 1,00 ST",
+    "nasa": "88596",
+    "category": "Groenten > Kool/paksoi",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah spitskool 1,00 ST",
+    "nasa": "832874",
+    "category": "Groenten > Kool",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah chinese kool 1,00 ST",
+    "nasa": "86878",
+    "category": "Groenten > Kool",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bosui 1,00 ST",
+    "nasa": "599987",
+    "category": "Groenten > Ui/kruiden",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bospeen 1,00 BS",
+    "nasa": "583138",
+    "category": "Groenten > Peen",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah broccoli 1,00 KG",
+    "nasa": "20961",
+    "category": "Groenten > Kool",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bloemkool 1,00 ST",
+    "nasa": "20960",
+    "category": "Groenten > Kool",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah witlof los 1,00 KG",
+    "nasa": "20954",
+    "category": "Groenten > Witlof",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah winterpeen los 1,00 ST",
+    "nasa": "538981",
+    "category": "Groenten > Peen",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah paprika mix 3,00 ST",
+    "nasa": "21006",
+    "category": "Groenten > Paprika",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah puntpaprika 500,00 GR",
+    "nasa": "22924",
+    "category": "Groenten > Paprika",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah paprika rood 1,00 ST",
+    "nasa": "646784",
+    "category": "Groenten > Paprika",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah aubergine 1,00 ST",
+    "nasa": "809016",
+    "category": "Groenten > Aubergine/courgette",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah gele courgette 1,00 ST",
+    "nasa": "819405",
+    "category": "Groenten > Aubergine/courgette",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah courgette 1,00 ST",
+    "nasa": "21003",
+    "category": "Groenten > Aubergine/courgette",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah trostomaten los 1,00 KG",
+    "nasa": "762529",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah coeur de boeuf 1,00 KG",
+    "nasa": "40953",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah vlees tomaten 1,00 KG",
+    "nasa": "21009",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah sweet cherry tomaten 250,00 GR",
+    "nasa": "596488",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah cherrytomaten 250,00 GR",
+    "nasa": "36597",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah tasty tom trostomaten 380,00 GR",
+    "nasa": "501842",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio sw cherry trostomaten 200,00 GR",
+    "nasa": "43349",
+    "category": "Groenten > Tomaten bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio ruby del trostomaten 300,00 GR",
+    "nasa": "43348",
+    "category": "Groenten > Tomaten bio",
+    "confidence": "controle"
+  },
+  {
+    "name": "ah fin red med trostomaat 450,00 GR",
+    "nasa": "711407",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah romaatjes 250,00 GR",
+    "nasa": "534133",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah roma tomaten 750,00 GR",
+    "nasa": "537853",
+    "category": "Groenten > Tomaten",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah komkommer 1,00 ST",
+    "nasa": "506672",
+    "category": "Groenten > Komkommer",
+    "confidence": "controle"
+  },
+  {
+    "name": "ah bio komkommer 1,00 ST",
+    "nasa": "529604",
+    "category": "Groenten > Komkommer bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah midi komkommers 3,00 ST",
+    "nasa": "39362",
+    "category": "Groenten > Komkommer",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah avocado eetrijp 2,00 ST",
+    "nasa": "571118",
+    "category": "Groenten > Avocado",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio avocado 2,00 ST",
+    "nasa": "517459",
+    "category": "Groenten > Avocado bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah avocado 1,00 ST",
+    "nasa": "597702",
+    "category": "Groenten > Avocado",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah venkel 1,00 ST",
+    "nasa": "820552",
+    "category": "Groenten > Venkel",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio baby romaine 2,00 ST",
+    "nasa": "708786",
+    "category": "Groenten > Sla bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio paprika punt 2,00 ST",
+    "nasa": "5680032",
+    "category": "Groenten > Paprika bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio pompoen 1,00 KG",
+    "nasa": "41957",
+    "category": "Groenten > Pompoen bio",
+    "confidence": "hoog"
+  },
+  {
+    "name": "ah bio peen pompoen 1,00 KG",
+    "nasa": "589705",
+    "category": "Groenten > Pompoen/peen bio",
+    "confidence": "controle"
+  },
+  {
+    "name": "ah sw puntpaprika geel 1,00 ST",
+    "nasa": "84546",
+    "category": "Groenten > Paprika",
+    "confidence": "controle"
+  }
+];
+    function L763(nl,en){ try{ return (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl; }catch(e){ return nl; } }
+    function E763(s){ try{ return escapeHtml(String(s??'')); }catch(e){ return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); } }
+    function by763(id){ return document.getElementById(id); }
+    function uid763(p){ return (typeof uid==='function'?uid(p):(p+'_'+Math.random().toString(36).slice(2)+'_'+Date.now())); }
+    function now763(){ return (typeof nowISO==='function'?nowISO():new Date().toISOString()); }
+    function save763(){ if(typeof save==='function') save(); }
+    function render763(){ if(typeof render==='function') render(); }
+    function toast763(msg,type){ if(typeof toast==='function') toast(msg,type||'info'); else console.log(msg); }
+    function agfList763(){ state.agfProducts = Array.isArray(state.agfProducts)?state.agfProducts:[]; return state.agfProducts; }
+    function installed763(){ const list=agfList763(); return GROENTEN_763.filter(it=>list.some(p=>String(p.nasa||'')===String(it.nasa)||String(p.name||'').toLowerCase()===String(it.name).toLowerCase())).length; }
+    function addGroenten763(){
+      const list=agfList763(); let added=0, updated=0;
+      GROENTEN_763.forEach(it=>{
+        let p=list.find(x=>String(x.nasa||'')===String(it.nasa)) || list.find(x=>String(x.name||'').toLowerCase()===String(it.name).toLowerCase());
+        if(!p){ list.push({id:uid763('agf'),name:it.name,nasa:it.nasa,category:it.category,aliases:'groenten schaplijst; presentatie 134; week 23 2026',favorite:false,history:[],source:'foto-schapplan-v763',confidence:it.confidence}); added++; }
+        else { p.nasa=p.nasa||it.nasa; p.category=p.category||it.category; p.aliases=String(p.aliases||''); if(!p.aliases.includes('groenten schaplijst')) p.aliases+=(p.aliases?'; ':'')+'groenten schaplijst'; p.source=p.source||'foto-schapplan-v763'; p.confidence=p.confidence||it.confidence; updated++; }
+      });
+      try{ if(typeof addActivity==='function') addActivity(`${added} groenten-artikelen geladen uit schapfoto’s`, 'agf'); }catch(e){}
+      save763(); toast763(`${added} toegevoegd · ${updated} bijgewerkt`, 'good'); render763();
+    }
+    function copyGroenten763(){
+      const txt="AGF Groenten schaplijst v7.6.3\nBron: foto's schapplan, presentatie 134 / week 23 2026\n\n"+GROENTEN_763.map(it=>`- ${it.name} · NASA ${it.nasa} · ${it.category}${it.confidence==='controle'?' · controleer foto':''}`).join('\n');
+      if(typeof copyText==='function') copyText(txt); else navigator.clipboard&&navigator.clipboard.writeText(txt); toast763(L763('Groentenlijst gekopieerd','Vegetable list copied'),'good');
+    }
+    function tableGroenten763(limit=12){
+      return `<div class="list">${GROENTEN_763.slice(0,limit).map(it=>`<div class="list-item compact"><span><strong>${E763(it.name)}</strong><br><span class="tiny muted">NASA ${E763(it.nasa)} · ${E763(it.category)}</span></span><span class="pill ${it.confidence==='hoog'?'good':'warn'}">${it.confidence==='hoog'?L763('hoog','high'):L763('controle','check')}</span></div>`).join('')}</div>${GROENTEN_763.length>limit?`<p class="tiny muted mt">+ ${GROENTEN_763.length-limit} meer in de lijst. Gebruik kopiëren of laden om alles te verwerken.</p>`:''}`;
+    }
+    function cardGroenten763(compact=false){ const inst=installed763(); return `<div class="card agf-groenten-v763"><div class="flex-line"><div><span class="chip">v7.6.3</span><h3>${E763(L763('Groenten schaplijst / NASA','Vegetable shelf list / NASA'))}</h3><p class="muted small">${E763(L763('Verwerkt uit de nieuwe foto’s van de groenten-afdeling. Entries met label “controle” zijn uit de foto minder scherp leesbaar en kun je later corrigeren.','Processed from the new vegetable-section photos. Entries labelled “check” were less readable in the photo and can be corrected later.'))}</p></div><span class="pill info">${inst}/${GROENTEN_763.length}</span></div>${compact?'':tableGroenten763(10)}<div class="btn-row mt"><button class="btn primary" data-action="v763-load-groenten">${E763(L763('Groentenlijst inladen','Load vegetable list'))}</button><button class="btn" data-action="v763-copy-groenten">${E763(L763('Kopieer lijst','Copy list'))}</button></div></div>`; }
+    const prevAgf763 = typeof renderAgf==='function'?renderAgf:null;
+    if(prevAgf763) renderAgf = window.renderAgf = function(){ const base=prevAgf763()||''; return `<div class="grid">${cardGroenten763(true)}</div>`+base; };
+    const prevInv763 = typeof renderInventory==='function'?renderInventory:null;
+    if(prevInv763) renderInventory = window.renderInventory = function(){ const base=prevInv763()||''; return base + `<div class="grid mt">${cardGroenten763(true)}</div>`; };
+    const prevDiag763 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiag763) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiag763()||''; const checks=[{name:L763('Groenten schapdata aanwezig','Vegetable shelf data present'),ok:GROENTEN_763.length>=40,detail:GROENTEN_763.length+' items'},{name:L763('NASA-nummers ingevuld','NASA numbers filled'),ok:GROENTEN_763.every(x=>x.nasa),detail:L763('alle entries hebben NASA','all entries have NASA')},{name:L763('Controlelabels beschikbaar','Check labels available'),ok:GROENTEN_763.some(x=>x.confidence==='controle'),detail:L763('onscherpe foto-items worden gemarkeerd','unclear photo items are marked')},{name:L763('Versie/cache','Version/cache'),ok:APP.version==='v7.6.3'&&APP.cache==='rich-cmd-cache-v763',detail:APP.version+' · '+APP.cache}]; return `<div class="card"><h3>v7.6.3 — ${E763(L763('AGF Groenten NASA checks','Produce vegetable NASA checks'))}</h3><div class="list">${checks.map(c=>`<div class="list-item compact"><span><strong>${E763(c.name)}</strong><br><span class="tiny muted">${E763(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn" data-action="v763-copy-groenten">${E763(L763('Kopieer groentenlijst','Copy vegetable list'))}</button></div></div>`+base; };
+    const prevHandle763 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle763) handleAction = window.handleAction = function(a,el,e){ if(a==='v763-load-groenten'){ addGroenten763(); return; } if(a==='v763-copy-groenten'){ copyGroenten763(); return; } return prevHandle763(a,el,e); };
+    try{ window.RICH_AGF_GROENTEN_763 = GROENTEN_763; }catch(e){}
+  } catch(err) { console.error('v7.6.3 AGF Groenten NASA Shelf Data patch failed', err); }
+})();

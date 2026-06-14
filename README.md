@@ -1,24 +1,26 @@
-# RICH CMD v7.6.2 — Field Cause Tracking & Interruption Insights
+# RICH CMD v7.6.3 — AGF Groenten NASA Shelf Data
 
-Deze update bouwt door op de V8 Data Learning Foundation. De focus ligt op het beter verklaren waarom planning verschuift, zonder dat de gebruiker alles live hoeft te timeren.
+Deze update verwerkt de nieuw aangeleverde foto's van de groenten-afdeling in een AGF-groenten schaplijst met NASA-nummers.
 
 ## Nieuw
 
-- Oorzaaklabels bij snelle notities en signalen.
-- Snelle onderbreking registreren met impacttijd.
-- Planning-impact in Visualisatie.
-- Dagrapport/impactrapport met oorzaken.
-- V8 Learning gebruikt oorzaken zoals late vracht, klantvragen of collega geholpen.
-- Diagnostiek bevat Field Cause Tracking checks.
+- Nieuwe AGF-kaart: **Groenten schaplijst / NASA**.
+- Knop **Groentenlijst inladen** op de AGF-pagina.
+- 45 groenten-/schapartikelen verwerkt uit de foto’s.
+- NASA-nummers worden aan AGF-productprofielen toegevoegd.
+- Duplicaten worden voorkomen op basis van NASA-nummer of productnaam.
+- Minder scherp leesbare entries krijgen het label **controle**.
+- CSV-bestand toegevoegd: `agf-groenten-schaplijst-v763.csv`.
+- Diagnostiek bevat AGF Groenten NASA checks.
 
 ## Belangrijk beleid
 
-- Timers blijven optioneel.
-- Afvinken en notities zijn genoeg voor normale werkdagen.
-- Oorzaken helpen verklaren waarom taken uitlopen, zonder automatisch schuld of harde conclusies te trekken.
-- Shiftleider Pro blijft standalone.
+- Bestaande AGF-data wordt niet gewist.
+- Bestaande producten worden alleen aangevuld als NASA/categorie ontbreekt.
+- Items met label **controle** kun je later handmatig corrigeren op basis van het papieren schapplan.
 - De hoofdflow blijft AGF/HACCP-gericht.
+- Shiftleider Pro blijft standalone.
 
 ## Testadvies
 
-Test na upload vooral: Vandaag → Onderbreking, Field Notes met oorzaak, Visualisatie → Planning-impact, V8 Preview, Diagnostiek → Field Cause Tracking checks en backup/export.
+Test na upload vooral: AGF → Groenten schaplijst / NASA → Groentenlijst inladen, zoeken op NASA/productnaam, Bonus/Quick Check, Bestelbeheer-context en Diagnostiek → AGF Groenten NASA checks.
