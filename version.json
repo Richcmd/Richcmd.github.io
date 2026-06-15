@@ -1,14 +1,14 @@
 {
-  "latestVersion": "v7.6.4",
-  "version": "v7.6.4",
-  "build": "One-Minute Command Center & NASA Safety",
-  "cache": "rich-cmd-cache-v764",
-  "assetVersion": "764",
+  "latestVersion": "v7.6.5",
+  "version": "v7.6.5",
+  "build": "Navigation & Findability UX Cleanup",
+  "cache": "rich-cmd-cache-v765",
+  "assetVersion": "765",
   "releaseDate": "2026-06-15",
   "minSupportedVersion": "v7.0.0",
   "forceBelowVersion": "",
   "channel": "stable-preview",
-  "updatePolicy": "Normal update; no forced migration. Makes Today calmer for one-minute use and marks photo-import NASA data as concept/unsafe for advice until verified.",
+  "updatePolicy": "Normal update; no forced migration. Improves navigation, findability, menu closing, shift controls and updates/recovery access while keeping Today calm.",
   "modules": [
     "Vandaag",
     "AGF",
@@ -24,11 +24,11 @@
     "Diagnostiek"
   ],
   "highlights": [
-    "One-Minute Command Center on Today",
-    "Quick Actions moved behind a compact button",
-    "Pause and important signals shown calmly",
-    "AGF NASA photo import marked as concept/unsafe",
-    "Concept NASA data excluded from advice/patterns until verified",
-    "Diagnostics include Today calm and NASA safety checks"
+    "Menu has a clear close button",
+    "Shift start/end is always findable from Today, menu, quick action and search",
+    "Command search now finds pages, actions, updates, backup, recovery, coaching and NASA safety",
+    "Updates & recovery is a clearer system hub inside Diagnostics and searchable by keyword",
+    "Quick Action modal is calmer and includes shift, pause, note, interruption, HACCP and AGF",
+    "Mobile bottom navigation includes search and menu shortcuts"
   ]
 }

@@ -1,13 +1,13 @@
-const CACHE = 'rich-cmd-cache-v764';
-const APP_VERSION = 'v7.6.4';
+const CACHE = 'rich-cmd-cache-v765';
+const APP_VERSION = 'v7.6.5';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './index.html?v=764',
-  './styles.css?v=764',
-  './vro-data.js?v=764',
-  './app.js?v=764',
-  './manifest.json?v=764',
+  './index.html?v=765',
+  './styles.css?v=765',
+  './vro-data.js?v=765',
+  './app.js?v=765',
+  './manifest.json?v=765',
   './version.json',
   './agf-groenten-schaplijst-v763.csv',
   './icon-192.png',
@@ -56,7 +56,7 @@ function cacheResponse(request, response) {
 }
 
 function cachedAppShell() {
-  return caches.match('./index.html?v=764')
+  return caches.match('./index.html?v=765')
     .then(match => match || caches.match('./index.html') || caches.match('./'));
 }
 

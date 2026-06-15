@@ -20894,3 +20894,202 @@ Advies
     save764();
   }catch(err){ console.error('v7.6.4 One-Minute Command Center & NASA Safety patch failed', err); }
 })();
+
+/* =========================================================
+   RICH CMD v7.6.5 — Navigation & Findability UX Cleanup
+   Calm navigation, real app-wide search, visible shift controls,
+   updates & recovery findable from menu/search/diagnostics.
+========================================================= */
+(function(){
+  try{
+    if(window.__richCmd765Applied) return;
+    window.__richCmd765Applied = true;
+
+    APP.version = 'v7.6.5';
+    APP.cache = 'rich-cmd-cache-v765';
+    APP.build = 'Navigation & Findability UX Cleanup';
+    APP.pwa = APP.pwa || {};
+    APP.pwa.assets = ['./','./index.html','./index.html?v=765','./styles.css?v=765','./vro-data.js?v=765','./app.js?v=765','./manifest.json?v=765','./version.json','./agf-groenten-schaplijst-v763.csv','./icon-192.png','./icon-512.png'];
+
+    const L765 = (nl,en)=> (typeof currentLang==='function' && currentLang()==='en') ? (en||nl) : nl;
+    const E765 = (v)=> typeof escapeHtml==='function' ? escapeHtml(String(v ?? '')) : String(v ?? '').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const save765 = ()=>{ try{ if(typeof save==='function') save(); }catch(_){} };
+    const render765 = ()=>{ try{ if(typeof render==='function') render(); }catch(_){} };
+    const toast765 = (msg,type)=>{ try{ if(typeof toast==='function') toast(msg,type||'info'); }catch(_){ console.log(msg); } };
+    const routeTitle765 = (r)=>{ try{ return routeLabel(r); }catch(_){ const item=(window.ROUTES||ROUTES||[]).find(x=>x.id===r); return item ? (typeof t==='function'?t(item.label):item.label) : r; } };
+    const nowText765 = ()=> new Date().toLocaleTimeString(currentLang()==='en'?'en-GB':'nl-NL',{hour:'2-digit',minute:'2-digit'});
+
+    function closeSidebar765(){ state.ui.sidebarOpen=false; save765(); render765(); }
+    function shiftStatus765(){
+      if(!state.shift?.active) return L765('Niet gestart','Not started');
+      const mins = Math.max(0, Math.round((Date.now() - new Date(state.shift.startedAt||Date.now()).getTime())/60000));
+      return state.shift.breakActive ? `${L765('Pauze bezig','Break active')} · ${minutesToText(mins)}` : `${L765('Bezig','Active')} · ${minutesToText(mins)}`;
+    }
+    function shiftControl765(compact=false){
+      const active=!!state.shift?.active, br=!!state.shift?.breakActive;
+      const started = active && state.shift.startedAt ? dateTime(state.shift.startedAt) : '';
+      const label = active ? (br?L765('Pauze loopt','Break running'):L765('Shift bezig','Shift active')) : L765('Shift niet gestart','Shift not started');
+      const detail = active ? `${L765('Gestart','Started')}: ${E765(started)}` : L765('Start je shift zodra je binnenkomt. Je vindt afsluiten hier ook terug.','Start your shift when you arrive. You can also end it here.');
+      const btns = active
+        ? `<button class="btn ${br?'good':'warn'}" data-action="toggle-break">${br?E765(L765('Pauze klaar','End break')):E765(L765('Pauze starten','Start break'))}</button><button class="btn bad" data-action="shift-end">${E765(L765('Shift beëindigen','End shift'))}</button>`
+        : `<button class="btn primary" data-action="shift-start">${E765(L765('Start shift','Start shift'))}</button>`;
+      return `<div class="card v765-shift-card ${compact?'compact':''}"><div class="flex-line"><div><span class="chip">${E765(L765('Altijd vindbaar','Always findable'))}</span><h3>${E765(label)}</h3><p class="muted small">${detail}</p></div><span class="pill ${active?'good':'warn'}">${E765(shiftStatus765())}</span></div><div class="btn-row mt">${btns}<button class="btn" data-action="v765-open-shift-panel">${E765(L765('Shiftpaneel','Shift panel'))}</button><button class="btn" data-action="open-command">⌕ ${E765(L765('Zoeken','Search'))}</button></div></div>`;
+    }
+    function shiftPanel765(){
+      const logs=(state.shift?.logs||[]).slice(0,8);
+      modal765(L765('Shift starten / beëindigen','Start / end shift'), `<div class="grid v765-shift-panel">${shiftControl765(false)}<div class="card soft"><h3>${E765(L765('Recente shiftmomenten','Recent shift moments'))}</h3>${logs.length?`<div class="list">${logs.map(l=>`<div class="list-item compact"><span>${E765(l.type||'log')}</span><span class="tiny muted">${E765(dateTime(l.at))}</span></div>`).join('')}</div>`:`<p class="muted">${E765(L765('Nog geen shiftlog vandaag.','No shift log yet today.'))}</p>`}</div><div class="btn-row"><button class="btn" data-action="close-modal">${E765(L765('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+
+    function quickAction765(){
+      const active=!!state.shift?.active, br=!!state.shift?.breakActive;
+      const shiftBtn = active ? `<button class="btn bad" data-action="shift-end">${E765(L765('Shift beëindigen','End shift'))}</button>` : `<button class="btn primary" data-action="shift-start">${E765(L765('Start shift','Start shift'))}</button>`;
+      const breakBtn = `<button class="btn ${br?'good':'warn'}" data-action="toggle-break" ${active?'':'disabled'}>${br?E765(L765('Pauze klaar','End break')):E765(L765('Pauze starten','Start break'))}</button>`;
+      modal765(L765('Snelle actie','Quick action'), `<div class="v765-quick-modal"><p class="muted small">${E765(L765('Alleen de acties die je op de vloer snel nodig hebt. Uitgebreide opties blijven via Zoeken of Menu bereikbaar.','Only the actions you need quickly on the floor. Expanded options remain available through Search or Menu.'))}</p><div class="grid grid-2 v765-quick-grid">${shiftBtn}${breakBtn}<button class="btn" data-action="v755-open-field-note" data-cat="Algemeen">+ ${E765(L765('Notitie','Note'))}</button><button class="btn" data-action="v762-open-interruption">+ ${E765(L765('Onderbreking','Interruption'))}</button><button class="btn" data-route="haccp">HACCP</button><button class="btn" data-route="agf">AGF</button><button class="btn" data-action="open-command">⌕ ${E765(L765('Zoeken','Search'))}</button><button class="btn" data-route="diagnostics">${E765(L765('Updates / systeem','Updates / system'))}</button></div><div class="btn-row mt"><button class="btn" data-action="close-modal">${E765(L765('Sluiten','Close'))}</button></div></div>`, 'wide');
+    }
+
+    function modal765(title,body,cls=''){
+      if(typeof modal==='function') return modal(title,body,cls);
+      const root=document.getElementById('modalRoot');
+      if(root) root.innerHTML=`<div class="modal-backdrop"><div class="modal ${cls}"><div class="modal-head"><h2>${E765(title)}</h2><button class="btn" data-action="close-modal">×</button></div>${body}</div></div>`;
+    }
+
+    function normalize765(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+    function searchIndex765(){
+      const routes=(typeof ROUTES!=='undefined'?ROUTES:[]).map(r=>({
+        type:'route', title:routeTitle765(r.id), route:r.id,
+        desc:`${L765('Pagina','Page')}: ${routeTitle765(r.id)}`,
+        tags:[r.id, r.label, routeTitle765(r.id), r.group].join(' ')
+      }));
+      const actions=[
+        {title:L765('Start shift','Start shift'),desc:L765('Locatie: Vandaag, Menu, Snelle actie','Location: Today, Menu, Quick action'),action:'shift-start',tags:'shift start inklokken clock in beginnen werkdag'},
+        {title:L765('Shift beëindigen','End shift'),desc:L765('Locatie: Vandaag, Menu, Snelle actie','Location: Today, Menu, Quick action'),action:'shift-end',tags:'shift einde uitklokken afsluiten clock out rapportage'},
+        {title:L765('Pauze starten / klaar','Start / end break'),desc:L765('Locatie: Vandaag, Shiftpaneel, Snelle actie','Location: Today, Shift panel, Quick action'),action:'toggle-break',tags:'pauze break koffie stop pauze klaar'},
+        {title:L765('Shiftpaneel openen','Open shift panel'),desc:L765('Start, pauze, beëindigen en recente logs op één plek.','Start, break, end and recent logs in one place.'),action:'v765-open-shift-panel',tags:'shift paneel start eindigen pauze logs'},
+        {title:L765('Snelle actie','Quick action'),desc:L765('Notitie, onderbreking, HACCP, AGF en shiftacties.','Note, interruption, HACCP, produce and shift actions.'),action:'v765-open-quick-action',tags:'snelle actie nieuw notitie signaal onderbreking'},
+        {title:L765('Updates & herstel','Updates & recovery'),desc:L765('Locatie: Diagnostiek / Systeem. Versie, cache, backup en updategeschiedenis.','Location: Diagnostics / System. Version, cache, backup and update history.'),action:'v765-open-updates',tags:'updates update versie changelog release herstel backup diagnostiek systeem cache'},
+        {title:L765('Backup downloaden','Download backup'),desc:L765('Locatie: Diagnostiek / Systeem. Maak een veiligheidskopie.','Location: Diagnostics / System. Create a safety copy.'),action:'download-backup',tags:'backup export downloaden veilig data herstel'},
+        {title:L765('Import / herstellen','Import / restore'),desc:L765('Locatie: Diagnostiek / Systeem. Herstel data uit backup.','Location: Diagnostics / System. Restore data from backup.'),action:'open-import',tags:'import herstellen restore backup data'},
+        {title:L765('NASA Safety','NASA Safety'),desc:L765('Locatie: AGF of Diagnostiek. Conceptdata uitschakelen/wissen.','Location: Produce or Diagnostics. Disable/clear concept data.'),action:'v764-copy-nasa-warning',tags:'nasa groenten concept wissen uitschakelen agf veiligheidswaarschuwing'},
+        {title:L765('Coaching skill tree','Coaching skill tree'),desc:L765('Locatie: Coaching. Skills, lessen en vervolgupdate voor interactieve details.','Location: Coaching. Skills, lessons and upcoming interactive detail update.'),route:'coaching',tags:'coaching skill tree skills lessen toetsen examens opleiding leren'},
+        {title:L765('Toetsen en examens','Tests and exams'),desc:L765('Locatie: Coaching. Wordt in de coaching-repair update verder uitgebreid.','Location: Coaching. Will be expanded in the coaching repair update.'),route:'coaching',tags:'toets toetsing examen exam vragen antwoorden lessen coaching academy'},
+        {title:L765('Instellingen','Settings'),desc:L765('Taal, thema, werkritme, startpagina en contacten.','Language, theme, work rhythm, start page and contacts.'),route:'settings',tags:'instellingen setting taal thema werkuren startpagina contacten'},
+        {title:L765('Diagnostiek','Diagnostics'),desc:L765('App-status, update log, backup, herstel en checks.','App status, update log, backup, recovery and checks.'),route:'diagnostics',tags:'diagnostiek status update cache health checks herstel backup'},
+        {title:L765('AGF productbeheer','Produce product management'),desc:L765('Locatie: AGF. Producten, NASA, bonus en bestelcontext.','Location: Produce. Products, NASA, bonus and ordering context.'),route:'agf',tags:'agf groenten fruit product nasa bestelbeheer bonus'},
+        {title:L765('HACCP dagplanning','HACCP day planning'),desc:L765('Locatie: HACCP. Taken inladen, plannen en uitvoeren.','Location: HACCP. Load, plan and execute tasks.'),route:'haccp',tags:'haccp dagplanning taken inladen schoonmaak startlijst'}
+      ];
+      return routes.concat(actions).map((x,i)=>({...x,id:x.id||('find_'+i), hay:normalize765([x.title,x.desc,x.tags,x.route,x.action].join(' '))}));
+    }
+    function results765(q){
+      const query=normalize765(q);
+      const all=searchIndex765();
+      if(!query) return all.filter(x=>/shift|updates|diagnostiek|coaching|haccp|agf|vandaag|backup|snelle actie/i.test([x.title,x.tags].join(' '))).slice(0,10);
+      const words=query.split(/\s+/).filter(Boolean);
+      return all.map(x=>{
+        let score=0;
+        words.forEach(w=>{ if(x.hay.includes(w)) score += x.hay.split(w).length>2 ? 3 : 2; if(normalize765(x.title).includes(w)) score+=4; });
+        return {...x,score};
+      }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score || a.title.localeCompare(b.title)).slice(0,18);
+    }
+    function renderFindResults765(q){
+      const arr=results765(q);
+      if(!arr.length) return `<div class="card soft"><strong>${E765(L765('Niets gevonden','Nothing found'))}</strong><p class="muted small">${E765(L765('Probeer: shift, pauze, updates, backup, coaching, toetsen, NASA, AGF of HACCP.','Try: shift, break, updates, backup, coaching, tests, NASA, produce or HACCP.'))}</p></div>`;
+      return `<div class="list v765-search-results">${arr.map(x=>`<div class="list-item compact"><span><strong>${E765(x.title)}</strong><br><span class="tiny muted">${E765(x.desc)}</span></span><button class="btn small ${x.route?'primary':''}" ${x.route?`data-route="${E765(x.route)}"`:`data-action="${E765(x.action)}"`}>${E765(L765('Open','Open'))}</button></div>`).join('')}</div>`;
+    }
+    function openFind765(initial=''){
+      const q=initial || '';
+      modal765(L765('Zoeken in RICH CMD','Search RICH CMD'), `<div class="v765-search"><p class="muted small">${E765(L765('Zoek naar pagina’s, acties en plekken in de app. Voorbeelden: shift, updates, backup, coaching toets, NASA, AGF.','Search pages, actions and places in the app. Examples: shift, updates, backup, coaching test, NASA, produce.'))}</p><input class="input v765-search-input" id="v765SearchInput" value="${E765(q)}" placeholder="${E765(L765('Zoek acties, pagina’s of functies…','Search actions, pages or features…'))}"><div id="v765SearchResults" class="mt">${renderFindResults765(q)}</div></div>`, 'wide v765-search-modal');
+      setTimeout(()=>{ const el=document.getElementById('v765SearchInput'); if(el){ el.focus(); try{ el.setSelectionRange(el.value.length, el.value.length); }catch(_){} } },40);
+    }
+
+    function updateLog765(){
+      const data = [
+        ['v7.6.5', L765('Navigation & Findability UX Cleanup','Navigation & Findability UX Cleanup'), L765('Menu sluitknop, echte zoekfunctie, shift altijd vindbaar, updates/herstel beter bereikbaar.','Menu close button, real search, shift always findable, updates/recovery easier to reach.')],
+        ['v7.6.4', L765('One-Minute Command Center & NASA Safety','One-Minute Command Center & NASA Safety'), L765('Vandaag rustiger gemaakt en NASA-foto-import veilig als concept gemarkeerd.','Made Today calmer and marked NASA photo import safely as concept.')],
+        ['v7.6.3', L765('AGF Groenten NASA Shelf Data','Produce NASA Shelf Data'), L765('Conceptimport uit foto’s; brondata onbetrouwbaar en niet gebruiken voor advies.','Concept import from photos; source data unreliable and not used for advice.')],
+        ['v7.6.2', L765('Field Cause Tracking & Interruption Insights','Field Cause Tracking & Interruption Insights'), L765('Oorzaken en onderbrekingen vastleggen voor betere planningcontext.','Cause and interruption logging for better planning context.')],
+        ['v7.6.1', L765('Learning Data Polish & Pattern Review UX','Learning Data Polish & Pattern Review UX'), L765('Pattern Review en datakwaliteit overzichtelijker gemaakt.','Improved Pattern Review and data-quality overview.')],
+        ['v7.6.0', L765('V8 Data Learning Foundation','V8 Data Learning Foundation'), L765('Basis voor learning events, patronen en datavertrouwen.','Foundation for learning events, patterns and data confidence.')]
+      ];
+      return `<div class="list">${data.map(r=>`<div class="list-item compact"><span><strong>${E765(r[0])} — ${E765(r[1])}</strong><br><span class="tiny muted">${E765(r[2])}</span></span></div>`).join('')}</div>`;
+    }
+    function openUpdates765(){
+      modal765(L765('Updates & herstel','Updates & recovery'), `<div class="grid v765-updates"><div class="card"><div class="flex-line"><div><span class="chip">${E765(APP.version)}</span><h3>${E765(L765('Huidige build','Current build'))}</h3><p class="muted small">${E765(APP.cache)} · ${E765(L765('Zoekbaar via: updates, versie, backup, herstel of diagnostiek.','Searchable via: updates, version, backup, recovery or diagnostics.'))}</p></div><span class="pill good">OK</span></div><div class="btn-row mt"><button class="btn primary" data-action="download-backup">${E765(L765('Backup downloaden','Download backup'))}</button><button class="btn" data-action="open-import">${E765(L765('Import / herstellen','Import / restore'))}</button><button class="btn" data-action="clear-cache">Cache</button><button class="btn" data-route="diagnostics">${E765(L765('Open Diagnostiek','Open Diagnostics'))}</button></div></div><div class="card"><h3>${E765(L765('Updategeschiedenis','Update history'))}</h3>${updateLog765()}</div></div>`, 'wide');
+    }
+    function systemHub765(){
+      return `<div class="card v765-system-hub"><div class="flex-line"><div><span class="chip">${E765(L765('Systeem','System'))}</span><h3>${E765(L765('Updates & herstel beter vindbaar','Updates & recovery easier to find'))}</h3><p class="muted small">${E765(L765('Versie, cache, backup, import/herstel en updategeschiedenis staan nu op één duidelijke plek.','Version, cache, backup, import/recovery and update history now live in one clear place.'))}</p></div><span class="pill info">${E765(APP.version)}</span></div><div class="btn-row mt"><button class="btn primary" data-action="v765-open-updates">${E765(L765('Updates & herstel','Updates & recovery'))}</button><button class="btn" data-action="open-command">⌕ ${E765(L765('Zoeken','Search'))}</button><button class="btn" data-action="download-backup">${E765(L765('Backup','Backup'))}</button><button class="btn" data-action="open-import">${E765(L765('Herstellen','Restore'))}</button></div></div>`;
+    }
+    function diagnostics765(){
+      const items=searchIndex765();
+      const checks=[
+        {name:L765('Menu heeft sluitknop','Menu has close button'),ok:true,detail:L765('Bovenaan het menu staat × Sluiten.','The top of the menu has × Close.')},
+        {name:L765('Shift altijd vindbaar','Shift always findable'),ok:true,detail:L765('Vandaag, menu, snelle actie en zoeken.','Today, menu, quick action and search.')},
+        {name:L765('Zoeken vindt functies','Search finds features'),ok:items.length>=20,detail:`${items.length} ${L765('zoekbare items','searchable items')}`},
+        {name:L765('Updates zoekbaar','Updates searchable'),ok:results765('updates').some(x=>/update/i.test(x.title+x.tags)),detail:L765('updates / versie / backup / herstel','updates / version / backup / recovery')},
+        {name:L765('Versie/cache','Version/cache'),ok:APP.version==='v7.6.5'&&APP.cache==='rich-cmd-cache-v765',detail:`${APP.version} · ${APP.cache}`}
+      ];
+      const score=Math.round(checks.filter(x=>x.ok).length/checks.length*100);
+      return `<div class="card v765-diagnostics"><div class="flex-line"><div><span class="chip">v7.6.5</span><h3>${E765(L765('Navigation & Findability checks','Navigation & Findability checks'))}</h3><p class="muted small">${E765(L765('Controleert of belangrijke acties vindbaar zijn zonder dat Vandaag drukker wordt.','Checks if key actions are findable without making Today busier.'))}</p></div><span class="pill ${score>=90?'good':'warn'}">${score}/100</span></div><div class="list mt">${checks.map(c=>`<div class="list-item compact"><span><strong>${E765(c.name)}</strong><br><span class="tiny muted">${E765(c.detail)}</span></span><span class="pill ${c.ok?'good':'warn'}">${c.ok?'OK':'Check'}</span></div>`).join('')}</div><div class="btn-row mt"><button class="btn primary" data-action="open-command">⌕ ${E765(L765('Test zoeken','Test search'))}</button><button class="btn" data-action="v765-open-shift-panel">${E765(L765('Test shiftpaneel','Test shift panel'))}</button><button class="btn" data-action="v765-open-updates">${E765(L765('Open updates','Open updates'))}</button></div></div>`;
+    }
+
+    const prevSidebar765 = typeof renderSidebar==='function'?renderSidebar:null;
+    if(prevSidebar765) renderSidebar = window.renderSidebar = function(){
+      const groupNames={today:L765('Vandaag','Today'),work:L765('Werkvloer','Work floor'),insight:L765('Inzicht & groei','Insight & growth'),system:L765('Systeem','System')};
+      const routes=(typeof ROUTES!=='undefined'?ROUTES:[]);
+      const groupHtml = ['today','work','insight','system'].map(g=>`<div class="nav-group v765-nav-group"><button class="nav-head" data-action="toggle-menu-group" data-group="${g}"><span>${E765(groupNames[g])}</span><span>${state.ui.menu[g]?'−':'+'}</span></button><div class="nav-items ${state.ui.menu[g]?'':'hidden'}">${routes.filter(r=>r.group===g).map(r=>`<button class="nav-btn ${state.route===r.id?'active':''}" data-route="${E765(r.id)}"><span class="nav-icon">${iconSvg(r.icon)}</span><span>${E765(t(r.label))}</span></button>`).join('')}</div></div>`).join('');
+      return `<aside class="sidebar v765-sidebar ${state.ui.sidebarOpen?'open':''}" id="sidebar"><div class="v765-sidebar-head"><div class="brand"><div class="brand-logo">RC</div><div><h1>RICH CMD</h1><p>${E765(t('appSubtitle'))}</p></div></div><button class="btn small v765-close-menu" data-action="close-sidebar">× ${E765(L765('Sluiten','Close'))}</button></div><div class="v765-menu-search"><button class="btn primary" data-action="open-command">⌕ ${E765(L765('Zoeken','Search'))}</button><button class="btn" data-route="today">${E765(L765('Vandaag','Today'))}</button></div><div class="v765-sidebar-shift">${shiftControl765(true)}</div>${groupHtml}<div class="card soft mt v765-sidebar-system"><strong>${E765(L765('Snel naar systeem','System shortcuts'))}</strong><div class="btn-row mt"><button class="btn small" data-action="v765-open-updates">${E765(L765('Updates','Updates'))}</button><button class="btn small" data-action="download-backup">${E765(L765('Backup','Backup'))}</button><button class="btn small" data-route="settings">${E765(L765('Instellingen','Settings'))}</button></div><div class="small muted mt">${E765(APP.version)} · ${E765(APP.cache)}</div></div></aside>`;
+    };
+
+    const prevTopbar765 = typeof renderTopbar==='function'?renderTopbar:null;
+    if(prevTopbar765) renderTopbar = window.renderTopbar = function(){
+      const name=state.settings.name||'Richard';
+      return `<header class="topbar v765-topbar"><div class="page-title"><div class="btn-row"><button class="btn hamburger" data-action="toggle-sidebar">☰ ${E765(L765('Menu','Menu'))}</button><button class="btn small v765-top-search" data-action="open-command">⌕ ${E765(L765('Zoeken','Search'))}</button><button class="btn small v765-top-shift" data-action="v765-open-shift-panel">${E765(L765('Shift','Shift'))}</button></div><h2>${E765(routeTitle765(state.route))}</h2><p>${E765(greeting())}, ${E765(name)}. ${E765(L765('Alles blijft bereikbaar via Menu of Zoeken.','Everything stays reachable via Menu or Search.'))}</p></div><div class="top-actions"><button class="btn primary" data-action="v765-open-quick-action">＋ ${E765(L765('Snelle actie','Quick action'))}</button><button class="btn" data-action="toggle-assist">Assist</button></div></header>`;
+    };
+
+    const prevToday765 = typeof renderToday==='function'?renderToday:null;
+    if(prevToday765) renderToday = window.renderToday = function(){
+      let base=prevToday765()||'';
+      base = String(base).replace(/RICH CMD v7\.6\.4/g,'RICH CMD v7.6.5');
+      return `<div class="v765-today-shell">${shiftControl765(false)}${base}</div>`;
+    };
+
+    const prevMobile765 = typeof renderMobileBottom==='function'?renderMobileBottom:null;
+    if(prevMobile765) renderMobileBottom = window.renderMobileBottom = function(){
+      return `<nav class="mobile-bottom v765-mobile-bottom"><button class="${state.route==='today'?'active':''}" data-route="today"><span>${iconSvg('today')}</span><small>${E765(L765('Vandaag','Today'))}</small></button><button class="${state.route==='haccp'?'active':''}" data-route="haccp"><span>${iconSvg('check')}</span><small>HACCP</small></button><button class="${state.route==='agf'?'active':''}" data-route="agf"><span>${iconSvg('leaf')}</span><small>AGF</small></button><button data-action="open-command"><span>⌕</span><small>${E765(L765('Zoek','Search'))}</small></button><button data-action="toggle-sidebar"><span>${iconSvg('dashboard')}</span><small>${E765(L765('Menu','Menu'))}</small></button></nav>`;
+    };
+
+    const prevDiag765 = typeof renderDiagnostics==='function'?renderDiagnostics:null;
+    if(prevDiag765) renderDiagnostics = window.renderDiagnostics = function(){ const base=prevDiag765()||''; return `<div class="grid diagnostics-v765">${systemHub765()}${diagnostics765()}<div class="card v765-update-log"><h3>${E765(L765('Updategeschiedenis','Update history'))}</h3>${updateLog765()}</div></div>${base}`; };
+
+    const prevSettings765 = typeof renderSettings==='function'?renderSettings:null;
+    if(prevSettings765) renderSettings = window.renderSettings = function(){ const base=prevSettings765()||''; return `${base}<div class="mt settings-v765">${systemHub765()}${diagnostics765()}</div>`; };
+
+    const prevHandle765 = typeof handleAction==='function'?handleAction:null;
+    if(prevHandle765) handleAction = window.handleAction = function(a,el,e){
+      if(a==='close-sidebar'){ closeSidebar765(); return; }
+      if(a==='open-command'){ openFind765(); return; }
+      if(a==='v765-open-find'){ openFind765(el?.dataset?.query||''); return; }
+      if(a==='v765-open-shift-panel'){ shiftPanel765(); return; }
+      if(a==='v765-open-quick-action' || a==='quick-action' || a==='v764-open-quick-actions'){ quickAction765(); return; }
+      if(a==='v765-open-updates'){ openUpdates765(); return; }
+      return prevHandle765(a,el,e);
+    };
+
+    if(!window.__richCmd765SearchInputBound){
+      window.__richCmd765SearchInputBound = true;
+      document.addEventListener('input', function(e){
+        const el=e.target && e.target.closest && e.target.closest('#v765SearchInput');
+        if(!el) return;
+        const host=document.getElementById('v765SearchResults');
+        if(host) host.innerHTML = renderFindResults765(el.value||'');
+      });
+      document.addEventListener('click', function(e){
+        if(!state?.ui?.sidebarOpen) return;
+        const target=e.target;
+        if(target.closest && (target.closest('.sidebar') || target.closest('[data-action="toggle-sidebar"]') || target.closest('[data-route]') || target.closest('[data-action]'))) return;
+        state.ui.sidebarOpen=false; save765(); render765();
+      });
+    }
+
+    save765();
+  }catch(err){ console.error('v7.6.5 Navigation & Findability UX Cleanup patch failed', err); }
+})();

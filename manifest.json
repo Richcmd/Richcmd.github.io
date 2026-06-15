@@ -1,8 +1,8 @@
 {
-  "name": "RICH CMD v7.6.4 — One-Minute Command Center",
-  "short_name": "RICH CMD 7.6.4",
-  "description": "RICH CMD — One-Minute Command Center en veilige AGF NASA-conceptdata.",
-  "start_url": "./index.html?v=764",
+  "name": "RICH CMD v7.6.5 — Navigation & Findability UX Cleanup",
+  "short_name": "RICH CMD 7.6.5",
+  "description": "RICH CMD — rustiger menu, echte zoekfunctie, shift altijd vindbaar en updates/herstel beter bereikbaar.",
+  "start_url": "./index.html?v=765",
   "display": "standalone",
   "background_color": "#f7fafc",
   "theme_color": "#0f766e",
